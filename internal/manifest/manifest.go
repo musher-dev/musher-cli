@@ -29,6 +29,7 @@ type Manifest struct {
 	Version     string   `yaml:"version"`
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description,omitempty"`
+	Visibility  string   `yaml:"visibility,omitempty"`
 	Readme      string   `yaml:"readme,omitempty"`
 	License     string   `yaml:"license,omitempty"`
 	Repository  string   `yaml:"repository,omitempty"`
@@ -218,6 +219,24 @@ func (m *Manifest) ValidatePaths(bundleRoot string) error {
 	}
 
 	return nil
+}
+
+// MapAssetType maps a manifest asset kind to the API's AssetType enum value.
+func MapAssetType(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "skill":
+		return "skill"
+	case "agent", "agent_definition":
+		return "agent_definition"
+	case "tool", "tool_config":
+		return "tool_config"
+	case "prompt":
+		return "prompt"
+	case "config":
+		return "config"
+	default:
+		return "other"
+	}
 }
 
 // Ref returns the publisher/slug reference string.

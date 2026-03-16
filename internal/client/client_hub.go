@@ -88,7 +88,7 @@ var ErrEndpointNotAvailable = fmt.Errorf("endpoint not available")
 
 // SearchHubBundles searches for bundles in the hub (public, no auth required).
 func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort string, limit int, cursor string) (*HubSearchResponse, error) {
-	endpoint, err := neturl.Parse(c.baseURL + "/api/v1/hub/bundles")
+	endpoint, err := neturl.Parse(c.baseURL + "/v1/hub/bundles")
 	if err != nil {
 		return nil, fmt.Errorf("parse hub search endpoint: %w", err)
 	}
@@ -122,7 +122,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 		return nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/hub/bundles")
+	resp, err := c.do(req, "/v1/hub/bundles")
 	if err != nil {
 		return nil, fmt.Errorf("search hub bundles: %w", err)
 	}
@@ -142,7 +142,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 
 // GetHubBundleDetail fetches full details for a hub bundle (public, no auth required).
 func (c *Client) GetHubBundleDetail(ctx context.Context, publisherHandle, bundleSlug string) (*HubBundleDetail, error) {
-	path := fmt.Sprintf("/api/v1/hub/bundles/%s/%s",
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s",
 		neturl.PathEscape(publisherHandle),
 		neturl.PathEscape(bundleSlug),
 	)
@@ -176,7 +176,7 @@ func (c *Client) GetHubBundleDetail(ctx context.Context, publisherHandle, bundle
 
 // ListPublisherBundles lists bundles for a publisher (public, no auth required).
 func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle string, limit int, cursor string) (*HubSearchResponse, error) {
-	endpoint, err := neturl.Parse(c.baseURL + "/api/v1/hub/publishers/" + neturl.PathEscape(publisherHandle) + "/bundles")
+	endpoint, err := neturl.Parse(c.baseURL + "/v1/hub/publishers/" + neturl.PathEscape(publisherHandle) + "/bundles")
 	if err != nil {
 		return nil, fmt.Errorf("parse publisher bundles endpoint: %w", err)
 	}
@@ -198,7 +198,7 @@ func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle strin
 		return nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/hub/publishers/{handle}/bundles")
+	resp, err := c.do(req, "/v1/hub/publishers/{handle}/bundles")
 	if err != nil {
 		return nil, fmt.Errorf("list publisher bundles: %w", err)
 	}
@@ -219,12 +219,12 @@ func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle strin
 // GetRunnerPublishers returns publisher handles associated with the authenticated runner.
 // Returns ErrEndpointNotAvailable if the server has not deployed this endpoint yet.
 func (c *Client) GetRunnerPublishers(ctx context.Context) ([]PublisherHandle, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/api/v1/hub/me/publishers", http.NoBody)
+	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/hub/me/publishers", http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/hub/me/publishers")
+	resp, err := c.do(req, "/v1/hub/me/publishers")
 	if err != nil {
 		return nil, fmt.Errorf("get runner publishers: %w", err)
 	}
@@ -250,12 +250,12 @@ func (c *Client) GetRunnerPublishers(ctx context.Context) ([]PublisherHandle, er
 
 // ListHubCategories lists available hub categories (public, no auth required).
 func (c *Client) ListHubCategories(ctx context.Context) ([]HubCategory, error) {
-	req, err := c.newPublicRequest(ctx, "GET", c.baseURL+"/api/v1/hub/categories", http.NoBody)
+	req, err := c.newPublicRequest(ctx, "GET", c.baseURL+"/v1/hub/categories", http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/hub/categories")
+	resp, err := c.do(req, "/v1/hub/categories")
 	if err != nil {
 		return nil, fmt.Errorf("list hub categories: %w", err)
 	}

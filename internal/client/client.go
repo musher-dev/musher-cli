@@ -179,12 +179,12 @@ func (c *Client) ValidateKey(ctx context.Context) (*Identity, error) {
 // ValidateKeyWithMeta validates the API key and returns identity plus
 // request/trace metadata from the response headers.
 func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseMeta, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/api/v1/runner/me", http.NoBody)
+	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/runner/me", http.NoBody)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/runner/me")
+	resp, err := c.do(req, "/v1/runner/me")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to API: %w", err)
 	}
@@ -217,12 +217,12 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 
 // GetCurrentUserProfile fetches the current authenticated user profile.
 func (c *Client) GetCurrentUserProfile(ctx context.Context) (*UserProfile, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/api/v1/users/me", http.NoBody)
+	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/users/me", http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.do(req, "/api/v1/users/me")
+	resp, err := c.do(req, "/v1/users/me")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch current user profile: %w", err)
 	}

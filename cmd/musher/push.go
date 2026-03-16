@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/client"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/manifest"
 	"github.com/musher-dev/musher-cli/internal/output"
@@ -22,9 +22,8 @@ func newPushCmd() *cobra.Command {
 
 This command:
   1. Loads and validates the manifest
-  2. Creates the bundle on the Hub (if new)
-  3. Uploads all asset files
-  4. Publishes the specified version
+  2. Reads all asset files
+  3. Pushes the bundle and assets in a single request
 
 For a single-step workflow, use 'musher publish' which validates,
 packs, and pushes in one command.
@@ -62,7 +61,7 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 		return clierrors.ManifestInvalid(err.Error())
 	}
 
-	// Verify all assets exist before upload
+	// Verify all assets exist before push
 	for _, asset := range m.Assets {
 		assetPath := filepath.Join(wd, asset.Src)
 		if _, statErr := os.Stat(assetPath); statErr != nil {
@@ -72,20 +71,10 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 
 	out.Print("Publishing %s...\n", m.VersionRef())
 
-	// Create bundle
-	spin := out.Spinner("Creating bundle")
-	spin.Start()
+	// Build assets payload
+	assets := make([]client.PushBundleAsset, 0, len(m.Assets))
 
-	bundleID, err := c.CreateBundle(ctx, m.Publisher, m.Slug, m.Name, m.Description)
-	if err != nil {
-		spin.StopWithFailure("Failed to create bundle")
-		return clierrors.PublishFailed(err)
-	}
-
-	spin.StopWithSuccess("Bundle created")
-
-	// Upload assets
-	for i, asset := range m.Assets {
+	for _, asset := range m.Assets {
 		assetPath := filepath.Join(wd, asset.Src)
 
 		data, readErr := safeio.ReadFile(assetPath)
@@ -93,38 +82,38 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 			return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to read asset: %s", asset.Src), readErr)
 		}
 
-		assetSpin := out.Spinner(fmt.Sprintf("Uploading asset %d/%d: %s", i+1, len(m.Assets), asset.Src))
-		assetSpin.Start()
-
-		// Derive logical path from installs if available, fall back to src
-		logicalPath := asset.Src
-		if len(asset.Installs) > 0 {
-			paths := make([]string, 0, len(asset.Installs))
-			for _, inst := range asset.Installs {
-				paths = append(paths, inst.Path)
-			}
-
-			logicalPath = strings.Join(paths, ",")
-		}
-
-		if uploadErr := c.AddBundleAsset(ctx, m.Publisher, bundleID, filepath.Base(asset.Src), asset.Kind, logicalPath, data); uploadErr != nil {
-			assetSpin.StopWithFailure(fmt.Sprintf("Failed to upload: %s", asset.Src))
-			return clierrors.PublishFailed(uploadErr)
-		}
-
-		assetSpin.StopWithSuccess(fmt.Sprintf("Uploaded: %s", asset.Src))
+		assets = append(assets, client.PushBundleAsset{
+			LogicalPath: asset.Src,
+			AssetType:   manifest.MapAssetType(asset.Kind),
+			ContentText: string(data),
+			MediaType:   asset.MediaType,
+		})
 	}
 
-	// Publish version
-	pubSpin := out.Spinner(fmt.Sprintf("Publishing v%s", m.Version))
-	pubSpin.Start()
-
-	if pubErr := c.PublishBundle(ctx, m.Publisher, bundleID, m.Version); pubErr != nil {
-		pubSpin.StopWithFailure("Failed to publish")
-		return clierrors.PublishFailed(pubErr)
+	visibility := m.Visibility
+	if visibility == "" {
+		visibility = "private"
 	}
 
-	pubSpin.StopWithSuccess(fmt.Sprintf("Published %s", m.VersionRef()))
+	req := &client.PushBundleRequest{
+		Slug:        m.Slug,
+		Name:        m.Name,
+		Description: m.Description,
+		Visibility:  visibility,
+		Version:     m.Version,
+		Manifest:    assets,
+	}
+
+	// Push bundle in a single request
+	spin := out.Spinner(fmt.Sprintf("Pushing %s", m.VersionRef()))
+	spin.Start()
+
+	if pushErr := c.PushBundle(ctx, m.Publisher, m.Slug, req); pushErr != nil {
+		spin.StopWithFailure("Push failed")
+		return clierrors.PublishFailed(pushErr)
+	}
+
+	spin.StopWithSuccess(fmt.Sprintf("Published %s", m.VersionRef()))
 
 	return nil
 }

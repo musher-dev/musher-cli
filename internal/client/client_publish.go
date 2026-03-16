@@ -8,119 +8,82 @@ import (
 	neturl "net/url"
 )
 
-// CreateBundle creates a new bundle under the given publisher.
-func (c *Client) CreateBundle(ctx context.Context, publisherHandle, slug, name, description string) (string, error) {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/bundles", neturl.PathEscape(publisherHandle))
-
-	body, err := encodeJSON(map[string]string{
-		"slug":        slug,
-		"name":        name,
-		"description": description,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	req, err := c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := c.do(req, path)
-	if err != nil {
-		return "", fmt.Errorf("create bundle: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return "", unexpectedStatus("create bundle", resp)
-	}
-
-	var result struct {
-		ID string `json:"id"`
-	}
-	if err := decodeJSON(resp.Body, &result, "failed to parse create bundle response"); err != nil {
-		return "", err
-	}
-
-	return result.ID, nil
+// PushBundleAsset represents a single asset in a push request.
+type PushBundleAsset struct {
+	LogicalPath string `json:"logical_path"`
+	AssetType   string `json:"asset_type"`
+	ContentText string `json:"content_text"`
+	MediaType   string `json:"media_type,omitempty"`
 }
 
-// AddBundleAsset uploads an asset to a bundle.
-func (c *Client) AddBundleAsset(ctx context.Context, publisherHandle, bundleID, fileName, assetType, logicalPath string, data []byte) error {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/bundles/%s/assets",
+// PushBundleRequest is the payload for the single-request push endpoint.
+type PushBundleRequest struct {
+	Slug        string            `json:"slug"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Visibility  string            `json:"visibility"`
+	Version     string            `json:"version"`
+	Manifest    []PushBundleAsset `json:"manifest"`
+}
+
+// PushBundle pushes a bundle and all its assets in a single request.
+func (c *Client) PushBundle(ctx context.Context, publisherHandle, bundleSlug string, req *PushBundleRequest) error {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s:push",
 		neturl.PathEscape(publisherHandle),
-		neturl.PathEscape(bundleID),
+		neturl.PathEscape(bundleSlug),
 	)
 
-	body, err := encodeJSON(map[string]any{
-		"fileName":    fileName,
-		"assetType":   assetType,
-		"logicalPath": logicalPath,
-		"content":     string(data),
-	})
+	body, err := encodeJSON(req)
 	if err != nil {
 		return err
 	}
 
-	req, err := c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
+	httpReq, err := c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 
-	resp, err := c.do(req, path)
+	resp, err := c.do(httpReq, path)
 	if err != nil {
-		return fmt.Errorf("add bundle asset: %w", err)
+		return fmt.Errorf("push bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return unexpectedStatus("add bundle asset", resp)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("push bundle", resp)
 	}
 
 	return nil
 }
 
-// PublishBundle publishes a bundle version.
-func (c *Client) PublishBundle(ctx context.Context, publisherHandle, bundleID, version string) error {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/bundles/%s:publish",
-		neturl.PathEscape(publisherHandle),
-		neturl.PathEscape(bundleID),
-	)
-
-	body, err := encodeJSON(map[string]string{
-		"version": version,
-	})
-	if err != nil {
-		return err
-	}
-
-	req, err := c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.do(req, path)
-	if err != nil {
-		return fmt.Errorf("publish bundle: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return unexpectedStatus("publish bundle", resp)
-	}
-
-	return nil
+// YankBundleVersionRequest is the payload for the yank endpoint.
+type YankBundleVersionRequest struct {
+	Reason string `json:"reason,omitempty"`
 }
 
 // YankBundleVersion yanks a published bundle version.
-func (c *Client) YankBundleVersion(ctx context.Context, ref, version string) error {
-	path := fmt.Sprintf("/api/v1/hub/bundles/%s/versions/%s:yank",
-		neturl.PathEscape(ref),
+func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, version, reason string) error {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s/versions/%s:yank",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(bundle),
 		neturl.PathEscape(version),
 	)
 
-	req, err := c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
+	var body []byte
+	var err error
+	if reason != "" {
+		body, err = encodeJSON(&YankBundleVersionRequest{Reason: reason})
+		if err != nil {
+			return err
+		}
+	}
+
+	var req *http.Request
+	if body != nil {
+		req, err = c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
+	} else {
+		req, err = c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
+	}
 	if err != nil {
 		return err
 	}
