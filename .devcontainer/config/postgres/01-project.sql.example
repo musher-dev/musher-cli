@@ -1,0 +1,15 @@
+-- Project-Specific Database Initialization
+-- =========================================
+-- Rename this file to 01-project.sql (or any NN-name.sql) to add
+-- project-specific schema, seeds, or extensions.
+--
+-- PostgreSQL processes files in /docker-entrypoint-initdb.d/ alphabetically,
+-- so 00-init.sql (base extensions and databases) always runs first.
+--
+-- This script runs against the default database (app) unless you \connect elsewhere.
+--
+-- Examples:
+--   CREATE TABLE users (id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), ...);
+--   INSERT INTO ... VALUES ...;
+--   \connect app_test;
+--   CREATE TABLE users (...);  -- mirror schema in test DB

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,14 +17,17 @@ import (
 func newPushCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "push",
-		Short: "Build and publish the bundle to the Musher Hub",
-		Long: `Validate, upload, and publish the bundle defined in musher.yaml.
+		Short: "Upload the bundle to the Musher Hub",
+		Long: `Upload the bundle defined in musher.yaml to the Musher Hub registry.
 
 This command:
   1. Loads and validates the manifest
   2. Creates the bundle on the Hub (if new)
   3. Uploads all asset files
   4. Publishes the specified version
+
+For a single-step workflow, use 'musher publish' which validates,
+packs, and pushes in one command.
 
 You must be authenticated ('musher login') and have a publisher handle.`,
 		Example: `  musher push`,
@@ -60,13 +64,13 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 
 	// Verify all assets exist before upload
 	for _, asset := range m.Assets {
-		assetPath := filepath.Join(wd, asset.Path)
+		assetPath := filepath.Join(wd, asset.Src)
 		if _, statErr := os.Stat(assetPath); statErr != nil {
-			return clierrors.BuildFailed(fmt.Sprintf("asset not found: %s", asset.Path))
+			return clierrors.ValidateFailed(fmt.Sprintf("asset not found: %s", asset.Src))
 		}
 	}
 
-	out.Print("Publishing %s v%s...\n", m.Ref(), m.Version)
+	out.Print("Publishing %s...\n", m.VersionRef())
 
 	// Create bundle
 	spin := out.Spinner("Creating bundle")
@@ -82,27 +86,33 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 
 	// Upload assets
 	for i, asset := range m.Assets {
-		assetPath := filepath.Join(wd, asset.Path)
+		assetPath := filepath.Join(wd, asset.Src)
 
 		data, readErr := safeio.ReadFile(assetPath)
 		if readErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to read asset: %s", asset.Path), readErr)
+			return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to read asset: %s", asset.Src), readErr)
 		}
 
-		assetSpin := out.Spinner(fmt.Sprintf("Uploading asset %d/%d: %s", i+1, len(m.Assets), asset.Path))
+		assetSpin := out.Spinner(fmt.Sprintf("Uploading asset %d/%d: %s", i+1, len(m.Assets), asset.Src))
 		assetSpin.Start()
 
-		logicalPath := asset.LogicalPath
-		if logicalPath == "" {
-			logicalPath = asset.Path
+		// Derive logical path from installs if available, fall back to src
+		logicalPath := asset.Src
+		if len(asset.Installs) > 0 {
+			paths := make([]string, 0, len(asset.Installs))
+			for _, inst := range asset.Installs {
+				paths = append(paths, inst.Path)
+			}
+
+			logicalPath = strings.Join(paths, ",")
 		}
 
-		if uploadErr := c.AddBundleAsset(ctx, m.Publisher, bundleID, filepath.Base(asset.Path), asset.Type, logicalPath, data); uploadErr != nil {
-			assetSpin.StopWithFailure(fmt.Sprintf("Failed to upload: %s", asset.Path))
+		if uploadErr := c.AddBundleAsset(ctx, m.Publisher, bundleID, filepath.Base(asset.Src), asset.Kind, logicalPath, data); uploadErr != nil {
+			assetSpin.StopWithFailure(fmt.Sprintf("Failed to upload: %s", asset.Src))
 			return clierrors.PublishFailed(uploadErr)
 		}
 
-		assetSpin.StopWithSuccess(fmt.Sprintf("Uploaded: %s", asset.Path))
+		assetSpin.StopWithSuccess(fmt.Sprintf("Uploaded: %s", asset.Src))
 	}
 
 	// Publish version
@@ -114,7 +124,7 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 		return clierrors.PublishFailed(pubErr)
 	}
 
-	pubSpin.StopWithSuccess(fmt.Sprintf("Published %s v%s", m.Ref(), m.Version))
+	pubSpin.StopWithSuccess(fmt.Sprintf("Published %s", m.VersionRef()))
 
 	return nil
 }

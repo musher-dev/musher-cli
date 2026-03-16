@@ -13,22 +13,44 @@ import (
 // FileName is the expected manifest file name.
 const FileName = "musher.yaml"
 
+const (
+	// APIVersionV1Alpha1 is the current manifest API version.
+	APIVersionV1Alpha1 = "musher.dev/v1alpha1"
+	// KindBundle is the manifest kind for bundle manifests.
+	KindBundle = "Bundle"
+)
+
 // Manifest represents a musher bundle manifest.
 type Manifest struct {
-	Name        string   `yaml:"name"`
+	APIVersion  string   `yaml:"apiVersion"`
+	Kind        string   `yaml:"kind"`
 	Publisher   string   `yaml:"publisher"`
 	Slug        string   `yaml:"slug"`
 	Version     string   `yaml:"version"`
+	Name        string   `yaml:"name"`
 	Description string   `yaml:"description,omitempty"`
-	Tags        []string `yaml:"tags,omitempty"`
+	Readme      string   `yaml:"readme,omitempty"`
+	License     string   `yaml:"license,omitempty"`
+	Repository  string   `yaml:"repository,omitempty"`
+	Keywords    []string `yaml:"keywords,omitempty"`
 	Assets      []Asset  `yaml:"assets"`
+	Include     []string `yaml:"include,omitempty"`
+	Exclude     []string `yaml:"exclude,omitempty"`
 }
 
 // Asset represents a single asset in the manifest.
 type Asset struct {
-	Path        string `yaml:"path"`
-	Type        string `yaml:"type"`
-	LogicalPath string `yaml:"logicalPath,omitempty"`
+	ID        string    `yaml:"id"`
+	Src       string    `yaml:"src"`
+	Kind      string    `yaml:"kind"`
+	MediaType string    `yaml:"mediaType,omitempty"`
+	Installs  []Install `yaml:"installs,omitempty"`
+}
+
+// Install defines a per-harness install mapping for an asset.
+type Install struct {
+	Harness string `yaml:"harness"`
+	Path    string `yaml:"path"`
 }
 
 // Load reads a musher.yaml manifest from the given directory.
@@ -72,8 +94,16 @@ func Save(dir string, m *Manifest) error {
 func (m *Manifest) Validate() error {
 	var errs []string
 
-	if strings.TrimSpace(m.Name) == "" {
-		errs = append(errs, "name is required")
+	if strings.TrimSpace(m.APIVersion) == "" {
+		errs = append(errs, "apiVersion is required")
+	} else if m.APIVersion != APIVersionV1Alpha1 {
+		errs = append(errs, fmt.Sprintf("unsupported apiVersion %q (expected %q)", m.APIVersion, APIVersionV1Alpha1))
+	}
+
+	if strings.TrimSpace(m.Kind) == "" {
+		errs = append(errs, "kind is required")
+	} else if m.Kind != KindBundle {
+		errs = append(errs, fmt.Sprintf("unsupported kind %q (expected %q)", m.Kind, KindBundle))
 	}
 
 	if strings.TrimSpace(m.Publisher) == "" {
@@ -88,17 +118,49 @@ func (m *Manifest) Validate() error {
 		errs = append(errs, "version is required")
 	}
 
+	if strings.TrimSpace(m.Name) == "" {
+		errs = append(errs, "name is required")
+	}
+
 	if len(m.Assets) == 0 {
 		errs = append(errs, "at least one asset is required")
 	}
 
+	seenIDs := make(map[string]bool)
+
 	for i, a := range m.Assets {
-		if strings.TrimSpace(a.Path) == "" {
-			errs = append(errs, fmt.Sprintf("assets[%d].path is required", i))
+		if strings.TrimSpace(a.ID) == "" {
+			errs = append(errs, fmt.Sprintf("assets[%d].id is required", i))
+		} else if seenIDs[a.ID] {
+			errs = append(errs, fmt.Sprintf("assets[%d].id %q is duplicated", i, a.ID))
+		} else {
+			seenIDs[a.ID] = true
 		}
 
-		if strings.TrimSpace(a.Type) == "" {
-			errs = append(errs, fmt.Sprintf("assets[%d].type is required", i))
+		if strings.TrimSpace(a.Src) == "" {
+			errs = append(errs, fmt.Sprintf("assets[%d].src is required", i))
+		} else {
+			if filepath.IsAbs(a.Src) {
+				errs = append(errs, fmt.Sprintf("assets[%d].src must be a relative path", i))
+			}
+
+			if strings.Contains(filepath.ToSlash(a.Src), "..") {
+				errs = append(errs, fmt.Sprintf("assets[%d].src must not contain '..'", i))
+			}
+		}
+
+		if strings.TrimSpace(a.Kind) == "" {
+			errs = append(errs, fmt.Sprintf("assets[%d].kind is required", i))
+		}
+
+		for j, inst := range a.Installs {
+			if strings.TrimSpace(inst.Harness) == "" {
+				errs = append(errs, fmt.Sprintf("assets[%d].installs[%d].harness is required", i, j))
+			}
+
+			if strings.TrimSpace(inst.Path) == "" {
+				errs = append(errs, fmt.Sprintf("assets[%d].installs[%d].path is required", i, j))
+			}
 		}
 	}
 
@@ -109,7 +171,61 @@ func (m *Manifest) Validate() error {
 	return nil
 }
 
+// ValidatePaths checks that all referenced files exist relative to bundleRoot.
+func (m *Manifest) ValidatePaths(bundleRoot string) error {
+	var errs []string
+
+	for _, asset := range m.Assets {
+		assetPath := filepath.Join(bundleRoot, asset.Src)
+
+		info, err := os.Lstat(assetPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				errs = append(errs, fmt.Sprintf("asset %q: file not found: %s", asset.ID, asset.Src))
+			} else {
+				errs = append(errs, fmt.Sprintf("asset %q: cannot access: %s: %v", asset.ID, asset.Src, err))
+			}
+
+			continue
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, resolveErr := filepath.EvalSymlinks(assetPath)
+			if resolveErr != nil {
+				errs = append(errs, fmt.Sprintf("asset %q: cannot resolve symlink: %s", asset.ID, asset.Src))
+
+				continue
+			}
+
+			absRoot, _ := filepath.Abs(bundleRoot)
+			absTarget, _ := filepath.Abs(target)
+
+			if !strings.HasPrefix(absTarget, absRoot+string(filepath.Separator)) {
+				errs = append(errs, fmt.Sprintf("asset %q: symlink escapes bundle root: %s", asset.ID, asset.Src))
+			}
+		}
+	}
+
+	if m.Readme != "" {
+		readmePath := filepath.Join(bundleRoot, m.Readme)
+		if _, err := os.Stat(readmePath); err != nil {
+			errs = append(errs, fmt.Sprintf("readme file not found: %s", m.Readme))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("path validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
+	return nil
+}
+
 // Ref returns the publisher/slug reference string.
 func (m *Manifest) Ref() string {
 	return m.Publisher + "/" + m.Slug
+}
+
+// VersionRef returns the publisher/slug@version reference string.
+func (m *Manifest) VersionRef() string {
+	return m.Publisher + "/" + m.Slug + "@" + m.Version
 }

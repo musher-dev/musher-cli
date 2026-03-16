@@ -31,13 +31,18 @@ func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "musher",
 		Short: "Publish agent bundles to the Musher Hub",
-		Long: `Create, build, and publish agent bundles to the Musher Hub.
+		Long: `Create, validate, and publish agent bundles to the Musher Hub.
 
 Musher is the publishing CLI for bundle authors. Use it to
-scaffold, validate, push, and manage your bundles.
+scaffold, validate, pack, and publish your bundles.
 
-Get started:  musher init`,
-		Example:       `  musher init`,
+Get started:
+  musher login
+  musher init
+  musher publish`,
+		Example:       `  musher init
+  musher validate
+  musher publish`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          noArgs,
@@ -141,13 +146,21 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	initCmd.GroupID = "publish"
 	rootCmd.AddCommand(initCmd)
 
-	buildCmd := newBuildCmd()
-	buildCmd.GroupID = "publish"
-	rootCmd.AddCommand(buildCmd)
+	validateCmd := newValidateCmd()
+	validateCmd.GroupID = "publish"
+	rootCmd.AddCommand(validateCmd)
+
+	packCmd := newPackCmd()
+	packCmd.GroupID = "publish"
+	rootCmd.AddCommand(packCmd)
 
 	pushCmd := newPushCmd()
 	pushCmd.GroupID = "publish"
 	rootCmd.AddCommand(pushCmd)
+
+	publishCmd := newPublishCmd()
+	publishCmd.GroupID = "publish"
+	rootCmd.AddCommand(publishCmd)
 
 	yankCmd := newYankCmd()
 	yankCmd.GroupID = "publish"

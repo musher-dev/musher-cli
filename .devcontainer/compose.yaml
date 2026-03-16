@@ -1,0 +1,26 @@
+# Musher Dev Container — Docker Compose orchestrator.
+# Add service files under compose/ and include them here.
+# Services run inside Docker-in-Docker via startup.sh.
+#
+# Port Allocation:
+#   15432  PostgreSQL         15440  MinIO API (obs.)
+#   15433  Redis              15441  MinIO Console (obs.)
+#   15434  MinIO API          15442  Tempo
+#   15435  MinIO Console      15443  Loki
+#   15436  OCI Registry       15444  VictoriaMetrics
+#   15460  Azimutt            15445  OTel HTTP
+#                             15446  OTel gRPC
+#                             15447  Grafana
+#                             15448  Pyroscope
+
+include:
+  - compose/postgres.yaml
+  - compose/redis.yaml
+  - compose/minio.yaml
+  - compose/registry.yaml
+  - compose/azimutt.yaml
+  - compose/observability.yaml
+
+networks:
+  default:
+    name: musher-dev

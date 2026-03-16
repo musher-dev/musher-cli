@@ -179,11 +179,20 @@ func PublishFailed(cause error) *CLIError {
 	})
 }
 
-// BuildFailed returns an error for build/validation failures.
-func BuildFailed(msg string) *CLIError {
+// ValidateFailed returns an error for validation failures.
+func ValidateFailed(msg string) *CLIError {
 	return &CLIError{
-		Message: fmt.Sprintf("Build failed: %s", msg),
-		Hint:    "Fix the issues above and run 'musher build' again",
+		Message: fmt.Sprintf("Validation failed: %s", msg),
+		Hint:    "Fix the issues above and run 'musher validate' again",
+		Code:    ExitGeneral,
+	}
+}
+
+// PackFailed returns an error for pack failures.
+func PackFailed(msg string) *CLIError {
+	return &CLIError{
+		Message: fmt.Sprintf("Pack failed: %s", msg),
+		Hint:    "Fix the issues above and run 'musher pack' again",
 		Code:    ExitGeneral,
 	}
 }
@@ -201,7 +210,7 @@ func ManifestInvalid(detail string) *CLIError {
 func YankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
 		Message: fmt.Sprintf("Failed to yank version %s", version),
-		Hint:    "Check the version exists and you have publisher access",
+		Hint:    "Check the version exists and you have publisher access. Yanked versions are hidden from search/install but remain fetchable by digest",
 		Cause:   cause,
 		Code:    ExitGeneral,
 	})

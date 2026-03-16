@@ -1,0 +1,155 @@
+# Observability stack (profile-gated).
+# Start with: docker compose --profile observability up -d
+
+services:
+  minio-observability:
+    image: minio/minio:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15440:9000"
+      - "127.0.0.1:15441:9001"
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_OBS_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_OBS_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - musher-minio-observability-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  minio-observability-init:
+    image: minio/mc:latest
+    profiles: [observability]
+    depends_on:
+      minio-observability:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio-observability:9000 ${MINIO_OBS_ROOT_USER:-minioadmin} ${MINIO_OBS_ROOT_PASSWORD:-minioadmin} &&
+      mc mb --ignore-existing local/tempo-traces &&
+      mc mb --ignore-existing local/loki-data
+      "
+    restart: "no"
+
+  tempo:
+    image: grafana/tempo:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15442:3200"
+    command: ["-config.file=/etc/tempo/tempo-config.yaml"]
+    volumes:
+      - ../config/observability/tempo-config.yaml:/etc/tempo/tempo-config.yaml:ro
+      - musher-tempo-data:/var/tempo
+    depends_on:
+      minio-observability-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  loki:
+    image: grafana/loki:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15443:3100"
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ../config/observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - musher-loki-data:/loki
+    depends_on:
+      minio-observability-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15444:8428"
+    volumes:
+      - musher-victoriametrics-data:/victoria-metrics-data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8428/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15445:4318"
+      - "127.0.0.1:15446:4317"
+    command: ["--config=/etc/otelcol/otel-collector-config.yaml"]
+    volumes:
+      - ../config/observability/otel-collector-config.yaml:/etc/otelcol/otel-collector-config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15447:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_INSTALL_PLUGINS: grafana-pyroscope-app
+    volumes:
+      - ../config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - musher-grafana-data:/var/lib/grafana
+    depends_on:
+      tempo:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+
+  pyroscope:
+    image: grafana/pyroscope:latest
+    profiles: [observability]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15448:4040"
+    volumes:
+      - musher-pyroscope-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4040/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  musher-minio-observability-data:
+  musher-tempo-data:
+  musher-loki-data:
+  musher-victoriametrics-data:
+  musher-grafana-data:
+  musher-pyroscope-data:

@@ -1,15 +1,210 @@
+// Musher Dev Container — Batteries-included template.
+// Uncomment optional blocks as needed. Comment out what you don't use.
 {
-  "name": "Musher CLI",
-  "image": "mcr.microsoft.com/devcontainers/go:1-1.26-bookworm",
-  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "name": "Musher Dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+  "features": {
+    // --- Core ---
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "installOhMyZshConfig": true,
+      "upgradePackages": true
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+
+    // --- Runtimes ---
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.13"
+    },
+    "ghcr.io/devcontainers/features/go:1": {},
+
+    // --- Docker ---
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+
+    // --- Package managers ---
+    "ghcr.io/devcontainers-extra/features/bun:1": {},
+    "ghcr.io/devcontainers-extra/features/uv:1": {},
+
+    // --- Additional runtimes ---
+    "ghcr.io/devcontainers-extra/features/deno:1": {},
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17",
+      "installGradle": false,
+      "installMaven": false
+    },
+
+    // --- Database tooling ---
+    "ghcr.io/robbert229/devcontainer-features/postgresql-client:1": {
+      "version": "16"
+    },
+
+    // --- Task runner ---
+    "ghcr.io/devcontainers-extra/features/go-task:1": {},
+
+    // --- Linting ---
+    "ghcr.io/lukewiwa/features/shellcheck:0": { "version": "stable" },
+
+    // --- AI tooling ---
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+
+    // --- Optional: Infrastructure tooling (uncomment as needed) ---
+    // "ghcr.io/devcontainers-extra/features/opentofu:1": {},
+    // "ghcr.io/devcontainers-extra/features/digitalocean-cli:1": {},
+    // "ghcr.io/devcontainers-extra/features/cloudflared:1": {},
+    // "ghcr.io/devcontainers/features/copilot-cli:1": {}
+  },
+
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+
+  "init": true,
+  "shutdownAction": "stopContainer",
+
+  // Allow debuggers (gdb, strace, delve) to attach to processes.
+  "capAdd": ["SYS_PTRACE"],
+
+  "mounts": [
+    "source=musher-${devcontainerId}-gh-config,target=/home/vscode/.config/gh,type=volume",
+    "source=musher-${devcontainerId}-claude-config,target=/home/vscode/.claude,type=volume",
+    "source=musher-${devcontainerId}-codex-config,target=/home/vscode/.codex,type=volume"
+    // Uncomment to persist Docker-in-Docker data across rebuilds:
+    // "source=musher-${devcontainerId}-dind-data,target=/var/lib/docker/volumes,type=volume"
+  ],
+
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "UV_LINK_MODE": "copy",
+    "XDG_CACHE_HOME": "/home/vscode/.cache",
+    "UV_CACHE_DIR": "/home/vscode/.cache/uv",
+    "RUFF_CACHE_DIR": "/home/vscode/.cache/ruff",
+    "PIP_CACHE_DIR": "/home/vscode/.cache/pip",
+    "MYPY_CACHE_DIR": "/home/vscode/.cache/mypy",
+    "NPM_CONFIG_CACHE": "/home/vscode/.cache/npm",
+    "DENO_DIR": "/home/vscode/.cache/deno",
+    "GOMODCACHE": "/home/vscode/.cache/go/mod",
+    "GOCACHE": "/home/vscode/.cache/go/build",
+    "BUN_INSTALL_CACHE_DIR": "/home/vscode/.cache/bun"
+  },
+
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+    // Uncomment if Go feature auto-sets GOROOT incorrectly:
+    // "GOROOT": ""
+  },
+
+  "waitFor": "postCreateCommand",
+  "postCreateCommand": {
+    "fix-crlf": "find .devcontainer/scripts -type f -name '*.sh' -exec sed -i 's/\\r$//' {} +",
+    "setup": ["bash", ".devcontainer/scripts/post-create.sh"]
+  },
+  "postStartCommand": ["bash", ".devcontainer/scripts/startup.sh"],
+
+  "forwardPorts": [15432, 15433, 15434, 15435, 15436, 15440, 15441, 15442, 15443, 15444, 15445, 15446, 15447, 15448, 15460],
+  "portsAttributes": {
+    "15432": { "label": "PostgreSQL", "onAutoForward": "silent" },
+    "15433": { "label": "Redis", "onAutoForward": "silent" },
+    "15434": { "label": "MinIO API", "onAutoForward": "silent" },
+    "15435": { "label": "MinIO Console", "onAutoForward": "silent" },
+    "15436": { "label": "OCI Registry", "onAutoForward": "silent" },
+    "15440": { "label": "MinIO API (Observability)", "onAutoForward": "silent" },
+    "15441": { "label": "MinIO Console (Observability)", "onAutoForward": "silent" },
+    "15442": { "label": "Tempo", "onAutoForward": "silent" },
+    "15443": { "label": "Loki", "onAutoForward": "silent" },
+    "15444": { "label": "VictoriaMetrics", "onAutoForward": "silent" },
+    "15445": { "label": "OTel HTTP", "onAutoForward": "silent" },
+    "15446": { "label": "OTel gRPC", "onAutoForward": "silent" },
+    "15447": { "label": "Grafana", "onAutoForward": "silent" },
+    "15448": { "label": "Pyroscope", "onAutoForward": "silent" },
+    "15460": { "label": "Azimutt", "onAutoForward": "silent" }
+  },
+
   "customizations": {
     "vscode": {
       "extensions": [
-        "golang.go"
-      ]
+        // --- Core tooling ---
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode",
+
+        // --- Language support ---
+        "golang.go",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+
+        // --- Shell linting ---
+        "timonwong.shellcheck",
+
+        // --- Optional (comment out if not needed) ---
+        "eamodio.gitlens",
+        "github.copilot",
+        "github.copilot-chat",
+        "bierner.markdown-mermaid"
+
+        // --- Optional: SQL client (uncomment if using PostgreSQL) ---
+        // "mtxr.sqltools",
+        // "mtxr.sqltools-driver-pg",
+
+        // --- Optional: Additional extensions (uncomment as needed) ---
+        // "tomoki1207.pdf",
+        // "jebbs.plantuml",
+        // "contextmapper.context-mapper-vscode-extension",
+        // "ChaunceyKiwi.json-tree-view",
+        // "github.vscode-pull-request-github",
+        // "hashicorp.terraform",
+        // "wholroyd.jinja",
+        // "batisteo.vscode-django"
+      ],
+      "settings": {
+        // --- Editor ---
+        "editor.formatOnSave": true,
+        "editor.rulers": [80, 120],
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+
+        // --- Terminal ---
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "bash": { "path": "/bin/bash" },
+          "zsh": { "path": "/bin/zsh" }
+        },
+
+        // --- Go ---
+        "go.toolsManagement.autoUpdate": true,
+
+        // --- Python ---
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+          }
+        },
+
+        // --- Prettier formatter overrides ---
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[json]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      }
     }
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
   }
 }

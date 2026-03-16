@@ -26,8 +26,10 @@ Flat Docker-style verb commands, flags, user interaction orchestration.
 - `logout.go` — Clear stored credentials
 - `whoami.go` — Show identity and publisher handles
 - `init.go` — Initialize musher.yaml manifest
-- `build.go` — Validate manifest and check assets
-- `push.go` — Publish bundle version to registry
+- `validate.go` — Validate manifest and check assets
+- `pack.go` — Pack bundle into local OCI artifact
+- `push.go` — Upload bundle to registry
+- `publish.go` — Validate, pack, and push in one step
 - `yank.go` — Yank a published version
 - `search.go` — Search the Musher Hub
 - `info.go` — Show bundle details
@@ -83,5 +85,7 @@ task fmt          # Format code
 - **State dir**: `~/.local/state/musher/` (XDG)
 - **Credentials**: OS Keyring (`dev.musher.musher`), falls back to `~/.config/musher/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log` (default sink)
+- **Pack cache**: `~/.cache/musher/pack/`
+- **OCI store**: `~/.local/share/musher/oci/`
 - **API endpoint**: `api.url` config key or `MUSHER_API_URL` env var
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`

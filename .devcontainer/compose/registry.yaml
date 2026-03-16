@@ -1,0 +1,20 @@
+# OCI container registry.
+
+services:
+  registry:
+    profiles: [registry]
+    image: registry:2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15436:5000"
+    volumes:
+      - musher-registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  musher-registry-data:

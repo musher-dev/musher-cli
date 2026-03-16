@@ -13,8 +13,12 @@ func newYankCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "yank <publisher/slug> <version>",
 		Short: "Yank a published bundle version",
-		Long: `Mark a published bundle version as yanked. Yanked versions
-are hidden from search results and cannot be installed.
+		Long: `Mark a published bundle version as yanked.
+
+Yanked versions are hidden from search results and will not be
+installed by default. However, they remain fetchable by digest
+for reproducibility — existing lockfiles that pin a digest will
+continue to resolve.
 
 This operation is irreversible.`,
 		Example: `  musher yank acme/my-bundle 1.0.0`,

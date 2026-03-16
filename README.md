@@ -24,10 +24,10 @@ musher login
 musher init
 
 # Validate your bundle
-musher build
+musher validate
 
 # Publish to the registry
-musher push
+musher publish
 ```
 
 ## Commands
@@ -43,9 +43,11 @@ musher push
 | Command | Description |
 |---------|-------------|
 | `musher init` | Initialize `musher.yaml` manifest |
-| `musher build` | Validate manifest and check assets |
-| `musher push` | Publish bundle version to registry |
-| `musher yank <ref> <version>` | Yank a published version |
+| `musher validate` | Validate manifest and check assets |
+| `musher pack` | Pack bundle into a local OCI artifact |
+| `musher push` | Upload bundle to registry |
+| `musher publish` | Validate, pack, and push in one step |
+| `musher yank <ref> <version>` | Yank a published version (hidden from search, fetchable by digest) |
 
 ### Discovery
 | Command | Description |
@@ -67,24 +69,31 @@ musher push
 - **Config dir**: `~/.config/musher/`
 - **Credentials**: OS Keyring (`dev.musher.musher`) or `~/.config/musher/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log`
+- **Pack cache**: `~/.cache/musher/pack/`
+- **OCI store**: `~/.local/share/musher/oci/`
 - **API endpoint**: `MUSHER_API_URL` or `api.url` config key (default: `https://api.musher.dev`)
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`
 
 ## `musher.yaml` Manifest
 
 ```yaml
-name: My Skill Bundle
+apiVersion: musher.dev/v1alpha1
+kind: Bundle
 publisher: acme
 slug: my-skill
 version: 1.0.0
+name: My Skill Bundle
 description: A helpful coding skill
-tags:
+keywords:
   - productivity
   - coding
 assets:
-  - path: skills/my-skill.md
-    type: skill
-    logicalPath: .claude/skills/my-skill.md
+  - id: my-skill
+    src: skills/my-skill.md
+    kind: skill
+    installs:
+      - harness: claude-code
+        path: .claude/skills/my-skill.md
 ```
 
 ## Development

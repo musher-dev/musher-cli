@@ -41,17 +41,25 @@ func runInit(out *output.Writer) error {
 	}
 
 	m := &manifest.Manifest{
-		Name:        "my-bundle",
+		APIVersion:  manifest.APIVersionV1Alpha1,
+		Kind:        manifest.KindBundle,
 		Publisher:   "your-handle",
 		Slug:        "my-bundle",
 		Version:     "0.1.0",
+		Name:        "My Bundle",
 		Description: "A brief description of your bundle",
-		Tags:        []string{"example"},
+		Keywords:    []string{"example"},
 		Assets: []manifest.Asset{
 			{
-				Path:        "skills/example.md",
-				Type:        "skill",
-				LogicalPath: ".claude/skills/example.md",
+				ID:   "example-skill",
+				Src:  "skills/example.md",
+				Kind: "skill",
+				Installs: []manifest.Install{
+					{
+						Harness: "claude-code",
+						Path:    ".claude/skills/example.md",
+					},
+				},
 			},
 		},
 	}
@@ -61,7 +69,7 @@ func runInit(out *output.Writer) error {
 	}
 
 	out.Success("Created musher.yaml")
-	out.Info("Edit the manifest, then run 'musher build' to validate")
+	out.Info("Edit the manifest, then run 'musher validate' to check it")
 
 	return nil
 }

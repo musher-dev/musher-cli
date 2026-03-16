@@ -1,0 +1,16 @@
+# Azimutt — database explorer UI (profile-gated).
+# Start with: docker compose --profile azimutt up -d
+
+services:
+  azimutt:
+    image: ghcr.io/azimuttapp/azimutt:main
+    platform: linux/amd64
+    restart: unless-stopped
+    profiles: [azimutt]
+    ports:
+      - "127.0.0.1:15460:4000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-app}
+    depends_on:
+      postgres:
+        condition: service_healthy

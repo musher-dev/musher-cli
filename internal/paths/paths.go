@@ -100,3 +100,36 @@ func CredentialsFile() (string, error) {
 
 	return filepath.Join(root, "api-key"), nil
 }
+
+func dataRoot() (string, error) {
+	noOSDefault := func() (string, error) {
+		return "", fmt.Errorf("no OS data directory function")
+	}
+
+	return rootWithFallback("XDG_DATA_HOME", noOSDefault, filepath.Join(".local", "share"))
+}
+
+// DataRoot returns the user data root directory for Musher.
+func DataRoot() (string, error) {
+	return dataRoot()
+}
+
+// PackCacheDir returns the pack cache directory for Musher.
+func PackCacheDir() (string, error) {
+	root, err := cacheRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "pack"), nil
+}
+
+// OCIStoreDir returns the OCI store directory for Musher.
+func OCIStoreDir() (string, error) {
+	root, err := dataRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "oci"), nil
+}
