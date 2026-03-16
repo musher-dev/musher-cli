@@ -1,0 +1,48 @@
+# Binary
+/musher
+musher-*
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Go workspace
+go.work
+go.work.sum
+
+# Release
+dist/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# env file
+.env
+
+# Claude Code — ignore everything inside except CLAUDE.md
+.claude/**
+!.claude/CLAUDE.md
+
+# Local tooling/cache (workspace-specific)
+.tools/
+.cache/
+.gocache/
+bin/

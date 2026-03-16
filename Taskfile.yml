@@ -1,0 +1,155 @@
+# Musher CLI Taskfile
+# Usage: task [task-name]
+# List tasks: task --list
+
+version: '3'
+
+vars:
+  BINARY: musher
+  MODULE: github.com/musher-dev/musher-cli
+
+tasks:
+  # ===========================================================================
+  # Setup
+  # ===========================================================================
+
+  setup:
+    desc: Install dependencies and tools
+    cmds:
+      - go mod download
+      - task: setup:tools
+
+  setup:tools:
+    desc: Install required tooling
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
+  # ===========================================================================
+  # Development
+  # ===========================================================================
+
+  build:
+    desc: Build the musher binary
+    cmds:
+      - go build -o {{.BINARY}} ./cmd/musher
+
+  build:all:
+    desc: Build for all platforms
+    cmds:
+      - GOOS=darwin GOARCH=amd64 go build -o {{.BINARY}}-darwin-amd64 ./cmd/musher
+      - GOOS=darwin GOARCH=arm64 go build -o {{.BINARY}}-darwin-arm64 ./cmd/musher
+      - GOOS=linux GOARCH=amd64 go build -o {{.BINARY}}-linux-amd64 ./cmd/musher
+      - GOOS=linux GOARCH=arm64 go build -o {{.BINARY}}-linux-arm64 ./cmd/musher
+      - GOOS=windows GOARCH=amd64 go build -o {{.BINARY}}-windows-amd64.exe ./cmd/musher
+
+  run:
+    desc: Run musher with arguments
+    cmds:
+      - go run ./cmd/musher {{.CLI_ARGS}}
+
+  # ===========================================================================
+  # Code Quality
+  # ===========================================================================
+
+  check:
+    desc: Run all checks (fmt + mod + lint + vuln + test)
+    cmds:
+      - task: check:fmt
+      - task: check:mod
+      - task: check:lint
+      - task: check:vuln
+      - task: check:test
+
+  check:fmt:
+    desc: Check Go formatting and imports (gofumpt + goimports)
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint is required. Run 'task setup:tools' first."
+    cmds:
+      - golangci-lint fmt --diff ./...
+
+  check:mod:
+    desc: Verify module files are tidy
+    cmds:
+      - go mod tidy -diff
+
+  check:lint:
+    desc: Run golangci-lint v2 (strict)
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint is required. Run 'task setup:tools' first."
+    cmds:
+      - golangci-lint run ./...
+
+  check:vuln:
+    desc: Run govulncheck
+    preconditions:
+      - sh: command -v govulncheck >/dev/null 2>&1
+        msg: "govulncheck is required. Run 'task setup:tools' first."
+    cmds:
+      - govulncheck ./...
+
+  check:test:
+    desc: Run tests with race detection
+    cmds:
+      - go test -v -race ./...
+
+  check:test-cover:
+    desc: Run tests with coverage
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  check:compile:
+    desc: Verify cross-platform compilation for all release targets
+    cmds:
+      - GOOS=darwin  GOARCH=amd64 go build ./cmd/musher
+      - GOOS=darwin  GOARCH=arm64 go build ./cmd/musher
+      - GOOS=linux   GOARCH=amd64 go build ./cmd/musher
+      - GOOS=linux   GOARCH=arm64 go build ./cmd/musher
+      - GOOS=windows GOARCH=amd64 go build ./cmd/musher
+
+  # Quick aliases
+  test:
+    desc: Run tests (alias for check:test)
+    cmds:
+      - task: check:test
+
+  lint:
+    desc: Run linter (alias for check:lint)
+    cmds:
+      - task: check:lint
+
+  # ===========================================================================
+  # Formatting
+  # ===========================================================================
+
+  fmt:
+    desc: Format Go code and imports
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint is required. Run 'task setup:tools' first."
+    cmds:
+      - golangci-lint fmt ./...
+      - go mod tidy
+
+  # ===========================================================================
+  # Utilities
+  # ===========================================================================
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -f {{.BINARY}} {{.BINARY}}-*
+      - rm -f coverage.out coverage.html
+
+  version:
+    desc: Show version info
+    cmds:
+      - go run ./cmd/musher version
+
+  help:
+    desc: Show musher help
+    cmds:
+      - go run ./cmd/musher --help

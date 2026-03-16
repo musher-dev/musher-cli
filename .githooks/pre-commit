@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-commit hook: run formatting and lint checks on staged Go files.
+set -eu
+
+exec "$(dirname "$0")/run-pre-commit.sh"

@@ -1,0 +1,15 @@
+{
+  "name": "Musher CLI",
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.26-bookworm",
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  }
+}

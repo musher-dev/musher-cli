@@ -1,0 +1,187 @@
+# golangci-lint v2 configuration
+# https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet           # Official Go vet
+    - errcheck        # Ensure errors are handled
+    - staticcheck     # Advanced static analysis (includes gosimple)
+    - unused          # Unused code detection
+    - ineffassign     # Unused assignments
+    - revive          # Style linter (golint replacement)
+    - bodyclose       # HTTP response body closure
+    - noctx           # HTTP requests with context
+    - gocritic        # Additional checks
+    - depguard        # Import boundary enforcement
+    - forbidigo       # Enforce output abstraction usage
+    - gosec           # Security vulnerability detection
+    - errorlint       # Error wrapping correctness (Go 1.13+)
+    - misspell        # Spelling errors in comments/strings
+    - unconvert       # Unnecessary type conversions
+    - nilerr          # Nil error return detection
+    - varnamelen      # Variable name length by scope
+    - nolintlint      # Ensure nolint directives are strict
+    - wrapcheck       # Ensure external errors are wrapped
+    - copyloopvar     # Catch unsafe loop var captures
+    - durationcheck   # Invalid duration math
+    - errname         # Error naming conventions
+    - predeclared     # Shadowing predeclared identifiers
+    - usestdlibvars   # Prefer stdlib constants/vars
+    - wastedassign    # Detect wasted assignments
+    - godot           # Require period at end of comments
+    - whitespace      # Remove unnecessary blank lines
+  settings:
+    govet:
+      enable:
+        - shadow        # Variable shadowing detection
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*github.com/fatih/color.Color).Fprint
+        - (*github.com/fatih/color.Color).Fprintf
+        - (*github.com/fatih/color.Color).Fprintln
+        - (io.ReadCloser).Close
+        - (io.Closer).Close
+    revive:
+      severity: error
+      rules:
+        - name: exported
+          disabled: false
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    depguard:
+      rules:
+        internal_no_cmd_import:
+          files:
+            - internal/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/cmd/musher
+              desc: internal packages must not import cmd/musher
+        platform_no_presentation:
+          files:
+            - internal/client/**/*.go
+            - internal/auth/**/*.go
+            - internal/config/**/*.go
+            - internal/update/**/*.go
+            - internal/errors/**/*.go
+            - internal/buildinfo/**/*.go
+            - internal/terminal/**/*.go
+            - internal/paths/**/*.go
+            - internal/observability/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/output
+              desc: platform/core packages must not depend on output
+            - pkg: github.com/musher-dev/musher-cli/internal/prompt
+              desc: platform/core packages must not depend on prompt
+        doctor_no_output:
+          files:
+            - internal/doctor/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/output
+              desc: doctor package must remain output-agnostic
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^fmt\.Print(ln)?$
+          msg: "use output.Writer.Print() or Println() instead"
+        - pattern: ^fmt\.Printf$
+          msg: "use output.Writer.Print() instead"
+        - pattern: ^log\.(Print|Fatal|Panic)(ln|f)?$
+          msg: "use output.Writer instead of log package"
+    gosec:
+      excludes:
+        - G104
+        - G115
+        - G304
+        - G703
+        - G704
+      config:
+        global:
+          nosec: true
+    errorlint:
+      errorf: true
+      errorf-multi: true
+      asserts: true
+      comparison: true
+    misspell:
+      locale: "US"
+    varnamelen:
+      min-name-length: 3
+      check-receiver: false
+      check-return: false
+      check-type-param: false
+      ignore-names:
+        - i
+        - j
+        - k
+        - v
+        - w
+        - t
+        - ok
+        - id
+        - ip
+        - db
+        - tx
+        - wg
+        - mu
+        - ch
+        - fs
+        - io
+        - c
+        - p
+        - r
+        - h
+        - s
+        - b
+        - n
+        - f
+      ignore-decls:
+        - c *cobra.Command
+        - c *client.Client
+        - p *prompt.Prompter
+        - w http.ResponseWriter
+        - r *http.Request
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    godot:
+      scope: declarations
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      - path: _test\.go
+        linters:
+          - gosec
+      - path: _test\.go
+        linters:
+          - varnamelen
+      - path: _test\.go
+        linters:
+          - dupl
+      - path: internal/.*
+        linters:
+          - gocognit
+
+formatters:
+  enable:
+    - gofumpt         # Strict formatting
+    - goimports       # Import management
+  settings:
+    gofumpt:
+      extra-rules: true
