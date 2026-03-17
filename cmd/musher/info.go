@@ -80,8 +80,8 @@ func runInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
 		out.Print("%s\n\n", detail.Description)
 	}
 
-	if detail.BundleType != "" {
-		out.Muted("Type: %s", detail.BundleType)
+	if len(detail.AssetTypes) > 0 {
+		out.Muted("Type: %s", strings.Join(detail.AssetTypes, ", "))
 	}
 
 	if len(detail.Tags) > 0 {

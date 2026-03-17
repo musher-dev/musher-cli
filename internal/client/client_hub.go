@@ -23,7 +23,7 @@ type HubBundleSummary struct {
 	Slug           string       `json:"slug"`
 	DisplayName    string       `json:"displayName"`
 	Summary        string       `json:"summary"`
-	BundleType     string       `json:"bundleType"`
+	AssetTypes     []string     `json:"assetTypes"`
 	Tags           []string     `json:"tags"`
 	Capabilities   []string     `json:"capabilities"`
 	License        string       `json:"license"`
@@ -100,7 +100,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 	}
 
 	if bundleType != "" {
-		params.Set("type", bundleType)
+		params.Set("asset_type", bundleType)
 	}
 
 	if sort != "" {
