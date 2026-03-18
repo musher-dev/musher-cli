@@ -15,12 +15,13 @@ func newPackCmd() *cobra.Command {
 	var outputDir string
 
 	cmd := &cobra.Command{
-		Use:   "pack",
-		Short: "Pack the bundle into a local OCI artifact",
+		Use:    "pack",
+		Hidden: true,
+		Short:  "Pack the bundle into a local OCI artifact",
 		Long: `Pack the bundle defined in musher.yaml into a local OCI artifact.
 
-This command validates the manifest and assets, then materializes
-an OCI artifact in the output directory.`,
+This command validates the bundle definition file and assets, then
+materializes an OCI artifact in the output directory.`,
 		Example: `  musher pack
   musher pack -o ./dist/`,
 		Args: noArgs,

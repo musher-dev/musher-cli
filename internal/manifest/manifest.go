@@ -1,4 +1,4 @@
-// Package manifest handles musher.yaml bundle manifest files.
+// Package manifest handles musher.yaml bundle definition files.
 package manifest
 
 import (
@@ -20,11 +20,11 @@ const (
 	KindBundle = "Bundle"
 )
 
-// Manifest represents a musher bundle manifest.
+// Manifest represents a musher bundle definition.
 type Manifest struct {
 	APIVersion  string   `yaml:"apiVersion"`
 	Kind        string   `yaml:"kind"`
-	Publisher   string   `yaml:"publisher"`
+	Namespace   string   `yaml:"namespace"`
 	Slug        string   `yaml:"slug"`
 	Version     string   `yaml:"version"`
 	Name        string   `yaml:"name"`
@@ -61,15 +61,15 @@ func Load(dir string) (*Manifest, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: dir is caller-provided trusted path
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("manifest not found: %s (run 'musher init' to create one)", path)
+			return nil, fmt.Errorf("bundle definition file not found: %s (run 'musher init' to create one)", path)
 		}
 
-		return nil, fmt.Errorf("read manifest: %w", err)
+		return nil, fmt.Errorf("read bundle definition: %w", err)
 	}
 
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parse manifest: %w", err)
+		return nil, fmt.Errorf("parse bundle definition: %w", err)
 	}
 
 	return &m, nil
@@ -81,11 +81,11 @@ func Save(dir string, m *Manifest) error {
 
 	data, err := yaml.Marshal(m)
 	if err != nil {
-		return fmt.Errorf("marshal manifest: %w", err)
+		return fmt.Errorf("marshal bundle definition: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: manifest is not sensitive
-		return fmt.Errorf("write manifest: %w", err)
+	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+		return fmt.Errorf("write bundle definition: %w", err)
 	}
 
 	return nil
@@ -107,8 +107,8 @@ func (m *Manifest) Validate() error {
 		errs = append(errs, fmt.Sprintf("unsupported kind %q (expected %q)", m.Kind, KindBundle))
 	}
 
-	if strings.TrimSpace(m.Publisher) == "" {
-		errs = append(errs, "publisher is required")
+	if strings.TrimSpace(m.Namespace) == "" {
+		errs = append(errs, "namespace is required")
 	}
 
 	if strings.TrimSpace(m.Slug) == "" {
@@ -166,7 +166,7 @@ func (m *Manifest) Validate() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("manifest validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+		return fmt.Errorf("bundle definition validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 
 	return nil
@@ -239,12 +239,12 @@ func MapAssetType(kind string) string {
 	}
 }
 
-// Ref returns the publisher/slug reference string.
+// Ref returns the namespace/slug reference string.
 func (m *Manifest) Ref() string {
-	return m.Publisher + "/" + m.Slug
+	return m.Namespace + "/" + m.Slug
 }
 
-// VersionRef returns the publisher/slug@version reference string.
+// VersionRef returns the namespace/slug:version reference string.
 func (m *Manifest) VersionRef() string {
-	return m.Publisher + "/" + m.Slug + "@" + m.Version
+	return m.Namespace + "/" + m.Slug + ":" + m.Version
 }

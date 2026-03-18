@@ -12,11 +12,11 @@ import (
 func newWhoamiCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "whoami",
-		Short: "Show current identity and publisher handles",
-		Long: `Display the authenticated identity and associated publisher handles.
+		Short: "Show current identity and writable namespaces",
+		Long: `Display the authenticated identity and associated writable namespaces.
 
 Validates the stored credentials against the API and shows
-which publisher handles are available for publishing.`,
+which namespaces are available for publishing.`,
 		Example: `  musher whoami`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -50,26 +50,26 @@ func runWhoami(cmd *cobra.Command, out *output.Writer) error {
 		out.Muted("Organization: %s", identity.OrganizationName)
 	}
 
-	// Fetch publisher handles
-	publishers, err := c.GetMyPublishers(ctx)
+	// Fetch writable namespaces
+	namespaces, err := c.GetMyNamespaces(ctx)
 	if err != nil {
-		out.Warning("Could not fetch publisher handles: %v", err)
+		out.Warning("Could not fetch writable namespaces: %v", err)
 		return nil
 	}
 
-	if len(publishers) == 0 {
-		out.Muted("No publisher handles associated with this account")
+	if len(namespaces) == 0 {
+		out.Muted("No writable namespaces associated with this account")
 		return nil
 	}
 
 	out.Println()
-	out.Print("Publisher handles:\n")
+	out.Print("Writable namespaces:\n")
 
-	for _, p := range publishers {
-		if p.DisplayName != "" {
-			out.Print("  %s (%s)\n", p.Handle, p.DisplayName)
+	for _, ns := range namespaces {
+		if ns.DisplayName != "" {
+			out.Print("  %s (%s)\n", ns.Handle, ns.DisplayName)
 		} else {
-			out.Print("  %s\n", p.Handle)
+			out.Print("  %s\n", ns.Handle)
 		}
 	}
 

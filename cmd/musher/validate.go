@@ -13,10 +13,10 @@ import (
 func newValidateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
-		Short: "Validate the bundle manifest and assets",
-		Long: `Validate the musher.yaml manifest and check that all referenced
-asset files exist. This performs the same checks that 'musher publish'
-runs before uploading.`,
+		Short: "Validate the bundle definition file and assets",
+		Long: `Validate the musher.yaml bundle definition file and check that all
+referenced asset files exist. This performs the same checks that
+'musher publish' runs before uploading.`,
 		Example: `  musher validate`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

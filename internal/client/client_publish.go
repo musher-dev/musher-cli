@@ -27,9 +27,9 @@ type PushBundleRequest struct {
 }
 
 // PushBundle pushes a bundle and all its assets in a single request.
-func (c *Client) PushBundle(ctx context.Context, publisherHandle, bundleSlug string, req *PushBundleRequest) error {
+func (c *Client) PushBundle(ctx context.Context, namespace, bundleSlug string, req *PushBundleRequest) error {
 	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s:push",
-		neturl.PathEscape(publisherHandle),
+		neturl.PathEscape(namespace),
 		neturl.PathEscape(bundleSlug),
 	)
 
@@ -101,7 +101,33 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 	return nil
 }
 
-// GetMyPublishers returns publisher handles associated with the authenticated user.
-func (c *Client) GetMyPublishers(ctx context.Context) ([]PublisherHandle, error) {
-	return c.GetRunnerPublishers(ctx)
+// GetMyNamespaces returns namespace handles associated with the authenticated user.
+func (c *Client) GetMyNamespaces(ctx context.Context) ([]NamespaceHandle, error) {
+	return c.GetRunnerNamespaces(ctx)
+}
+
+// UnyankBundleVersion restores a previously yanked bundle version.
+func (c *Client) UnyankBundleVersion(ctx context.Context, namespace, bundle, version string) error {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s/versions/%s:unyank",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(bundle),
+		neturl.PathEscape(version),
+	)
+
+	req, err := c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("unyank bundle version: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("unyank bundle version", resp)
+	}
+
+	return nil
 }

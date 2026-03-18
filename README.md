@@ -2,7 +2,7 @@
 
 Publish agent bundles to the [Musher Hub](https://musher.dev) registry.
 
-Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush) — while Mush loads and runs bundles locally, Musher handles creating, validating, and publishing them.
+Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush) — while Mush loads and runs bundles locally, Musher handles creating, validating, and publishing them. Think `docker push` vs `docker run`.
 
 ## Install
 
@@ -20,7 +20,7 @@ go install github.com/musher-dev/musher-cli/cmd/musher@latest
 # Authenticate
 musher login
 
-# Initialize a bundle manifest
+# Initialize a bundle definition file
 musher init
 
 # Validate your bundle
@@ -30,6 +30,35 @@ musher validate
 musher publish
 ```
 
+## Core Concepts
+
+- **Bundle** — A versioned package of assets (skills, prompts, configs) published to the Musher Hub.
+- **Asset** — A single file within a bundle (e.g. a skill markdown file, a prompt template).
+- **Bundle definition file** — The `musher.yaml` file that describes your bundle's metadata and assets.
+- **Namespace** — The publishing identity under which bundles are published (e.g. `acme/my-bundle`).
+
+## `musher.yaml` Bundle Definition
+
+```yaml
+apiVersion: musher.dev/v1alpha1
+kind: Bundle
+namespace: acme
+slug: my-skill
+version: 1.0.0
+name: My Skill Bundle
+description: A helpful coding skill
+keywords:
+  - productivity
+  - coding
+assets:
+  - id: my-skill
+    src: skills/my-skill.md
+    kind: skill
+    installs:
+      - harness: claude-code
+        path: .claude/skills/my-skill.md
+```
+
 ## Commands
 
 ### Authentication
@@ -37,24 +66,16 @@ musher publish
 |---------|-------------|
 | `musher login` | Authenticate with API key |
 | `musher logout` | Clear stored credentials |
-| `musher whoami` | Show current identity and publisher handles |
+| `musher whoami` | Show current identity and writable namespaces |
 
 ### Publishing
 | Command | Description |
 |---------|-------------|
-| `musher init` | Initialize `musher.yaml` manifest |
-| `musher validate` | Validate manifest and check assets |
-| `musher pack` | Pack bundle into a local OCI artifact |
-| `musher push` | Upload bundle to registry |
-| `musher publish` | Validate, pack, and push in one step |
-| `musher yank <ref> <version>` | Yank a published version (hidden from search, fetchable by digest) |
-
-### Discovery
-| Command | Description |
-|---------|-------------|
-| `musher search [query]` | Search the Musher Hub |
-| `musher info <pub/slug>` | Show bundle details |
-| `musher ls` | List your published bundles |
+| `musher init` | Create a `musher.yaml` bundle definition file |
+| `musher validate` | Validate bundle definition file and assets |
+| `musher publish` | Validate and publish the bundle |
+| `musher yank <ns/slug:version>` | Yank a published version (hidden from search, fetchable by digest) |
+| `musher unyank <ns/slug:version>` | Restore a yanked version |
 
 ### Maintenance
 | Command | Description |
@@ -73,28 +94,6 @@ musher publish
 - **OCI store**: `~/.local/share/musher/oci/`
 - **API endpoint**: `MUSHER_API_URL` or `api.url` config key (default: `https://api.musher.dev`)
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`
-
-## `musher.yaml` Manifest
-
-```yaml
-apiVersion: musher.dev/v1alpha1
-kind: Bundle
-publisher: acme
-slug: my-skill
-version: 1.0.0
-name: My Skill Bundle
-description: A helpful coding skill
-keywords:
-  - productivity
-  - coding
-assets:
-  - id: my-skill
-    src: skills/my-skill.md
-    kind: skill
-    installs:
-      - harness: claude-code
-        path: .claude/skills/my-skill.md
-```
 
 ## Development
 

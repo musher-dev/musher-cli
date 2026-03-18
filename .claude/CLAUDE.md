@@ -6,7 +6,7 @@ Musher is the **publishing CLI** for the Musher Hub registry — it creates,
 validates, and publishes agent bundles. It is the companion to
 [Mush](https://github.com/musher-dev/mush), which loads and runs bundles locally.
 
-**IS**: Bundle publisher, manifest validator, registry client.
+**IS**: Bundle publisher, bundle definition validator.
 **IS NOT**: Bundle runner, job executor, worker manager. That's Mush.
 
 Think `docker push` vs `docker run` — Musher publishes, Mush consumes.
@@ -24,16 +24,13 @@ Flat Docker-style verb commands, flags, user interaction orchestration.
 - `helpers.go` — Shared helpers (newAPIClient, requireAuth)
 - `login.go` — Authentication with API key
 - `logout.go` — Clear stored credentials
-- `whoami.go` — Show identity and publisher handles
-- `init.go` — Initialize musher.yaml manifest
-- `validate.go` — Validate manifest and check assets
-- `pack.go` — Pack bundle into local OCI artifact
-- `push.go` — Upload bundle to registry
-- `publish.go` — Validate, pack, and push in one step
+- `whoami.go` — Show identity and writable namespaces
+- `init.go` — Initialize musher.yaml bundle definition file
+- `validate.go` — Validate bundle definition file and check assets
+- `pack.go` — Pack bundle into local OCI artifact (hidden)
+- `publish.go` — Validate and publish the bundle
 - `yank.go` — Yank a published version
-- `search.go` — Search the Musher Hub
-- `info.go` — Show bundle details
-- `ls.go` — List published bundles
+- `unyank.go` — Restore a yanked version
 - `doctor.go` — Diagnostic checks
 - `update.go` — Self-update
 - `version.go` — Version display

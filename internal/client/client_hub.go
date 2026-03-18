@@ -78,7 +78,10 @@ type HubCategory struct {
 }
 
 // PublisherHandle is a lightweight representation of a publisher identity.
-type PublisherHandle struct {
+type PublisherHandle = NamespaceHandle
+
+// NamespaceHandle is a lightweight representation of a namespace identity.
+type NamespaceHandle struct {
 	Handle      string `json:"handle"`
 	DisplayName string `json:"displayName"`
 }
@@ -216,9 +219,9 @@ func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle strin
 	return &result, nil
 }
 
-// GetRunnerPublishers returns publisher handles associated with the authenticated runner.
+// GetRunnerNamespaces returns namespace handles associated with the authenticated runner.
 // Returns ErrEndpointNotAvailable if the server has not deployed this endpoint yet.
-func (c *Client) GetRunnerPublishers(ctx context.Context) ([]PublisherHandle, error) {
+func (c *Client) GetRunnerNamespaces(ctx context.Context) ([]NamespaceHandle, error) {
 	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/hub/me/publishers", http.NoBody)
 	if err != nil {
 		return nil, err
@@ -226,7 +229,7 @@ func (c *Client) GetRunnerPublishers(ctx context.Context) ([]PublisherHandle, er
 
 	resp, err := c.do(req, "/v1/hub/me/publishers")
 	if err != nil {
-		return nil, fmt.Errorf("get runner publishers: %w", err)
+		return nil, fmt.Errorf("get runner namespaces: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -235,17 +238,22 @@ func (c *Client) GetRunnerPublishers(ctx context.Context) ([]PublisherHandle, er
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, unexpectedStatus("get runner publishers", resp)
+		return nil, unexpectedStatus("get runner namespaces", resp)
 	}
 
 	var result struct {
-		Data []PublisherHandle `json:"data"`
+		Data []NamespaceHandle `json:"data"`
 	}
-	if err := decodeJSON(resp.Body, &result, "failed to parse runner publishers"); err != nil {
+	if err := decodeJSON(resp.Body, &result, "failed to parse runner namespaces"); err != nil {
 		return nil, err
 	}
 
 	return result.Data, nil
+}
+
+// GetRunnerPublishers is an alias for GetRunnerNamespaces for backward compatibility.
+func (c *Client) GetRunnerPublishers(ctx context.Context) ([]NamespaceHandle, error) {
+	return c.GetRunnerNamespaces(ctx)
 }
 
 // ListHubCategories lists available hub categories (public, no auth required).

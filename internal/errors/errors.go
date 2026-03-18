@@ -173,7 +173,7 @@ func ConfigFailed(operation string, cause error) *CLIError {
 func PublishFailed(cause error) *CLIError {
 	return enrichFromCause(&CLIError{
 		Message: "Publish failed",
-		Hint:    "Check your manifest and credentials, then try again",
+		Hint:    "Check your bundle definition file and credentials, then try again",
 		Cause:   cause,
 		Code:    ExitGeneral,
 	})
@@ -197,10 +197,10 @@ func PackFailed(msg string) *CLIError {
 	}
 }
 
-// ManifestInvalid returns an error for invalid manifests.
+// ManifestInvalid returns an error for invalid bundle definitions.
 func ManifestInvalid(detail string) *CLIError {
 	return &CLIError{
-		Message: fmt.Sprintf("Invalid manifest: %s", detail),
+		Message: fmt.Sprintf("Invalid bundle definition: %s", detail),
 		Hint:    "Check musher.yaml for required fields",
 		Code:    ExitConfig,
 	}
@@ -210,7 +210,17 @@ func ManifestInvalid(detail string) *CLIError {
 func YankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
 		Message: fmt.Sprintf("Failed to yank version %s", version),
-		Hint:    "Check the version exists and you have publisher access. Yanked versions are hidden from search/install but remain fetchable by digest",
+		Hint:    "Check the version exists and you have namespace access. Yanked versions are hidden from search/install but remain fetchable by digest",
+		Cause:   cause,
+		Code:    ExitGeneral,
+	})
+}
+
+// UnyankFailed returns an error for unyank failures.
+func UnyankFailed(version string, cause error) *CLIError {
+	return enrichFromCause(&CLIError{
+		Message: fmt.Sprintf("Failed to unyank version %s", version),
+		Hint:    "Check the version exists, is currently yanked, and you have namespace access",
 		Cause:   cause,
 		Code:    ExitGeneral,
 	})

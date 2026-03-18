@@ -34,7 +34,7 @@ func newRootCmd() *cobra.Command {
 		Long: `Create, validate, and publish agent bundles to the Musher Hub.
 
 Musher is the publishing CLI for bundle authors. Use it to
-scaffold, validate, pack, and publish your bundles.
+scaffold, validate, and publish your bundles.
 
 Get started:
   musher login
@@ -124,7 +124,6 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "auth", Title: "Authentication:"},
 		&cobra.Group{ID: "publish", Title: "Publishing:"},
-		&cobra.Group{ID: "discover", Title: "Discovery:"},
 		&cobra.Group{ID: "maintenance", Title: "Maintenance:"},
 	)
 
@@ -154,10 +153,6 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	packCmd.GroupID = "publish"
 	rootCmd.AddCommand(packCmd)
 
-	pushCmd := newPushCmd()
-	pushCmd.GroupID = "publish"
-	rootCmd.AddCommand(pushCmd)
-
 	publishCmd := newPublishCmd()
 	publishCmd.GroupID = "publish"
 	rootCmd.AddCommand(publishCmd)
@@ -166,18 +161,9 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	yankCmd.GroupID = "publish"
 	rootCmd.AddCommand(yankCmd)
 
-	// Discover group
-	searchCmd := newSearchCmd()
-	searchCmd.GroupID = "discover"
-	rootCmd.AddCommand(searchCmd)
-
-	infoCmd := newInfoCmd()
-	infoCmd.GroupID = "discover"
-	rootCmd.AddCommand(infoCmd)
-
-	lsCmd := newLsCmd()
-	lsCmd.GroupID = "discover"
-	rootCmd.AddCommand(lsCmd)
+	unyankCmd := newUnyankCmd()
+	unyankCmd.GroupID = "publish"
+	rootCmd.AddCommand(unyankCmd)
 
 	// Maintenance group
 	doctorCmd := newDoctorCmd()

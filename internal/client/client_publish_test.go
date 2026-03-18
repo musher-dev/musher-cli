@@ -115,7 +115,7 @@ func TestPushBundle(t *testing.T) {
 			},
 		}
 
-		err := c.PushBundle(context.Background(), "my-publisher", "my-bundle", req)
+		err := c.PushBundle(context.Background(), "my-namespace", "my-bundle", req)
 		if err != nil {
 			t.Fatalf("PushBundle returned error: %v", err)
 		}
@@ -124,7 +124,7 @@ func TestPushBundle(t *testing.T) {
 			t.Errorf("method = %q, want POST", gotMethod)
 		}
 
-		if want := "/v1/namespaces/my-publisher/bundles/my-bundle:push"; gotPath != want {
+		if want := "/v1/namespaces/my-namespace/bundles/my-bundle:push"; gotPath != want {
 			t.Errorf("path = %q, want %q", gotPath, want)
 		}
 
@@ -164,7 +164,49 @@ func TestPushBundle(t *testing.T) {
 			Version:    "1.0.0",
 		}
 
-		err := c.PushBundle(context.Background(), "pub", "my-bundle", req)
+		err := c.PushBundle(context.Background(), "ns", "my-bundle", req)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+}
+
+func TestUnyankBundleVersion(t *testing.T) {
+	t.Run("sends correct request", func(t *testing.T) {
+		var gotPath, gotMethod string
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			gotMethod = r.Method
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		c := client.New(srv.URL, "test-api-key")
+
+		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		if err != nil {
+			t.Fatalf("UnyankBundleVersion returned error: %v", err)
+		}
+
+		if gotMethod != "POST" {
+			t.Errorf("method = %q, want POST", gotMethod)
+		}
+
+		if want := "/v1/namespaces/acme/bundles/my-bundle/versions/1.0.0:unyank"; gotPath != want {
+			t.Errorf("path = %q, want %q", gotPath, want)
+		}
+	})
+
+	t.Run("returns error on non-success status", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+
+		c := client.New(srv.URL, "test-api-key")
+
+		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
