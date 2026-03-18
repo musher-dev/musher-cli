@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install script for Musher CLI
-# Usage: curl -fsSL https://get.musher.dev/cli | sh
+# Usage: curl -fsSL https://get.musher.dev | sh
 #
 # Options:
 #   --version VERSION   Install a specific version (default: latest)
@@ -70,9 +70,9 @@ Options:
   --help, -h          Show this help message
 
 Examples:
-  curl -fsSL https://get.musher.dev/cli | sh
-  curl -fsSL https://get.musher.dev/cli | sh -s -- --version 1.0.0
-  curl -fsSL https://get.musher.dev/cli | sh -s -- --prefix /usr/local
+  curl -fsSL https://get.musher.dev | sh
+  curl -fsSL https://get.musher.dev | sh -s -- --version 1.0.0
+  curl -fsSL https://get.musher.dev | sh -s -- --prefix /usr/local
 EOF
 }
 

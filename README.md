@@ -8,7 +8,7 @@ Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush)
 
 ```bash
 # From GitHub Releases
-curl -fsSL https://get.musher.dev/cli | sh
+curl -fsSL https://get.musher.dev | sh
 
 # Or with Go
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
