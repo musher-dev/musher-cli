@@ -40,7 +40,7 @@ Get started:
   musher login
   musher init
   musher publish`,
-		Example:       `  musher init
+		Example: `  musher init
   musher validate
   musher publish`,
 		SilenceUsage:  true,

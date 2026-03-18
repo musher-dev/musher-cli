@@ -99,4 +99,3 @@ func runSearch(cmd *cobra.Command, out *output.Writer, query, bundleType string)
 
 	return nil
 }
-

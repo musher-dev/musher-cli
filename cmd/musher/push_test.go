@@ -10,7 +10,7 @@ func TestAssetLogicalPathUsesSrc(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
+		name  string
 		asset manifest.Asset
 		want  string
 	}{
