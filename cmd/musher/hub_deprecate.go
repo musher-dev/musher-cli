@@ -13,7 +13,7 @@ func newHubDeprecateCmd() *cobra.Command {
 	var message string
 
 	cmd := &cobra.Command{
-		Use:   "deprecate <publisher/slug>",
+		Use:   "deprecate <namespace/slug>",
 		Short: "Deprecate a bundle on the Hub",
 		Long: `Mark a bundle as deprecated on the Musher Hub.
 
@@ -33,7 +33,7 @@ Deprecated bundles remain visible but display a deprecation notice.`,
 }
 
 func runHubDeprecate(cmd *cobra.Command, out *output.Writer, ref, message string) error {
-	publisher, slug, err := parseBundleRef(ref)
+	namespace, slug, err := parseBundleRef(ref)
 	if err != nil {
 		return err
 	}
@@ -43,15 +43,15 @@ func runHubDeprecate(cmd *cobra.Command, out *output.Writer, ref, message string
 		return authErr
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Deprecating %s/%s", publisher, slug))
+	spin := out.Spinner(fmt.Sprintf("Deprecating %s/%s", namespace, slug))
 	spin.Start()
 
-	if err := c.DeprecateHubBundle(cmd.Context(), publisher, slug, message); err != nil {
+	if err := c.DeprecateHubBundle(cmd.Context(), namespace, slug, message); err != nil {
 		spin.StopWithFailure("Failed to deprecate bundle")
-		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to deprecate %s/%s", publisher, slug), err)
+		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to deprecate %s/%s", namespace, slug), err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Deprecated %s/%s", publisher, slug))
+	spin.StopWithSuccess(fmt.Sprintf("Deprecated %s/%s", namespace, slug))
 
 	return nil
 }

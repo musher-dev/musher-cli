@@ -26,8 +26,8 @@ musher init
 # Validate your bundle
 musher validate
 
-# Publish to the registry
-musher publish
+# Push to the registry
+musher push
 ```
 
 ## Core Concepts
@@ -40,7 +40,6 @@ musher publish
 ## `musher.yaml` Bundle Definition
 
 ```yaml
-kind: Bundle
 namespace: acme
 slug: my-skill
 version: 1.0.0
@@ -52,10 +51,6 @@ keywords:
 assets:
   - id: my-skill
     src: skills/my-skill/SKILL.md
-    kind: skill
-    installs:
-      - harness: claude-code
-        path: .claude/skills/my-skill/SKILL.md
 ```
 
 Example skill file:
@@ -85,9 +80,20 @@ Add the instructions the agent should follow here.
 |---------|-------------|
 | `musher init` | Create a `musher.yaml` bundle definition file |
 | `musher validate` | Validate bundle definition file and assets |
-| `musher publish` | Validate and publish the bundle |
+| `musher push` | Validate and push the bundle to the registry |
 | `musher yank <ns/slug:version>` | Yank a published version (hidden from search, fetchable by digest) |
 | `musher unyank <ns/slug:version>` | Restore a yanked version |
+
+### Hub
+| Command | Description |
+|---------|-------------|
+| `musher hub search <query>` | Search for bundles on the Hub |
+| `musher hub info <namespace/slug>` | Show details for a Hub bundle |
+| `musher hub list <namespace>` | List bundles for a namespace |
+| `musher hub categories` | List Hub categories |
+| `musher hub publish <namespace/slug>` | Create or update a Hub listing |
+| `musher hub deprecate <namespace/slug>` | Deprecate a Hub bundle |
+| `musher hub undeprecate <namespace/slug>` | Remove deprecation from a Hub bundle |
 
 ### Maintenance
 | Command | Description |
@@ -103,7 +109,6 @@ Add the instructions the agent should follow here.
 - **Credentials**: OS Keyring (`dev.musher.musher`) or `~/.config/musher/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log`
 - **Pack cache**: `~/.cache/musher/pack/`
-- **OCI store**: `~/.local/share/musher/oci/`
 - **API endpoint**: `MUSHER_API_URL` or `api.url` config key (default: `https://api.musher.dev`)
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`
 

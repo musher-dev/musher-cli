@@ -11,7 +11,7 @@ import (
 
 func newHubUndeprecateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "undeprecate <publisher/slug>",
+		Use:     "undeprecate <namespace/slug>",
 		Short:   "Remove deprecation from a Hub bundle",
 		Long:    `Remove the deprecation notice from a bundle on the Musher Hub.`,
 		Example: `  musher hub undeprecate acme/my-bundle`,
@@ -24,7 +24,7 @@ func newHubUndeprecateCmd() *cobra.Command {
 }
 
 func runHubUndeprecate(cmd *cobra.Command, out *output.Writer, ref string) error {
-	publisher, slug, err := parseBundleRef(ref)
+	namespace, slug, err := parseBundleRef(ref)
 	if err != nil {
 		return err
 	}
@@ -34,15 +34,15 @@ func runHubUndeprecate(cmd *cobra.Command, out *output.Writer, ref string) error
 		return authErr
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Removing deprecation from %s/%s", publisher, slug))
+	spin := out.Spinner(fmt.Sprintf("Removing deprecation from %s/%s", namespace, slug))
 	spin.Start()
 
-	if err := c.UndeprecateHubBundle(cmd.Context(), publisher, slug); err != nil {
+	if err := c.UndeprecateHubBundle(cmd.Context(), namespace, slug); err != nil {
 		spin.StopWithFailure("Failed to undeprecate bundle")
-		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to undeprecate %s/%s", publisher, slug), err)
+		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to undeprecate %s/%s", namespace, slug), err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Restored %s/%s", publisher, slug))
+	spin.StopWithSuccess(fmt.Sprintf("Restored %s/%s", namespace, slug))
 
 	return nil
 }

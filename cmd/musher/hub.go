@@ -37,21 +37,21 @@ and interact with the catalog.`,
 	return cmd
 }
 
-// parseBundleRef parses a "publisher/slug" reference.
-func parseBundleRef(ref string) (publisher, slug string, err error) {
-	publisher, slug, ok := strings.Cut(ref, "/")
-	if !ok || publisher == "" || slug == "" {
-		return "", "", clierrors.New(clierrors.ExitUsage, "ref must be in the format <publisher/slug>")
+// parseBundleRef parses a "namespace/slug" reference.
+func parseBundleRef(ref string) (namespace, slug string, err error) {
+	namespace, slug, ok := strings.Cut(ref, "/")
+	if !ok || namespace == "" || slug == "" {
+		return "", "", clierrors.New(clierrors.ExitUsage, "ref must be in the format <namespace/slug>")
 	}
 
 	// Reject refs that contain a version (namespace/slug:version).
 	if strings.Contains(slug, ":") {
 		return "", "", &clierrors.CLIError{
 			Message: fmt.Sprintf("unexpected version in ref %q", ref),
-			Hint:    "Use the format <publisher/slug> without a version",
+			Hint:    "Use the format <namespace/slug> without a version",
 			Code:    clierrors.ExitUsage,
 		}
 	}
 
-	return publisher, slug, nil
+	return namespace, slug, nil
 }

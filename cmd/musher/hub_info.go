@@ -11,7 +11,7 @@ import (
 
 func newHubInfoCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "info <publisher/slug>",
+		Use:   "info <namespace/slug>",
 		Short: "Show details for a Hub bundle",
 		Long: `Display full details for a bundle listed on the Musher Hub,
 including description, versions, and install instructions.`,
@@ -25,7 +25,7 @@ including description, versions, and install instructions.`,
 }
 
 func runHubInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
-	publisher, slug, err := parseBundleRef(ref)
+	namespace, slug, err := parseBundleRef(ref)
 	if err != nil {
 		return err
 	}
@@ -36,13 +36,13 @@ func runHubInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
 		c = newPublicAPIClient(cfg)
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Fetching %s/%s", publisher, slug))
+	spin := out.Spinner(fmt.Sprintf("Fetching %s/%s", namespace, slug))
 	spin.Start()
 
-	detail, err := c.GetHubBundleDetail(cmd.Context(), publisher, slug)
+	detail, err := c.GetHubBundleDetail(cmd.Context(), namespace, slug)
 	if err != nil {
 		spin.StopWithFailure("Failed to fetch bundle")
-		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to get bundle %s/%s", publisher, slug), err)
+		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to get bundle %s/%s", namespace, slug), err)
 	}
 
 	spin.Stop()

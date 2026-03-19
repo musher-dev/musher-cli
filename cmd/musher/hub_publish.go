@@ -12,7 +12,7 @@ import (
 
 func newHubPublishCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "publish <publisher/slug>",
+		Use:   "publish <namespace/slug>",
 		Short: "Publish a bundle listing to the Hub",
 		Long: `Create or update a Hub listing for a bundle that has already been
 pushed to the registry.
@@ -28,7 +28,7 @@ This makes the bundle discoverable in the public Hub catalog.`,
 }
 
 func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
-	publisher, slug, err := parseBundleRef(ref)
+	namespace, slug, err := parseBundleRef(ref)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 	p := prompt.New(out)
 	if p.CanPrompt() {
 		confirmed, confirmErr := p.Confirm(
-			fmt.Sprintf("Publish %s/%s to the Hub?", publisher, slug), true)
+			fmt.Sprintf("Publish %s/%s to the Hub?", namespace, slug), true)
 		if confirmErr != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
 		}
@@ -53,15 +53,15 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 		}
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Publishing %s/%s to Hub", publisher, slug))
+	spin := out.Spinner(fmt.Sprintf("Publishing %s/%s to Hub", namespace, slug))
 	spin.Start()
 
-	if err := c.CreateHubListing(cmd.Context(), publisher, slug); err != nil {
+	if err := c.CreateHubListing(cmd.Context(), namespace, slug); err != nil {
 		spin.StopWithFailure("Failed to publish listing")
-		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to publish %s/%s to Hub", publisher, slug), err)
+		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to publish %s/%s to Hub", namespace, slug), err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Published %s/%s to Hub", publisher, slug))
+	spin.StopWithSuccess(fmt.Sprintf("Published %s/%s to Hub", namespace, slug))
 
 	return nil
 }

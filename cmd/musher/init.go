@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
+	"text/template"
 
 	"github.com/spf13/cobra"
 
@@ -41,96 +45,183 @@ Edit it to configure your bundle before publishing.`,
 	return cmd
 }
 
+// sanitizeSlug turns a directory name into a valid bundle slug.
+func sanitizeSlug(name string) string {
+	s := strings.ToLower(name)
+	s = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(s, "-")
+	s = regexp.MustCompile(`-{2,}`).ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+
+	if len(s) > 100 {
+		s = s[:100]
+		s = strings.TrimRight(s, "-")
+	}
+
+	if s == "" {
+		return "my-bundle"
+	}
+
+	return s
+}
+
+// slugToName converts a slug like "my-cool-bundle" to "My Cool Bundle".
+func slugToName(slug string) string {
+	words := strings.Split(slug, "-")
+	for i, w := range words {
+		if w != "" {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+
+	return strings.Join(words, " ")
+}
+
+var defaultTemplate = template.Must(template.New("default").Parse(
+	`# yaml-language-server: $schema=https://schemas.musher.dev/bundledef/v1alpha1.json
+
+# Replace with your namespace from ` + "`musher whoami`" + `.
+namespace: your-namespace
+
+slug: "{{ .Slug }}"
+version: 0.1.0
+name: "{{ .Name }}"
+description: A starter Musher bundle with one Agent Skill.
+readme: README.md
+
+assets:
+  - id: "{{ .Slug }}"
+    src: skills/{{ .Slug }}/SKILL.md
+`))
+
+var emptyTemplate = template.Must(template.New("empty").Parse(
+	`# yaml-language-server: $schema=https://schemas.musher.dev/bundledef/v1alpha1.json
+
+# Replace with your namespace from ` + "`musher whoami`" + `.
+namespace: your-namespace
+
+slug: "{{ .Slug }}"
+version: 0.1.0
+name: "{{ .Name }}"
+description: A brief description of your bundle.
+`))
+
+type initData struct {
+	Slug string
+	Name string
+}
+
 func runInit(out *output.Writer, force, empty bool) error {
 	workDir, err := os.Getwd()
 	if err != nil {
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
-	// Check if bundle definition already exists
+	// Check if bundle definition already exists (stat, not Load, so
+	// malformed files are not silently overwritten).
 	if !force {
-		if _, err := bundledef.Load(workDir); err == nil {
+		if _, err := os.Stat(filepath.Join(workDir, bundledef.FileName)); err == nil {
 			out.Warning("musher.yaml already exists in this directory (use --force to overwrite)")
 			return nil
 		}
 	}
 
-	if empty {
-		bundle := &bundledef.Def{
-			Namespace:   "your-handle",
-			Slug:        "my-bundle",
-			Version:     "0.1.0",
-			Name:        "My Bundle",
-			Description: "A brief description of your bundle",
-		}
+	slug := sanitizeSlug(filepath.Base(workDir))
+	data := initData{
+		Slug: slug,
+		Name: slugToName(slug),
+	}
 
-		if err := bundledef.Save(workDir, bundle); err != nil {
+	var created []string
+
+	if empty {
+		if err := writeTemplate(filepath.Join(workDir, bundledef.FileName), emptyTemplate, data); err != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
 		}
 
-		out.Success("Created musher.yaml")
-		out.Info("Next steps:")
-		out.Info("  1. Edit musher.yaml to set your namespace and bundle details")
-		out.Info("  2. Add assets to your bundle definition")
-		out.Info("  3. Run 'musher validate' to check your bundle")
+		created = append(created, "musher.yaml")
+	} else {
+		if err := writeTemplate(filepath.Join(workDir, bundledef.FileName), defaultTemplate, data); err != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
+		}
 
-		return nil
-	}
+		created = append(created, "musher.yaml")
 
-	bundle := &bundledef.Def{
-		Namespace:   "your-handle",
-		Slug:        "my-bundle",
-		Version:     "0.1.0",
-		Name:        "My Bundle",
-		Description: "A brief description of your bundle",
-		Keywords:    []string{"example"},
-		Assets: []bundledef.Asset{
-			{
-				ID:   "example-skill",
-				Src:  "skills/example-skill/SKILL.md",
-				Kind: "skill",
-			},
-			{
-				ID:   "example-agent",
-				Src:  "agents/example.md",
-				Kind: "agent",
-			},
-		},
-	}
+		// Create the example skill so validate passes out of the box.
+		skillsDir := filepath.Join(workDir, "skills", slug)
+		if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create skills directory", err)
+		}
 
-	if err := bundledef.Save(workDir, bundle); err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
-	}
+		skillPath := filepath.Join(skillsDir, "SKILL.md")
+		if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+			content := `---
+name: ` + slug + `
+description: A starter skill — edit the description and instructions below.
+---
 
-	// Create the example asset so validate passes out of the box
-	skillsDir := filepath.Join(workDir, "skills", "example-skill")
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create skills directory", err)
-	}
+# ` + data.Name + `
 
-	examplePath := filepath.Join(skillsDir, "SKILL.md")
-	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
-		content := "---\nname: example-skill\ndescription: A starter skill for validating Musher bundles and learning the Agent Skills format.\n---\n\n# Example Skill\n\nUse this skill when you need a minimal, valid Agent Skills example.\n"
-		if writeErr := os.WriteFile(examplePath, []byte(content), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create example skill", writeErr)
+## When to use
+
+Use this skill when you need to [describe the task or trigger].
+
+## What to edit
+
+- Update the **name** and **description** in the front matter above.
+- Replace the instructions below with your own.
+
+## Instructions
+
+Follow these steps:
+
+1. [First step]
+2. [Second step]
+3. [Third step]
+`
+			if writeErr := os.WriteFile(skillPath, []byte(content), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
+				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create example skill", writeErr)
+			}
+
+			created = append(created, "skills/"+slug+"/SKILL.md")
+		}
+
+		// Create README.md if missing.
+		readmePath := filepath.Join(workDir, "README.md")
+		if _, err := os.Stat(readmePath); os.IsNotExist(err) {
+			readmeContent := "# " + data.Name + "\n\nA Musher bundle.\n\n## Assets\n\n- **" + slug + "** — An Agent Skill (`skills/" + slug + "/SKILL.md`)\n"
+			if writeErr := os.WriteFile(readmePath, []byte(readmeContent), 0o644); writeErr != nil { //nolint:gosec // G306: readme is not sensitive
+				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create README.md", writeErr)
+			}
+
+			created = append(created, "README.md")
 		}
 	}
 
-	agentsDir := filepath.Join(workDir, "agents")
-	if err := os.MkdirAll(agentsDir, 0o750); err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create agents directory", err)
+	for _, f := range created {
+		out.Success("Created %s", f)
 	}
 
-	agentPath := filepath.Join(agentsDir, "example.md")
-	if _, err := os.Stat(agentPath); os.IsNotExist(err) {
-		content := "# Example Agent\n\nThis is a starter agent definition. Edit or replace this file with your own content.\n"
-		if writeErr := os.WriteFile(agentPath, []byte(content), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create example agent", writeErr)
-		}
+	out.Println()
+	out.Info("Next steps:")
+	out.Info("  1. Set 'namespace' in musher.yaml (run 'musher whoami' to see your namespaces)")
+	out.Info("  2. Edit bundle metadata and skill instructions")
+	out.Info("  3. Run 'musher validate' to check your bundle")
+	out.Info("  4. Run 'musher push' to publish")
+
+	return nil
+}
+
+func writeTemplate(path string, tmpl *template.Template, data initData) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
 	}
 
-	out.Success("Created musher.yaml")
-	out.Info("Edit the bundle definition file, then run 'musher validate' to check it")
+	defer func() { _ = f.Close() }()
+
+	if err := tmpl.Execute(f, data); err != nil {
+		return fmt.Errorf("write template to %s: %w", filepath.Base(path), err)
+	}
 
 	return nil
 }

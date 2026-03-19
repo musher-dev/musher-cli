@@ -27,7 +27,7 @@ Flat verbs for authoring, `hub` subcommand for catalog operations.
 - `whoami.go` — Show identity and writable namespaces
 - `init.go` — Initialize musher.yaml bundle definition file
 - `validate.go` — Validate bundle definition file and check assets
-- `pack.go` — Pack bundle into local OCI artifact (hidden)
+- `pack.go` — Pack bundle into local archive (hidden)
 - `push.go` — Validate and push the bundle to the registry
 - `yank.go` — Yank a published version
 - `unyank.go` — Restore a yanked version
@@ -97,6 +97,5 @@ task fmt          # Format code
 - **Credentials**: OS Keyring (`dev.musher.musher`), falls back to `~/.config/musher/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log` (default sink)
 - **Pack cache**: `~/.cache/musher/pack/`
-- **OCI store**: `~/.local/share/musher/oci/`
 - **API endpoint**: `api.url` config key or `MUSHER_API_URL` env var
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`
