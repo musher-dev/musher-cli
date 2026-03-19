@@ -114,14 +114,6 @@ func (i *Identity) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UserProfile represents the authenticated user profile.
-type UserProfile struct {
-	ID       string `json:"id"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	FullName string `json:"fullName"`
-}
-
 // ResponseMeta contains correlation metadata from an API response.
 type ResponseMeta struct {
 	RequestID string `json:"requestId,omitempty"`
@@ -204,39 +196,6 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 	}
 
 	return &identity, meta, nil
-}
-
-// GetCurrentUserProfile fetches the current authenticated user profile.
-func (c *Client) GetCurrentUserProfile(ctx context.Context) (*UserProfile, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/users/me", http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.do(req, "/v1/users/me")
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch current user profile: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("not authenticated")
-	}
-
-	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("forbidden")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, unexpectedStatus("current user profile", resp)
-	}
-
-	var profile UserProfile
-	if err := decodeJSON(resp.Body, &profile, "failed to parse current user profile"); err != nil {
-		return nil, err
-	}
-
-	return &profile, nil
 }
 
 func (c *Client) setRequestHeaders(req *http.Request) {

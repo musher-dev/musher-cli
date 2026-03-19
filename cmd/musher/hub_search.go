@@ -41,13 +41,27 @@ performs a full-text search across bundle names, descriptions, and tags.`,
 	}
 
 	cmd.Flags().StringVar(&bundleType, "type", "", "Filter by asset type (e.g. mcp_server, prompt)")
-	cmd.Flags().StringVar(&sort, "sort", "", "Sort order (e.g. stars, downloads, updated)")
+	cmd.Flags().StringVar(&sort, "sort", "", "Sort order (e.g. stars, downloads, recent)")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum number of results")
 
 	return cmd
 }
 
+func normalizeHubSearchSort(sort string) (string, bool) {
+	if sort == "updated" {
+		return "recent", true
+	}
+
+	return sort, false
+}
+
 func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sort string, limit int) error {
+	var warned bool
+	sort, warned = normalizeHubSearchSort(sort)
+	if warned {
+		out.Warning("--sort updated is deprecated; using recent")
+	}
+
 	_, c, err := newAPIClient()
 	if err != nil {
 		// Hub search is public — create an unauthenticated client.

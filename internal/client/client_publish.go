@@ -8,6 +8,17 @@ import (
 	neturl "net/url"
 )
 
+// BundleDetail represents the authenticated bundle detail payload.
+type BundleDetail struct {
+	ID            string `json:"id"`
+	Namespace     string `json:"namespace"`
+	Slug          string `json:"slug"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	ReadmeContent string `json:"readmeContent"`
+	ReadmeFormat  string `json:"readmeFormat"`
+}
+
 // PushBundleAsset represents a single asset in a push request.
 type PushBundleAsset struct {
 	LogicalPath string `json:"logicalPath"`
@@ -54,6 +65,42 @@ func (c *Client) PushBundle(ctx context.Context, namespace, bundleSlug string, r
 	}
 
 	return nil
+}
+
+// GetBundleDetail fetches bundle metadata from the authenticated namespace API.
+//
+//nolint:dupl // intentionally parallel to GetHubBundleDetail (different auth, endpoint, and return type)
+func (c *Client) GetBundleDetail(ctx context.Context, namespace, bundleSlug string) (*BundleDetail, error) {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(bundleSlug),
+	)
+
+	req, err := c.newRequest(ctx, "GET", c.baseURL+path, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return nil, fmt.Errorf("get bundle detail: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("bundle %s/%s not found", namespace, bundleSlug)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, unexpectedStatus("get bundle detail", resp)
+	}
+
+	var result BundleDetail
+	if err := decodeJSON(resp.Body, &result, "failed to parse bundle detail"); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }
 
 // YankBundleVersionRequest is the payload for the yank endpoint.

@@ -32,8 +32,6 @@ and interact with the catalog.`,
 		newHubPublishCmd(),
 		newHubDeprecateCmd(),
 		newHubUndeprecateCmd(),
-		newHubStarCmd(),
-		newHubUnstarCmd(),
 	)
 
 	return cmd

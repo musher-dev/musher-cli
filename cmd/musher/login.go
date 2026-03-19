@@ -90,10 +90,6 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 	}
 
 	displayName := identity.CredentialName
-	if profile, profileErr := c.GetCurrentUserProfile(cmd.Context()); profileErr == nil && profile.FullName != "" {
-		displayName = profile.FullName
-	}
-
 	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s", displayName))
 
 	// Store the key

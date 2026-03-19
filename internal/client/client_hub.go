@@ -105,6 +105,9 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 	}
 
 	if sort != "" {
+		if sort == "updated" {
+			sort = "recent"
+		}
 		params.Set("sort", sort)
 	}
 
@@ -142,6 +145,8 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 }
 
 // GetHubBundleDetail fetches full details for a hub bundle (public, no auth required).
+//
+//nolint:dupl // intentionally parallel to GetBundleDetail (different auth, endpoint, and return type)
 func (c *Client) GetHubBundleDetail(ctx context.Context, publisherHandle, bundleSlug string) (*HubBundleDetail, error) {
 	path := fmt.Sprintf("/v1/hub/bundles/%s/%s",
 		neturl.PathEscape(publisherHandle),
@@ -255,11 +260,28 @@ func (c *Client) CreateHubListing(ctx context.Context, publisherHandle, bundleSl
 		neturl.PathEscape(publisherHandle),
 	)
 
-	type createListingRequest struct {
-		BundleSlug string `json:"bundle_slug"`
+	bundle, err := c.GetBundleDetail(ctx, publisherHandle, bundleSlug)
+	if err != nil {
+		return fmt.Errorf("resolve bundle metadata: %w", err)
 	}
 
-	body, err := encodeJSON(&createListingRequest{BundleSlug: bundleSlug})
+	type createListingRequest struct {
+		BundleID      string `json:"bundleId"`
+		Slug          string `json:"slug"`
+		DisplayName   string `json:"displayName"`
+		Description   string `json:"description,omitempty"`
+		ReadmeContent string `json:"readmeContent,omitempty"`
+		ReadmeFormat  string `json:"readmeFormat,omitempty"`
+	}
+
+	body, err := encodeJSON(&createListingRequest{
+		BundleID:      bundle.ID,
+		Slug:          bundle.Slug,
+		DisplayName:   bundle.Name,
+		Description:   bundle.Description,
+		ReadmeContent: bundle.ReadmeContent,
+		ReadmeFormat:  bundle.ReadmeFormat,
+	})
 	if err != nil {
 		return err
 	}
@@ -345,56 +367,6 @@ func (c *Client) UndeprecateHubBundle(ctx context.Context, publisherHandle, bund
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return unexpectedStatus("undeprecate hub bundle", resp)
-	}
-
-	return nil
-}
-
-// StarHubBundle adds a star to a hub bundle.
-func (c *Client) StarHubBundle(ctx context.Context, publisherHandle, bundleSlug string) error {
-	path := fmt.Sprintf("/v1/hub/bundles/%s/%s/star",
-		neturl.PathEscape(publisherHandle),
-		neturl.PathEscape(bundleSlug),
-	)
-
-	req, err := c.newRequest(ctx, "PUT", c.baseURL+path, emptyJSONBody())
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.do(req, path)
-	if err != nil {
-		return fmt.Errorf("star hub bundle: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
-		return unexpectedStatus("star hub bundle", resp)
-	}
-
-	return nil
-}
-
-// UnstarHubBundle removes a star from a hub bundle.
-func (c *Client) UnstarHubBundle(ctx context.Context, publisherHandle, bundleSlug string) error {
-	path := fmt.Sprintf("/v1/hub/bundles/%s/%s/star",
-		neturl.PathEscape(publisherHandle),
-		neturl.PathEscape(bundleSlug),
-	)
-
-	req, err := c.newRequest(ctx, "DELETE", c.baseURL+path, http.NoBody)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.do(req, path)
-	if err != nil {
-		return fmt.Errorf("unstar hub bundle: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return unexpectedStatus("unstar hub bundle", resp)
 	}
 
 	return nil

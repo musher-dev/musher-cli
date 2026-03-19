@@ -3,25 +3,41 @@ package client_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/client"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func newMockClient(apiKey string, fn roundTripFunc) *client.Client {
+	return client.NewWithHTTPClient("https://api.test", apiKey, &http.Client{Transport: fn})
+}
+
+func jsonResponse(statusCode int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
 func TestYankBundleVersion(t *testing.T) {
 	t.Run("sends correct request without reason", func(t *testing.T) {
 		var gotPath, gotMethod string
 
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
 			gotMethod = r.Method
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+			return jsonResponse(http.StatusOK, `{}`), nil
+		})
 
 		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "")
 		if err != nil {
@@ -40,16 +56,12 @@ func TestYankBundleVersion(t *testing.T) {
 	t.Run("sends reason in body", func(t *testing.T) {
 		var gotBody client.YankBundleVersionRequest
 
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
-				http.Error(w, "bad json", http.StatusBadRequest)
-				return
+				t.Fatalf("decode body: %v", err)
 			}
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+			return jsonResponse(http.StatusOK, `{}`), nil
+		})
 
 		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "security vulnerability")
 		if err != nil {
@@ -62,12 +74,9 @@ func TestYankBundleVersion(t *testing.T) {
 	})
 
 	t.Run("returns error on non-success status", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusForbidden, `{}`), nil
+		})
 
 		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "")
 		if err == nil {
@@ -83,21 +92,17 @@ func TestPushBundle(t *testing.T) {
 		var gotAuth string
 		var gotBody client.PushBundleRequest
 
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
 			gotMethod = r.Method
 			gotAuth = r.Header.Get("Authorization")
 
 			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
-				http.Error(w, "bad json", http.StatusBadRequest)
-				return
+				t.Fatalf("decode body: %v", err)
 			}
 
-			w.WriteHeader(http.StatusCreated)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+			return jsonResponse(http.StatusCreated, `{}`), nil
+		})
 
 		req := &client.PushBundleRequest{
 			Slug:        "my-bundle",
@@ -150,12 +155,9 @@ func TestPushBundle(t *testing.T) {
 	})
 
 	t.Run("returns error on non-success status", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusForbidden, `{}`), nil
+		})
 
 		req := &client.PushBundleRequest{
 			Slug:       "my-bundle",
@@ -175,14 +177,11 @@ func TestUnyankBundleVersion(t *testing.T) {
 	t.Run("sends correct request", func(t *testing.T) {
 		var gotPath, gotMethod string
 
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
 			gotMethod = r.Method
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+			return jsonResponse(http.StatusOK, `{}`), nil
+		})
 
 		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
 		if err != nil {
@@ -199,16 +198,137 @@ func TestUnyankBundleVersion(t *testing.T) {
 	})
 
 	t.Run("returns error on non-success status", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		defer srv.Close()
-
-		c := client.New(srv.URL, "test-api-key")
+		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusForbidden, `{}`), nil
+		})
 
 		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 	})
+}
+
+func TestGetBundleDetail(t *testing.T) {
+	var gotPath, gotAuth string
+
+	c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		return jsonResponse(http.StatusOK, `{
+			"id":"bundle-123",
+			"namespace":"acme",
+			"slug":"my-bundle",
+			"name":"My Bundle",
+			"description":"A test bundle",
+			"readmeContent":"# Hello",
+			"readmeFormat":"markdown"
+		}`), nil
+	})
+
+	result, err := c.GetBundleDetail(context.Background(), "acme", "my-bundle")
+	if err != nil {
+		t.Fatalf("GetBundleDetail returned error: %v", err)
+	}
+
+	if gotPath != "/v1/namespaces/acme/bundles/my-bundle" {
+		t.Fatalf("path = %q, want %q", gotPath, "/v1/namespaces/acme/bundles/my-bundle")
+	}
+
+	if gotAuth != "Bearer test-api-key" {
+		t.Fatalf("auth = %q, want bearer token", gotAuth)
+	}
+
+	if result.ID != "bundle-123" || result.Name != "My Bundle" || result.ReadmeFormat != "markdown" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestCreateHubListingUsesBundleMetadata(t *testing.T) {
+	var (
+		gotLookupPath string
+		gotCreatePath string
+		gotCreateBody map[string]any
+		requestCount  int
+	)
+
+	c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
+		requestCount++
+
+		switch r.URL.Path {
+		case "/v1/namespaces/acme/bundles/my-bundle":
+			gotLookupPath = r.URL.Path
+			return jsonResponse(http.StatusOK, `{
+				"id":"bundle-123",
+				"namespace":"acme",
+				"slug":"my-bundle",
+				"name":"My Bundle",
+				"description":"A test bundle",
+				"readmeContent":"# Hello",
+				"readmeFormat":"markdown"
+			}`), nil
+		case "/v1/hub/publishers/acme/listings":
+			gotCreatePath = r.URL.Path
+			if err := json.NewDecoder(r.Body).Decode(&gotCreateBody); err != nil {
+				t.Fatalf("decode create body: %v", err)
+			}
+			return jsonResponse(http.StatusCreated, `{}`), nil
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+			return jsonResponse(http.StatusNotFound, `{}`), nil
+		}
+	})
+
+	if err := c.CreateHubListing(context.Background(), "acme", "my-bundle"); err != nil {
+		t.Fatalf("CreateHubListing returned error: %v", err)
+	}
+
+	if requestCount != 2 {
+		t.Fatalf("requestCount = %d, want 2", requestCount)
+	}
+
+	if gotLookupPath != "/v1/namespaces/acme/bundles/my-bundle" {
+		t.Fatalf("lookup path = %q", gotLookupPath)
+	}
+
+	if gotCreatePath != "/v1/hub/publishers/acme/listings" {
+		t.Fatalf("create path = %q", gotCreatePath)
+	}
+
+	if gotCreateBody["bundleId"] != "bundle-123" {
+		t.Fatalf("bundleId = %#v, want %q", gotCreateBody["bundleId"], "bundle-123")
+	}
+
+	if gotCreateBody["slug"] != "my-bundle" {
+		t.Fatalf("slug = %#v, want %q", gotCreateBody["slug"], "my-bundle")
+	}
+
+	if gotCreateBody["displayName"] != "My Bundle" {
+		t.Fatalf("displayName = %#v, want %q", gotCreateBody["displayName"], "My Bundle")
+	}
+
+	if gotCreateBody["description"] != "A test bundle" {
+		t.Fatalf("description = %#v, want %q", gotCreateBody["description"], "A test bundle")
+	}
+
+	if gotCreateBody["readmeContent"] != "# Hello" {
+		t.Fatalf("readmeContent = %#v, want %q", gotCreateBody["readmeContent"], "# Hello")
+	}
+}
+
+func TestSearchHubBundlesNormalizesUpdatedSort(t *testing.T) {
+	var gotSort string
+
+	c := newMockClient("", func(r *http.Request) (*http.Response, error) {
+		gotSort = r.URL.Query().Get("sort")
+		return jsonResponse(http.StatusOK, `{"data":[],"meta":{"nextCursor":"","hasMore":false}}`), nil
+	})
+
+	if _, err := c.SearchHubBundles(context.Background(), "", "", "updated", 20, ""); err != nil {
+		t.Fatalf("SearchHubBundles returned error: %v", err)
+	}
+
+	if gotSort != "recent" {
+		t.Fatalf("sort = %q, want %q", gotSort, "recent")
+	}
 }
