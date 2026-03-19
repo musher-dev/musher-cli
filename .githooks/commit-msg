@@ -1,5 +1,0 @@
-#!/bin/sh
-# Commit-msg hook: validate Conventional Commits format.
-set -eu
-
-exec "$(dirname "$0")/run-commit-msg.sh" "$1"

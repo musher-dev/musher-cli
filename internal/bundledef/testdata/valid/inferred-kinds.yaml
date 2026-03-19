@@ -1,0 +1,15 @@
+namespace: acme
+slug: inferred
+version: 0.1.0
+name: Inferred Kinds
+assets:
+  - id: my-skill
+    src: skills/example/SKILL.md
+  - id: my-agent
+    src: agents/example.md
+  - id: my-prompt
+    src: prompts/example.md
+  - id: my-tool
+    src: tools/example.yaml
+  - id: my-config
+    src: config/example.yaml

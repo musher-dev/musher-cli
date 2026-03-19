@@ -39,10 +39,10 @@ scaffold, validate, and publish your bundles.
 Get started:
   musher login
   musher init
-  musher publish`,
+  musher push`,
 		Example: `  musher init
   musher validate
-  musher publish`,
+  musher push`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          noArgs,
@@ -124,6 +124,7 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "auth", Title: "Authentication:"},
 		&cobra.Group{ID: "publish", Title: "Publishing:"},
+		&cobra.Group{ID: "hub", Title: "Hub:"},
 		&cobra.Group{ID: "maintenance", Title: "Maintenance:"},
 	)
 
@@ -153,9 +154,9 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	packCmd.GroupID = "publish"
 	rootCmd.AddCommand(packCmd)
 
-	publishCmd := newPublishCmd()
-	publishCmd.GroupID = "publish"
-	rootCmd.AddCommand(publishCmd)
+	pushCmd := newPushCmd()
+	pushCmd.GroupID = "publish"
+	rootCmd.AddCommand(pushCmd)
 
 	yankCmd := newYankCmd()
 	yankCmd.GroupID = "publish"
@@ -164,6 +165,11 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	unyankCmd := newUnyankCmd()
 	unyankCmd.GroupID = "publish"
 	rootCmd.AddCommand(unyankCmd)
+
+	// Hub group
+	hubCmd := newHubCmd()
+	hubCmd.GroupID = "hub"
+	rootCmd.AddCommand(hubCmd)
 
 	// Maintenance group
 	doctorCmd := newDoctorCmd()

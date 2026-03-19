@@ -19,29 +19,18 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
 
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
       - name: Install tools
         run: task setup:tools
 
-      - name: Check formatting
-        run: task check:fmt
-
-      - name: Check modules
-        run: task check:mod
-
-      - name: Lint
-        run: task check:lint
-
-      - name: Vulnerability check
-        run: task check:vuln
-
-      - name: Test
-        run: task check:test
-
-      - name: Cross-compile
-        run: task check:compile
+      - name: Run canonical quality gate
+        run: task check:ci

@@ -40,7 +40,6 @@ musher publish
 ## `musher.yaml` Bundle Definition
 
 ```yaml
-apiVersion: musher.dev/v1alpha1
 kind: Bundle
 namespace: acme
 slug: my-skill
@@ -52,11 +51,24 @@ keywords:
   - coding
 assets:
   - id: my-skill
-    src: skills/my-skill.md
+    src: skills/my-skill/SKILL.md
     kind: skill
     installs:
       - harness: claude-code
-        path: .claude/skills/my-skill.md
+        path: .claude/skills/my-skill/SKILL.md
+```
+
+Example skill file:
+
+```md
+---
+name: my-skill
+description: A helpful coding skill. Use when the task matches this bundle's specialization.
+---
+
+# My Skill
+
+Add the instructions the agent should follow here.
 ```
 
 ## Commands
@@ -98,11 +110,16 @@ assets:
 ## Development
 
 ```bash
-task build        # Build binary
-task check        # Run all quality checks
-task check:test   # Run tests only
-task fmt          # Format code
+task setup         # Download deps, install pinned tools, install hooks
+task build         # Build binary
+task check:ci      # Run the canonical quality gate
+task check:test    # Run tests only
+task check:shell   # Lint shell scripts
+task check:workflow # Lint GitHub Actions workflows
+task fmt           # Format Go and shell code, then tidy modules
 ```
+
+Local hooks are managed by `lefthook` and are installed automatically by `task setup`.
 
 ## License
 

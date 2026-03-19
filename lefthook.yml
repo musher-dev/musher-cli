@@ -1,0 +1,41 @@
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      glob: "*.go"
+      run: task check:fmt:files -- {staged_files}
+    go-lint:
+      glob: "*.go"
+      run: task check:lint:files -- {staged_files}
+    shell:
+      glob: "*.sh"
+      run: task check:shell:files -- {staged_files}
+    workflow:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: task check:workflow:files -- {staged_files}
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: |
+        sh -ceu '
+        first_line=$(head -n 1 "$1")
+        case "$first_line" in
+          Merge*) exit 0 ;;
+        esac
+        pattern="^(feat|fix|chore|docs|style|refactor|perf|test|ci|build|revert)(\\(.+\\))?(!)?: .+"
+        if ! printf "%s\n" "$first_line" | grep -Eq "$pattern"; then
+          printf "%s\n" "ERROR: Commit message does not follow Conventional Commits format." >&2
+          printf "%s\n" "" >&2
+          printf "%s\n" "  Expected: <type>(<scope>): <description>" >&2
+          printf "  Got:      %s\n" "$first_line" >&2
+          printf "%s\n" "" >&2
+          printf "%s\n" "  Types: feat, fix, chore, docs, style, refactor, perf, test, ci, build, revert" >&2
+          exit 1
+        fi
+        ' -- {1}
+
+pre-push:
+  commands:
+    verify:
+      run: task check:pre-push

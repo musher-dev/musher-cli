@@ -7,12 +7,14 @@
 # Usage: Called automatically by devcontainer.json postStartCommand.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly COMPOSE_FILE="$(cd "${SCRIPT_DIR}/.." && pwd)/compose.yaml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+COMPOSE_FILE="$(cd "${SCRIPT_DIR}/.." && pwd)/compose.yaml"
+readonly COMPOSE_FILE
 
-# shellcheck source=lib/common.sh
+# shellcheck source=.devcontainer/scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
-# shellcheck source=lib/motd.sh
+# shellcheck source=.devcontainer/scripts/lib/motd.sh
 source "${SCRIPT_DIR}/lib/motd.sh"
 
 # Logs the failing command and line number on ERR.
@@ -45,7 +47,7 @@ wait_for_healthy() {
   local elapsed=0
   while ((elapsed < timeout)); do
     local output
-    output="$(docker compose -f "${COMPOSE_FILE}" ps --format json 2>/dev/null || true)"
+    output="$(docker compose -f "${COMPOSE_FILE}" ps --format json 2> /dev/null || true)"
 
     # Detect failed services (exited, dead, or unhealthy)
     local failed=""
@@ -58,7 +60,7 @@ wait_for_healthy() {
         local state
         state="$(echo "$line" | grep -o '"State":"[^"]*"' | head -1 | cut -d'"' -f4)"
         log "  ${name}: ${state}"
-        docker compose -f "${COMPOSE_FILE}" logs --tail=10 "$name" 2>/dev/null || true
+        docker compose -f "${COMPOSE_FILE}" logs --tail=10 "$name" 2> /dev/null || true
       done
       return 1
     fi

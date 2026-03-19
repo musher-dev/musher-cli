@@ -24,7 +24,7 @@ func newUnyankCmd() *cobra.Command {
 }
 
 func runUnyank(cmd *cobra.Command, out *output.Writer, ref string) error {
-	namespace, slug, version, err := parseVersionRef(ref)
+	namespace, slug, ver, err := parseVersionRef(ref)
 	if err != nil {
 		return err
 	}
@@ -34,15 +34,15 @@ func runUnyank(cmd *cobra.Command, out *output.Writer, ref string) error {
 		return authErr
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Restoring %s/%s:%s", namespace, slug, version))
+	spin := out.Spinner(fmt.Sprintf("Restoring %s/%s:%s", namespace, slug, ver))
 	spin.Start()
 
-	if err := c.UnyankBundleVersion(cmd.Context(), namespace, slug, version); err != nil {
-		spin.StopWithFailure(fmt.Sprintf("Failed to unyank %s/%s:%s", namespace, slug, version))
-		return clierrors.UnyankFailed(version, err)
+	if err := c.UnyankBundleVersion(cmd.Context(), namespace, slug, ver); err != nil {
+		spin.StopWithFailure(fmt.Sprintf("Failed to unyank %s/%s:%s", namespace, slug, ver))
+		return clierrors.UnyankFailed(ver, err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Restored %s/%s:%s", namespace, slug, version))
+	spin.StopWithSuccess(fmt.Sprintf("Restored %s/%s:%s", namespace, slug, ver))
 
 	return nil
 }

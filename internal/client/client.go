@@ -95,30 +95,15 @@ type Identity struct {
 	OrganizationName string `json:"organizationName"`
 }
 
-// UnmarshalJSON accepts both organization-scoped and legacy workspace-scoped payloads.
+// UnmarshalJSON decodes the identity JSON payload.
 func (i *Identity) UnmarshalJSON(data []byte) error {
-	type identityAlias struct {
-		CredentialType   string `json:"credentialType"`
-		CredentialID     string `json:"credentialId"`
-		CredentialName   string `json:"credentialName"`
-		RunnerID         string `json:"runnerId"`
-		OrganizationID   string `json:"organizationId"`
-		OrganizationName string `json:"organizationName"`
-		WorkspaceID      string `json:"workspaceId"`
-		WorkspaceName    string `json:"workspaceName"`
-	}
-
+	type identityAlias Identity
 	var aux identityAlias
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("unmarshal identity: %w", err)
 	}
 
-	i.CredentialType = aux.CredentialType
-	i.CredentialID = aux.CredentialID
-	i.CredentialName = aux.CredentialName
-	i.RunnerID = aux.RunnerID
-	i.OrganizationID = firstNonEmpty(aux.OrganizationID, aux.WorkspaceID)
-	i.OrganizationName = firstNonEmpty(aux.OrganizationName, aux.WorkspaceName)
+	*i = Identity(aux)
 
 	return nil
 }
@@ -360,16 +345,6 @@ func decodeJSON(body io.Reader, dst any, msg string) error {
 	}
 
 	return nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-
-	return ""
 }
 
 func emptyJSONBody() io.Reader {

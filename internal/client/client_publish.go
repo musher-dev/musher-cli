@@ -23,7 +23,7 @@ type PushBundleRequest struct {
 	Description string            `json:"description,omitempty"`
 	Visibility  string            `json:"visibility"`
 	Version     string            `json:"version"`
-	Manifest    []PushBundleAsset `json:"manifest"`
+	Assets      []PushBundleAsset `json:"manifest"`
 }
 
 // PushBundle pushes a bundle and all its assets in a single request.

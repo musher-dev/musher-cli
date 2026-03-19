@@ -2,11 +2,13 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundledef"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/manifest"
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
@@ -27,25 +29,41 @@ referenced asset files exist. This performs the same checks that
 }
 
 func runValidate(out *output.Writer) error {
-	wd, err := os.Getwd()
+	workDir, err := os.Getwd()
 	if err != nil {
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
-	m, err := manifest.Load(wd)
+	// Run schema validation first.
+	yamlPath := filepath.Join(workDir, bundledef.FileName)
+
+	yamlData, err := os.ReadFile(yamlPath)
+	if err == nil {
+		if schemaErrs := bundledef.ValidateSchema(yamlData); len(schemaErrs) > 0 {
+			parts := make([]string, 0, len(schemaErrs)+1)
+			parts = append(parts, "schema validation failed:")
+			for _, e := range schemaErrs {
+				parts = append(parts, "  - "+e.String())
+			}
+
+			return clierrors.InvalidBundleDef(strings.Join(parts, "\n"))
+		}
+	}
+
+	bundle, err := bundledef.Load(workDir)
 	if err != nil {
-		return clierrors.ManifestInvalid(err.Error())
+		return clierrors.InvalidBundleDef(err.Error())
 	}
 
-	if err := m.Validate(); err != nil {
-		return clierrors.ManifestInvalid(err.Error())
+	if err := bundle.Validate(); err != nil {
+		return clierrors.InvalidBundleDef(err.Error())
 	}
 
-	if err := m.ValidatePaths(wd); err != nil {
+	if err := bundle.ValidateAssets(workDir); err != nil {
 		return clierrors.ValidateFailed(err.Error())
 	}
 
-	out.Success("Bundle is valid: %s (%d assets)", m.VersionRef(), len(m.Assets))
+	out.Success("Bundle is valid: %s (%d assets)", bundle.VersionRef(), len(bundle.Assets))
 
 	return nil
 }

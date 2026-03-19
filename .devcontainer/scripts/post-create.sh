@@ -7,11 +7,12 @@
 # Usage: Called automatically by devcontainer.json postCreateCommand.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
-# shellcheck source=lib/common.sh
+# shellcheck source=.devcontainer/scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
-# shellcheck source=lib/base-setup.sh
+# shellcheck source=.devcontainer/scripts/lib/base-setup.sh
 source "${SCRIPT_DIR}/lib/base-setup.sh"
 
 # Logs the failing command and line number on ERR.
@@ -51,14 +52,14 @@ setup_env_file() {
 #   Writes progress to stderr via log()
 setup_shell_customization() {
   local shell_dir
-  shell_dir="$(cd "${SCRIPT_DIR}/../config/shell" 2>/dev/null && pwd)" || return 0
+  shell_dir="$(cd "${SCRIPT_DIR}/../config/shell" 2> /dev/null && pwd)" || return 0
   local zshrc="/home/${REMOTE_USER:-vscode}/.zshrc"
   local marker="# --- musher shell customization ---"
 
-  if ! grep -qF "$marker" "$zshrc" 2>/dev/null; then
+  if ! grep -qF "$marker" "$zshrc" 2> /dev/null; then
     log "Configuring shell customization sourcing..."
     # NOTE: ${shell_dir} is intentionally expanded at write-time (unquoted heredoc).
-    cat >> "$zshrc" <<EOF
+    cat >> "$zshrc" << EOF
 
 $marker
 for f in ${shell_dir}/*.shared.sh(N); do
@@ -84,15 +85,8 @@ main() {
   setup_shell_customization
   # --- Add repo-specific setup below ---
   # --- Musher CLI repo-specific setup ---
-  log "Installing Go tools..."
-  go install golang.org/x/vuln/cmd/govulncheck@latest
-  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-
-  log "Configuring git hooks..."
-  git config core.hooksPath .githooks
-
-  log "Downloading Go dependencies..."
-  go mod download
+  log "Installing pinned project tooling and hooks..."
+  task setup
 
   log "Post-create setup completed"
 }

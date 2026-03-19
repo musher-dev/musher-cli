@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -76,9 +77,6 @@ type HubCategory struct {
 	Description string `json:"description"`
 	BundleCount int    `json:"bundleCount"`
 }
-
-// PublisherHandle is a lightweight representation of a publisher identity.
-type PublisherHandle = NamespaceHandle
 
 // NamespaceHandle is a lightweight representation of a namespace identity.
 type NamespaceHandle struct {
@@ -251,9 +249,155 @@ func (c *Client) GetRunnerNamespaces(ctx context.Context) ([]NamespaceHandle, er
 	return result.Data, nil
 }
 
-// GetRunnerPublishers is an alias for GetRunnerNamespaces for backward compatibility.
-func (c *Client) GetRunnerPublishers(ctx context.Context) ([]NamespaceHandle, error) {
-	return c.GetRunnerNamespaces(ctx)
+// CreateHubListing creates or updates a hub listing for a bundle.
+func (c *Client) CreateHubListing(ctx context.Context, publisherHandle, bundleSlug string) error {
+	path := fmt.Sprintf("/v1/hub/publishers/%s/listings",
+		neturl.PathEscape(publisherHandle),
+	)
+
+	type createListingRequest struct {
+		BundleSlug string `json:"bundle_slug"`
+	}
+
+	body, err := encodeJSON(&createListingRequest{BundleSlug: bundleSlug})
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("create hub listing: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("create hub listing", resp)
+	}
+
+	return nil
+}
+
+// DeprecateHubBundle marks a hub bundle as deprecated.
+func (c *Client) DeprecateHubBundle(ctx context.Context, publisherHandle, bundleSlug, message string) error {
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s:deprecate",
+		neturl.PathEscape(publisherHandle),
+		neturl.PathEscape(bundleSlug),
+	)
+
+	type deprecateRequest struct {
+		Message string `json:"message,omitempty"`
+	}
+
+	var body []byte
+	var err error
+	if message != "" {
+		body, err = encodeJSON(&deprecateRequest{Message: message})
+		if err != nil {
+			return err
+		}
+	}
+
+	var req *http.Request
+	if body != nil {
+		req, err = c.newRequest(ctx, "POST", c.baseURL+path, bytes.NewReader(body))
+	} else {
+		req, err = c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
+	}
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("deprecate hub bundle: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("deprecate hub bundle", resp)
+	}
+
+	return nil
+}
+
+// UndeprecateHubBundle removes deprecation from a hub bundle.
+func (c *Client) UndeprecateHubBundle(ctx context.Context, publisherHandle, bundleSlug string) error {
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s:undeprecate",
+		neturl.PathEscape(publisherHandle),
+		neturl.PathEscape(bundleSlug),
+	)
+
+	req, err := c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("undeprecate hub bundle: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("undeprecate hub bundle", resp)
+	}
+
+	return nil
+}
+
+// StarHubBundle adds a star to a hub bundle.
+func (c *Client) StarHubBundle(ctx context.Context, publisherHandle, bundleSlug string) error {
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s/star",
+		neturl.PathEscape(publisherHandle),
+		neturl.PathEscape(bundleSlug),
+	)
+
+	req, err := c.newRequest(ctx, "PUT", c.baseURL+path, emptyJSONBody())
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("star hub bundle: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("star hub bundle", resp)
+	}
+
+	return nil
+}
+
+// UnstarHubBundle removes a star from a hub bundle.
+func (c *Client) UnstarHubBundle(ctx context.Context, publisherHandle, bundleSlug string) error {
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s/star",
+		neturl.PathEscape(publisherHandle),
+		neturl.PathEscape(bundleSlug),
+	)
+
+	req, err := c.newRequest(ctx, "DELETE", c.baseURL+path, http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return fmt.Errorf("unstar hub bundle: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return unexpectedStatus("unstar hub bundle", resp)
+	}
+
+	return nil
 }
 
 // ListHubCategories lists available hub categories (public, no auth required).

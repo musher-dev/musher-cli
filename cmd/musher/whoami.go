@@ -44,7 +44,12 @@ func runWhoami(cmd *cobra.Command, out *output.Writer) error {
 		return clierrors.CredentialsInvalid(err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s (via %s)", identity.CredentialName, source))
+	displayName := identity.CredentialName
+	if profile, profileErr := c.GetCurrentUserProfile(ctx); profileErr == nil && profile.FullName != "" {
+		displayName = profile.FullName
+	}
+
+	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s (via %s)", displayName, source))
 
 	if identity.OrganizationName != "" {
 		out.Muted("Organization: %s", identity.OrganizationName)

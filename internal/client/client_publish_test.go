@@ -105,7 +105,7 @@ func TestPushBundle(t *testing.T) {
 			Description: "A test bundle",
 			Visibility:  "private",
 			Version:     "1.0.0",
-			Manifest: []client.PushBundleAsset{
+			Assets: []client.PushBundleAsset{
 				{
 					LogicalPath: "prompts/hello.txt",
 					AssetType:   "prompt",
@@ -140,12 +140,12 @@ func TestPushBundle(t *testing.T) {
 			t.Errorf("body.Version = %q, want %q", gotBody.Version, "1.0.0")
 		}
 
-		if len(gotBody.Manifest) != 1 {
-			t.Fatalf("body.Manifest length = %d, want 1", len(gotBody.Manifest))
+		if len(gotBody.Assets) != 1 {
+			t.Fatalf("body.Manifest length = %d, want 1", len(gotBody.Assets))
 		}
 
-		if gotBody.Manifest[0].LogicalPath != "prompts/hello.txt" {
-			t.Errorf("body.Manifest[0].LogicalPath = %q, want %q", gotBody.Manifest[0].LogicalPath, "prompts/hello.txt")
+		if gotBody.Assets[0].LogicalPath != "prompts/hello.txt" {
+			t.Errorf("body.Manifest[0].LogicalPath = %q, want %q", gotBody.Assets[0].LogicalPath, "prompts/hello.txt")
 		}
 	})
 

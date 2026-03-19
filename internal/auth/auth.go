@@ -21,6 +21,7 @@ const (
 // CredentialSource indicates where credentials were found.
 type CredentialSource string
 
+// Credential source values.
 const (
 	SourceEnv     CredentialSource = "environment variable"
 	SourceKeyring CredentialSource = "keyring"

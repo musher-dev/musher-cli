@@ -29,7 +29,7 @@ log() {
 # Returns:
 #   0 if found, 1 otherwise
 has_cmd() {
-  command -v "$1" &>/dev/null
+  command -v "$1" &> /dev/null
 }
 
 # Runs a command with sudo if available, otherwise without.
@@ -37,7 +37,7 @@ has_cmd() {
 # Arguments:
 #   $@ — command and arguments
 maybe_sudo() {
-  if sudo -n true 2>/dev/null; then
+  if sudo -n true 2> /dev/null; then
     sudo "$@"
   else
     "$@"
@@ -152,7 +152,7 @@ verify_tools() {
   local all_ok=true
   for cmd in "$@"; do
     if has_cmd "$cmd"; then
-      log "  ✓ ${cmd}: $("$cmd" --version 2>/dev/null || echo 'installed')"
+      log "  ✓ ${cmd}: $("$cmd" --version 2> /dev/null || echo 'installed')"
     else
       log "  ✗ ${cmd}: MISSING"
       all_ok=false

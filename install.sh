@@ -57,7 +57,7 @@ PREFIX=""
 YES=false
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Install Musher CLI
 
 Usage:
@@ -125,11 +125,11 @@ detect_arch() {
 # ── Download helpers ─────────────────────────────────────────────────────────
 
 has_curl() {
-  command -v curl >/dev/null 2>&1
+  command -v curl > /dev/null 2>&1
 }
 
 has_wget() {
-  command -v wget >/dev/null 2>&1
+  command -v wget > /dev/null 2>&1
 }
 
 download() {
@@ -150,7 +150,7 @@ download() {
 resolve_latest_version() {
   if has_curl; then
     url=$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' \
-      "${BASE_URL}/releases/latest" 2>/dev/null) ||
+      "${BASE_URL}/releases/latest" 2> /dev/null) ||
       err "Failed to resolve latest version. Check ${BASE_URL}/releases"
   elif has_wget; then
     url=$(wget --https-only --max-redirect=0 -S \
@@ -176,9 +176,9 @@ verify_checksum() {
   expected=$(awk -v name="$archive_name" '$2 == name { print $1; exit }' "$checksums_file")
   [ -n "$expected" ] || err "Archive '$archive_name' not found in checksums file"
 
-  if command -v sha256sum >/dev/null 2>&1; then
+  if command -v sha256sum > /dev/null 2>&1; then
     actual=$(sha256sum "$file" | awk '{print $1}')
-  elif command -v shasum >/dev/null 2>&1; then
+  elif command -v shasum > /dev/null 2>&1; then
     actual=$(shasum -a 256 "$file" | awk '{print $1}')
   else
     err "Neither sha256sum nor shasum found. Cannot verify checksum."
@@ -208,7 +208,7 @@ maybe_sudo() {
     return
   fi
 
-  if command -v sudo >/dev/null 2>&1; then
+  if command -v sudo > /dev/null 2>&1; then
     echo "sudo"
   else
     err "Cannot write to $target and sudo is not available. Try: --prefix ~/.local"
@@ -287,7 +287,7 @@ main() {
     esac
   fi
 
-  TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t musher)"
+  TMP_DIR="$(mktemp -d 2> /dev/null || mktemp -d -t musher)"
   trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 
   say "Downloading ${ARCHIVE_NAME}..."
@@ -303,7 +303,7 @@ main() {
   tar -xzf "${TMP_DIR}/${ARCHIVE_NAME}" -C "$TMP_DIR"
 
   SUDO="$(maybe_sudo "$BIN_DIR")"
-  mkdir -p "$BIN_DIR" 2>/dev/null || ${SUDO} mkdir -p "$BIN_DIR"
+  mkdir -p "$BIN_DIR" 2> /dev/null || ${SUDO} mkdir -p "$BIN_DIR"
   ${SUDO} install -m 755 "${TMP_DIR}/${BINARY}" "${BIN_DIR}/${BINARY}"
 
   say ""

@@ -7,7 +7,7 @@ import (
 
 // ReadFile centralizes trusted-path reads.
 func ReadFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: callers pass trusted or validated paths
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
@@ -49,7 +49,7 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 
 // Open centralizes trusted-path opens.
 func Open(path string) (*os.File, error) {
-	file, err := os.Open(path) //nolint:gosec // G304: callers pass trusted or validated paths
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
@@ -59,7 +59,7 @@ func Open(path string) (*os.File, error) {
 
 // OpenFile centralizes trusted-path open flags.
 func OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
-	file, err := os.OpenFile(path, flag, perm) //nolint:gosec // G304: callers pass trusted or validated paths
+	file, err := os.OpenFile(path, flag, perm)
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}

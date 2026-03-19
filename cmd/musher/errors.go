@@ -16,6 +16,10 @@ func handleError(out *output.Writer, err error) int {
 	if clierrors.As(err, &cliErr) {
 		out.Failure("%s", cliErr.Message)
 
+		if cliErr.Cause != nil {
+			out.Muted("  Cause: %s", cliErr.Cause)
+		}
+
 		if shouldProbeHealth(cliErr, out) {
 			renderHealthProbe(out, cliErr)
 		} else if cliErr.Hint != "" {

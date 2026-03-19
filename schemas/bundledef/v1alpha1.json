@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.musher.dev/bundledef/v1alpha1.json",
+  "title": "Musher Bundle Definition",
+  "description": "Schema for musher.yaml bundle definition files (v1alpha1).",
+  "type": "object",
+  "required": ["namespace", "slug", "version", "name", "assets"],
+  "properties": {
+    "namespace": { "$ref": "#/$defs/namespace" },
+    "slug": { "$ref": "#/$defs/slug" },
+    "version": { "$ref": "#/$defs/semver" },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name for the bundle."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Short description of the bundle."
+    },
+    "visibility": {
+      "type": "string",
+      "enum": ["private", "public"],
+      "default": "private",
+      "description": "Bundle visibility. Defaults to private."
+    },
+    "readme": { "$ref": "#/$defs/relativePath" },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier."
+    },
+    "licenseFile": { "$ref": "#/$defs/relativePath" },
+    "repository": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL of the source repository."
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "description": "Searchable keywords."
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Arbitrary key-value metadata."
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/asset" },
+      "description": "Bundle assets."
+    }
+  },
+  "if": {
+    "properties": { "visibility": { "const": "public" } },
+    "required": ["visibility"]
+  },
+  "then": {
+    "required": ["description", "readme"],
+    "anyOf": [
+      { "required": ["license"] },
+      { "required": ["licenseFile"] }
+    ]
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "namespace": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Owner namespace (lowercase, hyphens allowed, no leading/trailing hyphen)."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Bundle slug (lowercase, hyphens allowed, no leading/trailing hyphen)."
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*))?(\\+([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*))?$",
+      "description": "Semantic version string."
+    },
+    "relativePath": {
+      "type": "string",
+      "pattern": "^[^/]",
+      "minLength": 1,
+      "description": "Relative file path (must not start with /)."
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[a-z]+/[a-z0-9.+-]+$",
+      "description": "IANA media type."
+    },
+    "assetKind": {
+      "type": "string",
+      "enum": ["skill", "agent", "prompt", "tool", "config"],
+      "description": "Asset kind. Can be inferred from src path prefix."
+    },
+    "asset": {
+      "type": "object",
+      "required": ["id", "src"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Unique asset identifier within the bundle."
+        },
+        "src": { "$ref": "#/$defs/relativePath" },
+        "kind": { "$ref": "#/$defs/assetKind" },
+        "mediaType": { "$ref": "#/$defs/mediaType" }
+      },
+      "unevaluatedProperties": false,
+      "description": "A single bundle asset."
+    }
+  }
+}

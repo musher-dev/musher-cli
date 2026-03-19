@@ -39,3 +39,13 @@ func requireAuth() (*client.Client, error) {
 	_, c, err := newAPIClient()
 	return c, err
 }
+
+// configForPublicClient returns the API URL from config (no auth needed).
+func configForPublicClient() string {
+	return config.Load().APIURL()
+}
+
+// newPublicAPIClient creates an unauthenticated client for public endpoints.
+func newPublicAPIClient(apiURL string) *client.Client {
+	return client.New(apiURL, "")
+}

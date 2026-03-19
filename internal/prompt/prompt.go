@@ -141,16 +141,7 @@ func (p *Prompter) Select(message string, options []string) (int, error) {
 	}
 }
 
-// APIKey prompts the user for an API key.
-func APIKey(out *output.Writer) (string, error) {
-	out.Print("Enter your API key: ")
-
-	reader := bufio.NewReader(os.Stdin)
-
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("failed to read input: %w", err)
-	}
-
-	return strings.TrimSpace(input), nil
+// APIKey prompts for an API key with masked input (asterisks).
+func (p *Prompter) APIKey() (string, error) {
+	return p.Password("Enter your API key")
 }

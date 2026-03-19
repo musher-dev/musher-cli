@@ -57,7 +57,8 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 		}
 
 		var err error
-		apiKey, err = prompt.APIKey(out)
+		p := prompt.New(out)
+		apiKey, err = p.APIKey()
 		if err != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read API key", err)
 		}
@@ -88,7 +89,12 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 		return clierrors.AuthFailed(err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s", identity.CredentialName))
+	displayName := identity.CredentialName
+	if profile, profileErr := c.GetCurrentUserProfile(cmd.Context()); profileErr == nil && profile.FullName != "" {
+		displayName = profile.FullName
+	}
+
+	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s", displayName))
 
 	// Store the key
 	if err := auth.StoreAPIKey(apiKey); err != nil {

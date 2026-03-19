@@ -100,7 +100,11 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 	}
 
 	if out.JSON {
-		return out.PrintJSON(info)
+		if jsonErr := out.PrintJSON(info); jsonErr != nil {
+			return fmt.Errorf("print update info: %w", jsonErr)
+		}
+
+		return nil
 	}
 
 	if !info.UpdateAvailable && !force {

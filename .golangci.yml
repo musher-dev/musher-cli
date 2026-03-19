@@ -15,15 +15,23 @@ linters:
     - staticcheck     # Advanced static analysis (includes gosimple)
     - unused          # Unused code detection
     - ineffassign     # Unused assignments
+    - bidichk         # Detect dangerous bidirectional text
     - revive          # Style linter (golint replacement)
     - bodyclose       # HTTP response body closure
     - noctx           # HTTP requests with context
     - gocritic        # Additional checks
+    - fatcontext      # Nested contexts in loops/closures
     - depguard        # Import boundary enforcement
     - forbidigo       # Enforce output abstraction usage
     - gosec           # Security vulnerability detection
+    - dupl            # Duplicate code detection
     - errorlint       # Error wrapping correctness (Go 1.13+)
     - misspell        # Spelling errors in comments/strings
+    - nilnil          # Avoid returning nil, nil
+    - nilnesserr      # Nilness-related error issues
+    - usetesting      # Ensure test helpers use testing package APIs
+    - thelper         # Ensure test helpers call t.Helper
+    - tparallel       # Catch missing t.Parallel in table tests
     - unconvert       # Unnecessary type conversions
     - nilerr          # Nil error return detection
     - varnamelen      # Variable name length by scope
@@ -138,6 +146,7 @@ linters:
         - tx
         - wg
         - mu
+        - tt
         - ch
         - fs
         - io
@@ -171,9 +180,6 @@ linters:
       - path: _test\.go
         linters:
           - varnamelen
-      - path: _test\.go
-        linters:
-          - dupl
       - path: internal/.*
         linters:
           - gocognit

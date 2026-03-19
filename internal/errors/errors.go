@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// Exit codes for CLI commands.
 const (
 	ExitSuccess   = 0
 	ExitGeneral   = 1
@@ -197,8 +198,8 @@ func PackFailed(msg string) *CLIError {
 	}
 }
 
-// ManifestInvalid returns an error for invalid bundle definitions.
-func ManifestInvalid(detail string) *CLIError {
+// InvalidBundleDef returns an error for invalid bundle definitions.
+func InvalidBundleDef(detail string) *CLIError {
 	return &CLIError{
 		Message: fmt.Sprintf("Invalid bundle definition: %s", detail),
 		Hint:    "Check musher.yaml for required fields",

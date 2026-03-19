@@ -1,0 +1,7 @@
+slug: my-bundle
+version: 1.0.0
+name: My Bundle
+assets:
+  - id: a
+    src: skills/a.md
+    kind: skill

@@ -1,0 +1,24 @@
+namespace: acme
+slug: my-bundle
+version: 1.2.3
+name: My Full Bundle
+description: A bundle with all fields populated
+visibility: public
+readme: README.md
+license: MIT
+licenseFile: LICENSE
+repository: https://github.com/acme/my-bundle
+keywords:
+  - example
+  - test
+annotations:
+  team: platform
+  tier: free
+assets:
+  - id: example-skill
+    src: skills/example/SKILL.md
+    kind: skill
+    mediaType: text/markdown
+  - id: example-agent
+    src: agents/example.md
+    kind: agent

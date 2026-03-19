@@ -15,10 +15,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   exit 1
 fi
 
-readonly _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly _HOME="/home/${REMOTE_USER:-vscode}"
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly _LIB_DIR
+_HOME="/home/${REMOTE_USER:-vscode}"
+readonly _HOME
 
-# shellcheck source=common.sh
+# shellcheck source=.devcontainer/scripts/lib/common.sh
 source "${_LIB_DIR}/common.sh"
 
 # --- Config directories ---

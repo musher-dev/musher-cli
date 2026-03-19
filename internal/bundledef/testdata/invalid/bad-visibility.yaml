@@ -1,0 +1,9 @@
+namespace: acme
+slug: my-bundle
+version: 1.0.0
+name: My Bundle
+visibility: unlisted
+assets:
+  - id: a
+    src: skills/a.md
+    kind: skill

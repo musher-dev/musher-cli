@@ -7,6 +7,12 @@ version: '3'
 vars:
   BINARY: musher
   MODULE: github.com/musher-dev/musher-cli
+  GO_VERSION: 1.26.1
+  GOLANGCI_LINT_VERSION: v2.11.3
+  GOVULNCHECK_VERSION: v1.1.4
+  SHFMT_VERSION: v3.13.0
+  ACTIONLINT_VERSION: v1.7.11
+  LEFTHOOK_VERSION: v1.13.6
 
 tasks:
   # ===========================================================================
@@ -18,12 +24,25 @@ tasks:
     cmds:
       - go mod download
       - task: setup:tools
+      - task: setup:hooks
 
   setup:tools:
     desc: Install required tooling
     cmds:
-      - go install golang.org/x/vuln/cmd/govulncheck@latest
-      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}}
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
+      - go install mvdan.cc/sh/v3/cmd/shfmt@{{.SHFMT_VERSION}}
+      - go install github.com/rhysd/actionlint/cmd/actionlint@{{.ACTIONLINT_VERSION}}
+      - go install github.com/evilmartians/lefthook@{{.LEFTHOOK_VERSION}}
+
+  setup:hooks:
+    desc: Install repository git hooks
+    preconditions:
+      - sh: command -v lefthook >/dev/null 2>&1
+        msg: "lefthook is required. Run 'task setup:tools' first."
+    cmds:
+      - git config --unset core.hooksPath || true
+      - lefthook install
 
   # ===========================================================================
   # Development
@@ -53,21 +72,40 @@ tasks:
   # ===========================================================================
 
   check:
-    desc: Run all checks (fmt + mod + lint + vuln + test)
+    desc: Run the full local quality suite
+    cmds:
+      - task: check:ci
+
+  check:ci:
+    desc: Run the canonical CI quality gate
     cmds:
       - task: check:fmt
+      - task: check:shell
+      - task: check:workflow
       - task: check:mod
+      - task: check:guards
       - task: check:lint
       - task: check:vuln
       - task: check:test
+      - task: check:compile
 
   check:fmt:
-    desc: Check Go formatting and imports (gofumpt + goimports)
+    desc: Check Go formatting and imports
     preconditions:
       - sh: command -v golangci-lint >/dev/null 2>&1
         msg: "golangci-lint is required. Run 'task setup:tools' first."
     cmds:
       - golangci-lint fmt --diff ./...
+
+  check:fmt:files:
+    desc: Check formatting on specific Go files
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint is required. Run 'task setup:tools' first."
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "Pass one or more Go files after '--'."
+    cmds:
+      - golangci-lint fmt --diff {{.CLI_ARGS}}
 
   check:mod:
     desc: Verify module files are tidy
@@ -81,6 +119,73 @@ tasks:
         msg: "golangci-lint is required. Run 'task setup:tools' first."
     cmds:
       - golangci-lint run ./...
+
+  check:lint:files:
+    desc: Run golangci-lint on packages containing the given Go files
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint is required. Run 'task setup:tools' first."
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "Pass one or more Go files after '--'."
+    cmds:
+      - |
+        dirs=$(for f in {{.CLI_ARGS}}; do dirname "$f"; done | sort -u)
+        pkgs=""
+        for d in $dirs; do
+          pkgs="$pkgs ./$d"
+        done
+        golangci-lint run $pkgs
+
+  check:shell:
+    desc: Lint shell scripts with shfmt + shellcheck
+    preconditions:
+      - sh: command -v shfmt >/dev/null 2>&1
+        msg: "shfmt is required. Run 'task setup:tools' first."
+      - sh: command -v shellcheck >/dev/null 2>&1
+        msg: "shellcheck is required and must be installed on PATH."
+    cmds:
+      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -d -i 2 -ci -sr"
+      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shellcheck -x"
+
+  check:shell:files:
+    desc: Lint specific shell files
+    preconditions:
+      - sh: command -v shfmt >/dev/null 2>&1
+        msg: "shfmt is required. Run 'task setup:tools' first."
+      - sh: command -v shellcheck >/dev/null 2>&1
+        msg: "shellcheck is required and must be installed on PATH."
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "Pass one or more shell files after '--'."
+    cmds:
+      - shfmt -d -i 2 -ci -sr {{.CLI_ARGS}}
+      - shellcheck -x {{.CLI_ARGS}}
+
+  check:workflow:
+    desc: Lint GitHub Actions workflows
+    preconditions:
+      - sh: command -v actionlint >/dev/null 2>&1
+        msg: "actionlint is required. Run 'task setup:tools' first."
+    cmds:
+      - sh -c "find .github/workflows -type f \\( -name '*.yml' -o -name '*.yaml' \\) -print0 | xargs -0 actionlint"
+
+  check:workflow:files:
+    desc: Lint specific workflow files
+    preconditions:
+      - sh: command -v actionlint >/dev/null 2>&1
+        msg: "actionlint is required. Run 'task setup:tools' first."
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "Pass one or more workflow files after '--'."
+    cmds:
+      - actionlint {{.CLI_ARGS}}
+
+  check:guards:
+    desc: Enforce repository quality guardrails
+    cmds:
+      - |
+        if rg -n '(@latest|version:\s*latest)' .devcontainer/scripts .github/workflows; then
+          echo "floating @latest versions are not allowed in automation; pin tool versions explicitly"
+          exit 1
+        fi
 
   check:vuln:
     desc: Run govulncheck
@@ -110,6 +215,14 @@ tasks:
       - GOOS=linux   GOARCH=arm64 go build ./cmd/musher
       - GOOS=windows GOARCH=amd64 go build ./cmd/musher
 
+  check:pre-push:
+    desc: Run the pre-push verification suite
+    cmds:
+      - task: check:guards
+      - task: check:lint
+      - task: check:test
+      - task: check:compile
+
   # Quick aliases
   test:
     desc: Run tests (alias for check:test)
@@ -130,8 +243,11 @@ tasks:
     preconditions:
       - sh: command -v golangci-lint >/dev/null 2>&1
         msg: "golangci-lint is required. Run 'task setup:tools' first."
+      - sh: command -v shfmt >/dev/null 2>&1
+        msg: "shfmt is required. Run 'task setup:tools' first."
     cmds:
       - golangci-lint fmt ./...
+      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -w -i 2 -ci -sr"
       - go mod tidy
 
   # ===========================================================================

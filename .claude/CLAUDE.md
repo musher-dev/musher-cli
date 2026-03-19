@@ -15,26 +15,40 @@ Think `docker push` vs `docker run` — Musher publishes, Mush consumes.
 
 ### CLI Entry — `cmd/musher/`
 
-Flat Docker-style verb commands, flags, user interaction orchestration.
+Flat verbs for authoring, `hub` subcommand for catalog operations.
 
 - `main.go` — Entry point, version injection, error handling
-- `root.go` — Root command, persistent flags, flat verb registration
+- `root.go` — Root command, persistent flags, verb registration
 - `bootstrap.go` — Runtime configuration (logging, output modes)
 - `errors.go` — CLI error rendering and health probes
-- `helpers.go` — Shared helpers (newAPIClient, requireAuth)
+- `helpers.go` — Shared helpers (newAPIClient, requireAuth, public client)
 - `login.go` — Authentication with API key
 - `logout.go` — Clear stored credentials
 - `whoami.go` — Show identity and writable namespaces
 - `init.go` — Initialize musher.yaml bundle definition file
 - `validate.go` — Validate bundle definition file and check assets
 - `pack.go` — Pack bundle into local OCI artifact (hidden)
-- `publish.go` — Validate and publish the bundle
+- `push.go` — Validate and push the bundle to the registry
 - `yank.go` — Yank a published version
 - `unyank.go` — Restore a yanked version
+- `hub.go` — Hub parent command + `parseBundleRef` helper
+- `hub_search.go` — Search hub bundles
+- `hub_info.go` — Show hub bundle details
+- `hub_list.go` — List bundles for a namespace
+- `hub_categories.go` — List hub categories
+- `hub_publish.go` — Publish a listing to the hub
+- `hub_deprecate.go` — Deprecate a hub bundle
+- `hub_undeprecate.go` — Remove deprecation from a hub bundle
+- `hub_star.go` — Star/unstar hub bundles
 - `doctor.go` — Diagnostic checks
 - `update.go` — Self-update
 - `version.go` — Version display
 - `completion.go` — Shell completions
+
+### Schemas — `schemas/`
+
+- `bundledef/v1alpha1.json` — JSON Schema (Draft 2020-12) for musher.yaml bundle definitions
+- `bundledef/embed.go` — Go embed wrapper for schema consumption
 
 ### Internal Packages — `internal/`
 
@@ -44,7 +58,7 @@ Flat Docker-style verb commands, flags, user interaction orchestration.
 - `config/` — Viper-based configuration
 - `doctor/` — Diagnostic check framework
 - `errors/` — CLIError type
-- `manifest/` — musher.yaml reader/writer/validator
+- `bundledef/` — musher.yaml reader/writer/validator (with JSON Schema validation)
 - `observability/` — Structured logging + telemetry
 - `output/` — CLI output handling (colors, spinners, TTY detection)
 - `paths/` — XDG-style path resolution
