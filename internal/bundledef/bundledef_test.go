@@ -133,22 +133,24 @@ func TestMapAssetType(t *testing.T) {
 	}{
 		// Exact matches
 		{"skill", "skill"},
-		{"agent", "agent_definition"},
-		{"agent_definition", "agent_definition"},
-		{"tool", "tool_config"},
-		{"tool_config", "tool_config"},
+		{"agent", "agent_spec"},
+		{"agent_spec", "agent_spec"},
+		{"agent_definition", "agent_spec"},
+		{"tool", "toolset"},
+		{"toolset", "toolset"},
+		{"tool_config", "toolset"},
 		{"prompt", "prompt"},
 		{"config", "config"},
 
 		// Case insensitivity
 		{"Skill", "skill"},
-		{"AGENT", "agent_definition"},
-		{"Tool_Config", "tool_config"},
+		{"AGENT", "agent_spec"},
+		{"Tool_Config", "toolset"},
 		{"PROMPT", "prompt"},
 
 		// Whitespace trimming
 		{" skill ", "skill"},
-		{"  agent  ", "agent_definition"},
+		{"  agent  ", "agent_spec"},
 
 		// Fallback to other
 		{"", "other"},

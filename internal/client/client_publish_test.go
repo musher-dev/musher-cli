@@ -145,7 +145,7 @@ func TestPushBundle(t *testing.T) {
 		}
 
 		if gotBody.Assets[0].LogicalPath != "prompts/hello.txt" {
-			t.Errorf("body.Manifest[0].LogicalPath = %q, want %q", gotBody.Assets[0].LogicalPath, "prompts/hello.txt")
+			t.Errorf("body.Manifest[0].logicalPath = %q, want %q", gotBody.Assets[0].LogicalPath, "prompts/hello.txt")
 		}
 	})
 

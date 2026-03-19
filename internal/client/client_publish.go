@@ -10,10 +10,10 @@ import (
 
 // PushBundleAsset represents a single asset in a push request.
 type PushBundleAsset struct {
-	LogicalPath string `json:"logical_path"`
-	AssetType   string `json:"asset_type"`
-	ContentText string `json:"content_text"`
-	MediaType   string `json:"media_type,omitempty"`
+	LogicalPath string `json:"logicalPath"`
+	AssetType   string `json:"assetType"`
+	ContentText string `json:"contentText"`
+	MediaType   string `json:"mediaType,omitempty"`
 }
 
 // PushBundleRequest is the payload for the single-request push endpoint.

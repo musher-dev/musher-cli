@@ -40,6 +40,7 @@ type HTTPStatusError struct {
 	Status    int
 	RequestID string
 	TraceID   string
+	Detail    string
 }
 
 func (e *HTTPStatusError) Error() string {
@@ -52,11 +53,16 @@ func (e *HTTPStatusError) Error() string {
 		extras = append(extras, "trace_id="+e.TraceID)
 	}
 
-	if len(extras) == 0 {
-		return fmt.Sprintf("%s failed with status %d", e.Operation, e.Status)
+	base := fmt.Sprintf("%s failed with status %d", e.Operation, e.Status)
+	if len(extras) > 0 {
+		base = fmt.Sprintf("%s (%s)", base, strings.Join(extras, ", "))
 	}
 
-	return fmt.Sprintf("%s failed with status %d (%s)", e.Operation, e.Status, strings.Join(extras, ", "))
+	if e.Detail != "" {
+		base = fmt.Sprintf("%s: %s", base, e.Detail)
+	}
+
+	return base
 }
 
 // RequestIDValue returns the request correlation ID when available.
@@ -356,12 +362,24 @@ func unexpectedStatus(operation string, resp *http.Response) error {
 	statusCode := 0
 	requestID := ""
 	traceID := ""
+	detail := ""
 
 	if resp != nil {
 		statusCode = resp.StatusCode
 		requestID = strings.TrimSpace(resp.Header.Get("X-Request-Id"))
 		traceID = responseTraceID(resp)
-		_, _ = io.Copy(io.Discard, resp.Body)
+
+		// Try to extract detail from RFC 9457 Problem Details response.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if err == nil && len(body) > 0 {
+			var problem struct {
+				Detail string `json:"detail"`
+				Title  string `json:"title"`
+			}
+			if json.Unmarshal(body, &problem) == nil && problem.Detail != "" {
+				detail = problem.Detail
+			}
+		}
 	}
 
 	return &HTTPStatusError{
@@ -369,6 +387,7 @@ func unexpectedStatus(operation string, resp *http.Response) error {
 		Status:    statusCode,
 		RequestID: requestID,
 		TraceID:   traceID,
+		Detail:    detail,
 	}
 }
 

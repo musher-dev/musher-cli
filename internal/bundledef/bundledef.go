@@ -247,10 +247,10 @@ func MapAssetType(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "skill":
 		return "skill"
-	case "agent", "agent_definition":
-		return "agent_definition"
-	case "tool", "tool_config":
-		return "tool_config"
+	case "agent", "agent_spec", "agent_definition":
+		return "agent_spec"
+	case "tool", "toolset", "tool_config":
+		return "toolset"
 	case "prompt":
 		return "prompt"
 	case "config":
