@@ -18,7 +18,7 @@ func newHubListCmd() *cobra.Command {
 		Long:  `List all bundles published by a namespace on the Musher Hub.`,
 		Example: `  musher hub list acme
   musher hub list acme --limit 50`,
-		Args: cobra.ExactArgs(1),
+		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runHubList(cmd, out, args[0], limit)

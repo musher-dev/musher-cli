@@ -193,20 +193,22 @@ func PublishFailed(cause error) *CLIError {
 	})
 }
 
+// VersionConflict returns an error when pushing a version that already exists.
+func VersionConflict(versionRef string, cause error) *CLIError {
+	return enrichFromCause(&CLIError{
+		Message:   fmt.Sprintf("Version %s already exists", versionRef),
+		Hint:      "Bump the version in musher.yaml and try again, or use 'musher yank' to remove the existing version",
+		Cause:     cause,
+		Code:      ExitGeneral,
+		ErrorCode: "ERR-PUBLISH-CONFLICT",
+	})
+}
+
 // ValidateFailed returns an error for validation failures.
 func ValidateFailed(msg string) *CLIError {
 	return &CLIError{
 		Message: fmt.Sprintf("Validation failed: %s", msg),
 		Hint:    "Fix the issues above and run 'musher validate' again",
-		Code:    ExitGeneral,
-	}
-}
-
-// PackFailed returns an error for pack failures.
-func PackFailed(msg string) *CLIError {
-	return &CLIError{
-		Message: fmt.Sprintf("Pack failed: %s", msg),
-		Hint:    "Fix the issues above and run 'musher pack' again",
 		Code:    ExitGeneral,
 	}
 }
@@ -235,16 +237,6 @@ func UnyankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
 		Message: fmt.Sprintf("Failed to unyank version %s", version),
 		Hint:    "Check the version exists, is currently yanked, and you have namespace access",
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// ImportFailed returns an error for import failures.
-func ImportFailed(cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message: "Import failed",
-		Hint:    "Check the source paths and try again",
 		Cause:   cause,
 		Code:    ExitGeneral,
 	})

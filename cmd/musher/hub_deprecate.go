@@ -20,7 +20,7 @@ func newHubDeprecateCmd() *cobra.Command {
 Deprecated bundles remain visible but display a deprecation notice.`,
 		Example: `  musher hub deprecate acme/old-bundle
   musher hub deprecate acme/old-bundle --message "Use acme/new-bundle instead"`,
-		Args: cobra.ExactArgs(1),
+		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runHubDeprecate(cmd, out, args[0], message)

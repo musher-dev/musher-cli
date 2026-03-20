@@ -15,7 +15,7 @@ func newHubUndeprecateCmd() *cobra.Command {
 		Short:   "Remove deprecation from a Hub bundle",
 		Long:    `Remove the deprecation notice from a bundle on the Musher Hub.`,
 		Example: `  musher hub undeprecate acme/my-bundle`,
-		Args:    cobra.ExactArgs(1),
+		Args:    requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runHubUndeprecate(cmd, out, args[0])

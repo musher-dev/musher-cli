@@ -19,7 +19,7 @@ pushed to the registry.
 
 This makes the bundle discoverable in the public Hub catalog.`,
 		Example: `  musher hub publish acme/my-bundle`,
-		Args:    cobra.ExactArgs(1),
+		Args:    requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runHubPublish(cmd, out, args[0])

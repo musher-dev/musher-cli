@@ -33,18 +33,7 @@ func newRootCmd() *cobra.Command {
 		Short: "Publish agent bundles to the Musher registry",
 		Long: `Create, validate, and publish agent bundles to the Musher
 registry. Use the Hub commands to manage public catalog
-listings.
-
-Get started:
-  musher login
-  musher init
-  musher push
-
-Docs:   https://github.com/musher-dev/musher-cli
-Issues: https://github.com/musher-dev/musher-cli/issues`,
-		Example: `  musher init
-  musher validate
-  musher push`,
+listings.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          noArgs,
@@ -99,7 +88,9 @@ Issues: https://github.com/musher-dev/musher-cli/issues`,
 		},
 	}
 
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (hub, version, update, and import commands)")
+	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\nDocs: https://docs.musher.dev/\n")
+
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (hub, version, and update commands)")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Minimal output (for CI)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
@@ -159,10 +150,6 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	validateCmd.GroupID = "publish"
 	rootCmd.AddCommand(validateCmd)
 
-	packCmd := newPackCmd()
-	packCmd.GroupID = "publish"
-	rootCmd.AddCommand(packCmd)
-
 	pushCmd := newPushCmd()
 	pushCmd.GroupID = "publish"
 	rootCmd.AddCommand(pushCmd)
@@ -174,10 +161,6 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	unyankCmd := newUnyankCmd()
 	unyankCmd.GroupID = "publish"
 	rootCmd.AddCommand(unyankCmd)
-
-	importCmd := newImportCmd()
-	importCmd.GroupID = "publish"
-	rootCmd.AddCommand(importCmd)
 
 	// Hub group
 	hubCmd := newHubCmd()
@@ -212,6 +195,19 @@ func validateAPIURL(raw string) (string, error) {
 }
 
 // noArgs returns a Cobra positional-arg validator that rejects any arguments.
+// requireOneArg returns a Cobra positional-arg validator that requires exactly one argument.
+func requireOneArg(cmd *cobra.Command, args []string) error {
+	if len(args) != 1 {
+		return &clierrors.CLIError{
+			Message: fmt.Sprintf("'%s' requires exactly one argument", cmd.CommandPath()),
+			Hint:    fmt.Sprintf("Usage: %s\nRun '%s --help' for details", cmd.UseLine(), cmd.CommandPath()),
+			Code:    clierrors.ExitUsage,
+		}
+	}
+
+	return nil
+}
+
 func noArgs(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return &clierrors.CLIError{

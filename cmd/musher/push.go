@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -104,6 +106,12 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 
 	if pushErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req); pushErr != nil {
 		spin.StopWithFailure("Push failed")
+
+		var httpErr *client.HTTPStatusError
+		if errors.As(pushErr, &httpErr) && httpErr.Status == http.StatusConflict {
+			return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
+		}
+
 		return clierrors.PublishFailed(pushErr)
 	}
 

@@ -114,16 +114,6 @@ func DataRoot() (string, error) {
 	return dataRoot()
 }
 
-// PackCacheDir returns the pack cache directory for Musher.
-func PackCacheDir() (string, error) {
-	root, err := cacheRoot()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(root, "pack"), nil
-}
-
 // OCIStoreDir returns the OCI store directory for Musher.
 func OCIStoreDir() (string, error) {
 	root, err := dataRoot()

@@ -81,8 +81,6 @@ Add the instructions the agent should follow here.
 | `musher init` | Create a `musher.yaml` bundle definition file |
 | `musher validate` | Validate bundle definition file and assets |
 | `musher push` | Validate and push the bundle to the registry |
-| `musher import skills <path...>` | Import skills from local directories |
-| `musher import npm --installed` | Import skills from installed npm packages |
 | `musher yank <ns/slug:version>` | Yank a published version (hidden from search, fetchable by digest) |
 | `musher unyank <ns/slug:version>` | Restore a yanked version |
 
@@ -112,7 +110,6 @@ Add the instructions the agent should follow here.
 - **Config dir**: `~/.config/musher/`
 - **Credentials**: OS Keyring (`dev.musher.musher`) or `~/.config/musher/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log`
-- **Pack cache**: `~/.cache/musher/pack/`
 - **API endpoint**: `MUSHER_API_URL` or `api.url` config key (default: `https://api.musher.dev`)
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`
 

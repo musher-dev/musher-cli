@@ -71,7 +71,7 @@ Options:
 
 Examples:
   curl -fsSL https://get.musher.dev | sh
-  curl -fsSL https://get.musher.dev | sh -s -- --version 1.0.0
+  curl -fsSL https://get.musher.dev | sh -s -- --version 0.1.0
   curl -fsSL https://get.musher.dev | sh -s -- --prefix /usr/local
 EOF
 }

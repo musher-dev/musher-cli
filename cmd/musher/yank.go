@@ -22,7 +22,7 @@ for reproducibility — existing lockfiles that pin a digest will
 continue to resolve.`,
 		Example: `  musher yank acme/my-bundle:1.0.0
   musher yank acme/my-bundle:1.0.0 --reason "security vulnerability"`,
-		Args: cobra.ExactArgs(1),
+		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runYank(cmd, out, args[0])

@@ -15,7 +15,7 @@ func newUnyankCmd() *cobra.Command {
 		Short:   "Restore a yanked bundle version",
 		Long:    `Restore a previously yanked bundle version, making it visible and installable again.`,
 		Example: `  musher unyank acme/my-bundle:1.0.0`,
-		Args:    cobra.ExactArgs(1),
+		Args:    requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runUnyank(cmd, out, args[0])

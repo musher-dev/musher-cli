@@ -16,7 +16,7 @@ func newHubInfoCmd() *cobra.Command {
 		Long: `Display full details for a bundle listed on the Musher Hub,
 including description, versions, and install instructions.`,
 		Example: `  musher hub info acme/my-bundle`,
-		Args:    cobra.ExactArgs(1),
+		Args:    requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runHubInfo(cmd, out, args[0])
