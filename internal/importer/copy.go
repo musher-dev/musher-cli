@@ -49,7 +49,7 @@ func CopyDir(src, dst string) error {
 		}
 
 		if entry.IsDir() {
-			return os.MkdirAll(target, 0o750)
+			return os.MkdirAll(target, 0o755) //nolint:gosec // project files need standard read+execute for all users
 		}
 
 		return copyFile(path, target)
@@ -73,7 +73,7 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("stat %s: %w", src, err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { //nolint:gosec // project files need standard read+execute for all users
 		return fmt.Errorf("create parent directory: %w", err)
 	}
 

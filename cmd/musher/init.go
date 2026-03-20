@@ -190,7 +190,7 @@ func runInit(out *output.Writer, force, empty bool) error {
 
 		// Create the example skill so validate passes out of the box.
 		skillsDir := filepath.Join(workDir, "skills", slug)
-		if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+		if err := os.MkdirAll(skillsDir, 0o755); err != nil { //nolint:gosec // project files need standard read+execute for all users
 			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create skills directory", err)
 		}
 
@@ -260,7 +260,7 @@ Follow these steps:
 }
 
 func writeTemplate(path string, tmpl *template.Template, data initData) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // project files need standard read permissions
 	if err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
 	}
