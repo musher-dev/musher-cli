@@ -88,6 +88,12 @@ name: "{{ .Name }}"
 description: A starter Musher bundle with one Agent Skill.
 readme: README.md
 
+# Visibility controls who can see your bundle.
+# Options: public, private (default if omitted is private).
+visibility: public
+
+license: Apache-2.0
+
 assets:
   - id: "{{ .Slug }}"
     src: skills/{{ .Slug }}/SKILL.md
@@ -103,6 +109,10 @@ slug: "{{ .Slug }}"
 version: 0.1.0
 name: "{{ .Name }}"
 description: A brief description of your bundle.
+
+# Visibility controls who can see your bundle.
+# Options: public, private (default if omitted is private).
+visibility: public
 `))
 
 type initData struct {

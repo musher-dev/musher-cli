@@ -172,9 +172,15 @@ func ConfigFailed(operation string, cause error) *CLIError {
 
 // PublishFailed returns an error for publishing failures.
 func PublishFailed(cause error) *CLIError {
+	hint := "Check your bundle definition file and credentials, then try again"
+
+	if containsAny(errorString(cause), "private", "visibility", "plan allows", "plan limit") {
+		hint = "Set 'visibility: public' in musher.yaml, or upgrade your plan for more private bundles"
+	}
+
 	return enrichFromCause(&CLIError{
 		Message: "Publish failed",
-		Hint:    "Check your bundle definition file and credentials, then try again",
+		Hint:    hint,
 		Cause:   cause,
 		Code:    ExitGeneral,
 	})
