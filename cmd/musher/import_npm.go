@@ -19,7 +19,7 @@ func newImportNpmCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "npm [flags]",
+		Use:   "npm --installed [flags]",
 		Short: "Import skills from npm packages",
 		Long: `Import agent skills from npm packages into the bundle workspace.
 

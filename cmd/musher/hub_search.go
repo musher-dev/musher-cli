@@ -25,7 +25,7 @@ Without a query, lists recently updated bundles. With a query,
 performs a full-text search across bundle names, descriptions, and tags.`,
 		Example: `  musher hub search
   musher hub search "code review"
-  musher hub search --type mcp_server
+  musher hub search --type skill
   musher hub search --sort stars --limit 10`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,7 +40,7 @@ performs a full-text search across bundle names, descriptions, and tags.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&bundleType, "type", "", "Filter by asset type (e.g. mcp_server, prompt)")
+	cmd.Flags().StringVar(&bundleType, "type", "", "Filter by asset type (skill, agent, prompt, tool, config)")
 	cmd.Flags().StringVar(&sort, "sort", "", "Sort order (e.g. stars, downloads, recent)")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum number of results")
 
@@ -97,7 +97,7 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 		b := &result.Data[i]
 		out.Print("%s/%s", b.Publisher.Handle, b.Slug)
 		if b.LatestVersion != "" {
-			out.Print("@%s", b.LatestVersion)
+			out.Print(":%s", b.LatestVersion)
 		}
 		out.Print("\n")
 

@@ -30,16 +30,18 @@ func newRootCmd() *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "musher",
-		Short: "Publish agent bundles to the Musher Hub",
-		Long: `Create, validate, and publish agent bundles to the Musher Hub.
-
-Musher is the publishing CLI for bundle authors. Use it to
-scaffold, validate, and publish your bundles.
+		Short: "Publish agent bundles to the Musher registry",
+		Long: `Create, validate, and publish agent bundles to the Musher
+registry. Use the Hub commands to manage public catalog
+listings.
 
 Get started:
   musher login
   musher init
-  musher push`,
+  musher push
+
+Docs:   https://github.com/musher-dev/musher-cli
+Issues: https://github.com/musher-dev/musher-cli/issues`,
 		Example: `  musher init
   musher validate
   musher push`,
@@ -97,7 +99,7 @@ Get started:
 		},
 	}
 
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (hub, version, update, and import commands)")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Minimal output (for CI)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
