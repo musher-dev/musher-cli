@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/musher-dev/musher-cli/compare/v0.2.0...v0.2.1) (2026-03-20)
+
+
+### Features
+
+* add visibility recovery flow and hub-readiness validation ([bdc9ca8](https://github.com/musher-dev/musher-cli/commit/bdc9ca89f5901b74a967c6e91afd39d6ec42b917))
+
 ## [0.2.0](https://github.com/musher-dev/musher-cli/compare/v0.1.0...v0.2.0) (2026-03-20)
 
 
