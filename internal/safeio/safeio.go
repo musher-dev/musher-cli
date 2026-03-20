@@ -1,6 +1,7 @@
 package safeio
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -22,7 +23,7 @@ func ReadFileIfExists(path string) (data []byte, exists bool, err error) {
 		return data, true, nil
 	}
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	}
 

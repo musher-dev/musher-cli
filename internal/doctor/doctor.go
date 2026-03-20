@@ -11,6 +11,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -204,7 +205,7 @@ func checkConfigFile(context.Context) Result {
 
 	data, err := safeio.ReadFile(configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return Result{
 				Status:  StatusPass,
 				Message: "No config file (using defaults)",
