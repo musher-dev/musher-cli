@@ -62,6 +62,7 @@ func TestRunInitOverwriteProtectionMalformedFile(t *testing.T) {
 func TestRunInitForceOverwritesMalformedFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1") // isolate from host credentials
 
 	malformed := []byte("this: is not\n  valid: musher yaml\n")
 	if err := os.WriteFile(filepath.Join(dir, "musher.yaml"), malformed, 0o644); err != nil {
@@ -139,6 +140,7 @@ func TestRunInitSlugFromDirectoryName(t *testing.T) {
 func TestRunInitGeneratedContent(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1") // isolate from host credentials
 
 	out := testWriter()
 
