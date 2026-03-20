@@ -4,6 +4,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -94,9 +95,15 @@ func As(err error, target **CLIError) bool {
 
 // NotAuthenticated returns an error indicating missing credentials.
 func NotAuthenticated() *CLIError {
+	hint := "Run 'musher login' or set MUSHER_API_KEY"
+	if os.Getenv("SUDO_USER") != "" {
+		hint = "Credentials from 'musher login' are not accessible under sudo. " +
+			"Run without sudo, or pass --api-key, or set MUSHER_API_KEY"
+	}
+
 	return &CLIError{
 		Message:   "Not authenticated",
-		Hint:      "Run 'musher login' or set MUSHER_API_KEY",
+		Hint:      hint,
 		Code:      ExitAuth,
 		ErrorCode: "ERR-AUTH-001",
 	}

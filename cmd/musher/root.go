@@ -50,6 +50,13 @@ Get started:
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			if os.Geteuid() == 0 && cmd.Name() != "update" {
+				out.Warning("Running as root is not recommended. Files created will be owned by root.")
+				if os.Getenv("SUDO_USER") != "" {
+					out.Warning("Credentials from 'musher login' are stored per-user and won't be accessible under sudo.")
+				}
+			}
+
 			if strings.TrimSpace(apiURL) != "" {
 				validatedURL, err := validateAPIURL(apiURL)
 				if err != nil {
