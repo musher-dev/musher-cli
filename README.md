@@ -1,6 +1,6 @@
 # Musher CLI
 
-Publish agent bundles to the [Musher Hub](https://musher.dev) registry.
+Publish agent bundles to the [Musher](https://musher.dev) registry.
 
 Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush) — while Mush loads and runs bundles locally, Musher handles creating, validating, and publishing them. Think `docker push` vs `docker run`.
 
@@ -81,6 +81,8 @@ Add the instructions the agent should follow here.
 | `musher init` | Create a `musher.yaml` bundle definition file |
 | `musher validate` | Validate bundle definition file and assets |
 | `musher push` | Validate and push the bundle to the registry |
+| `musher import skills <path...>` | Import skills from local directories |
+| `musher import npm --installed` | Import skills from installed npm packages |
 | `musher yank <ns/slug:version>` | Yank a published version (hidden from search, fetchable by digest) |
 | `musher unyank <ns/slug:version>` | Restore a yanked version |
 
@@ -94,6 +96,8 @@ Add the instructions the agent should follow here.
 | `musher hub publish <namespace/slug>` | Create or update a Hub listing |
 | `musher hub deprecate <namespace/slug>` | Deprecate a Hub bundle |
 | `musher hub undeprecate <namespace/slug>` | Remove deprecation from a Hub bundle |
+
+> **Two-step flow:** `musher push` uploads your bundle to the registry. `musher hub publish` creates or updates the public catalog listing.
 
 ### Maintenance
 | Command | Description |
