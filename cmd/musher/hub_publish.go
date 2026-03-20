@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundledef"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
@@ -31,6 +33,14 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 	namespace, slug, err := parseBundleRef(ref)
 	if err != nil {
 		return err
+	}
+
+	// If a local musher.yaml exists, validate hub-readiness before proceeding.
+	workDir, _ := os.Getwd()
+	if def, loadErr := bundledef.Load(workDir); loadErr == nil {
+		if hubErr := def.ValidateHubReadiness(); hubErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
+		}
 	}
 
 	c, authErr := requireAuth()

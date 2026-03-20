@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/musher-dev/musher-cli/internal/skills"
 	"gopkg.in/yaml.v3"
 )
+
+// visibilityLineRE matches a YAML visibility line (e.g. "visibility: private").
+var visibilityLineRE = regexp.MustCompile(`(?m)^(\s*visibility:\s*).*$`)
 
 // FileName is the expected bundle definition file name.
 const FileName = "musher.yaml"
@@ -83,6 +87,45 @@ func Save(dir string, d *Def) error {
 	}
 
 	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+		return fmt.Errorf("write bundle definition: %w", err)
+	}
+
+	return nil
+}
+
+// SetVisibility performs a targeted line replacement of the visibility field in
+// musher.yaml, preserving comments and formatting. If no visibility line exists,
+// one is inserted after the name line (or before assets as fallback).
+func SetVisibility(dir, visibility string) error {
+	path := filepath.Join(dir, FileName)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read bundle definition: %w", err)
+	}
+
+	content := string(data)
+
+	if visibilityLineRE.MatchString(content) {
+		content = visibilityLineRE.ReplaceAllString(content, "${1}"+visibility)
+	} else {
+		// Insert after "name:" line, or before "assets:" as fallback.
+		nameRE := regexp.MustCompile(`(?m)^(name:.*)$`)
+		if loc := nameRE.FindStringIndex(content); loc != nil {
+			insertAt := loc[1]
+			content = content[:insertAt] + "\nvisibility: " + visibility + content[insertAt:]
+		} else {
+			assetsRE := regexp.MustCompile(`(?m)^(assets:.*)$`)
+			if loc := assetsRE.FindStringIndex(content); loc != nil {
+				insertAt := loc[0]
+				content = content[:insertAt] + "visibility: " + visibility + "\n" + content[insertAt:]
+			} else {
+				content += "\nvisibility: " + visibility + "\n"
+			}
+		}
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
 		return fmt.Errorf("write bundle definition: %w", err)
 	}
 
@@ -258,6 +301,30 @@ func MapAssetType(kind string) string {
 	default:
 		return "other"
 	}
+}
+
+// ValidateHubReadiness checks that the bundle definition has all fields required
+// for publishing to the Hub catalog: description, readme, and license.
+func (d *Def) ValidateHubReadiness() error {
+	var missing []string
+
+	if strings.TrimSpace(d.Description) == "" {
+		missing = append(missing, "description")
+	}
+
+	if strings.TrimSpace(d.Readme) == "" {
+		missing = append(missing, "readme")
+	}
+
+	if strings.TrimSpace(d.License) == "" && strings.TrimSpace(d.LicenseFile) == "" {
+		missing = append(missing, "license or licenseFile")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("bundle is not ready for Hub publishing — missing required fields:\n  - %s", strings.Join(missing, "\n  - "))
+	}
+
+	return nil
 }
 
 // Ref returns the namespace/slug reference string.

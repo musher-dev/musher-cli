@@ -1,6 +1,8 @@
 package bundledef
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -124,6 +126,79 @@ func TestValidateDefaultsVisibilityToPrivate(t *testing.T) {
 	}
 }
 
+func TestValidateHubReadiness(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		def     Def
+		wantErr bool
+		wantMsg string
+	}{
+		{
+			name: "all fields present",
+			def: Def{
+				Description: "A bundle",
+				Readme:      "README.md",
+				License:     "MIT",
+			},
+			wantErr: false,
+		},
+		{
+			name: "licenseFile instead of license",
+			def: Def{
+				Description: "A bundle",
+				Readme:      "README.md",
+				LicenseFile: "LICENSE",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "all missing",
+			def:     Def{},
+			wantErr: true,
+			wantMsg: "description",
+		},
+		{
+			name: "missing readme",
+			def: Def{
+				Description: "A bundle",
+				License:     "MIT",
+			},
+			wantErr: true,
+			wantMsg: "readme",
+		},
+		{
+			name: "missing license and licenseFile",
+			def: Def{
+				Description: "A bundle",
+				Readme:      "README.md",
+			},
+			wantErr: true,
+			wantMsg: "license or licenseFile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.def.ValidateHubReadiness()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+
+				if !strings.Contains(err.Error(), tt.wantMsg) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.wantMsg)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestMapAssetType(t *testing.T) {
 	t.Parallel()
 
@@ -166,5 +241,130 @@ func TestMapAssetType(t *testing.T) {
 				t.Errorf("MapAssetType(%q) = %q, want %q", tt.kind, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSetVisibilityReplacesExistingLine(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `namespace: acme
+slug: my-bundle
+version: 1.0.0
+name: My Bundle
+visibility: private # keep bundles private
+assets:
+  - id: a
+    src: skills/a.md
+`
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetVisibility(dir, "public"); err != nil {
+		t.Fatalf("SetVisibility() error = %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, FileName))
+	result := string(got)
+
+	if !strings.Contains(result, "visibility: public") {
+		t.Errorf("expected visibility: public, got:\n%s", result)
+	}
+
+	// Comment should be preserved (the regex replaces the whole line after "visibility: ")
+	if strings.Contains(result, "private") {
+		t.Errorf("old visibility value should be gone, got:\n%s", result)
+	}
+}
+
+func TestSetVisibilityInsertsAfterName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `namespace: acme
+slug: my-bundle
+version: 1.0.0
+name: My Bundle
+assets:
+  - id: a
+    src: skills/a.md
+`
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetVisibility(dir, "public"); err != nil {
+		t.Fatalf("SetVisibility() error = %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, FileName))
+	result := string(got)
+
+	if !strings.Contains(result, "visibility: public") {
+		t.Errorf("expected visibility: public, got:\n%s", result)
+	}
+
+	// visibility should appear between name and assets
+	nameIdx := strings.Index(result, "name: My Bundle")
+	visIdx := strings.Index(result, "visibility: public")
+	assetsIdx := strings.Index(result, "assets:")
+
+	if visIdx <= nameIdx || visIdx >= assetsIdx {
+		t.Errorf("visibility should be between name and assets, got:\n%s", result)
+	}
+}
+
+func TestSetVisibilityPreservesComments(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `# My bundle config
+namespace: acme
+slug: my-bundle
+version: 1.0.0
+name: My Bundle
+visibility: private
+# Assets section
+assets:
+  - id: a
+    src: skills/a.md
+`
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetVisibility(dir, "public"); err != nil {
+		t.Fatalf("SetVisibility() error = %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, FileName))
+	result := string(got)
+
+	if !strings.Contains(result, "# My bundle config") {
+		t.Error("top comment was lost")
+	}
+
+	if !strings.Contains(result, "# Assets section") {
+		t.Error("assets comment was lost")
+	}
+
+	if !strings.Contains(result, "visibility: public") {
+		t.Errorf("expected visibility: public, got:\n%s", result)
+	}
+}
+
+func TestSetVisibilityMissingFileError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	err := SetVisibility(dir, "public")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+
+	if !strings.Contains(err.Error(), "read bundle definition") {
+		t.Errorf("error = %q, want it to mention read failure", err.Error())
 	}
 }

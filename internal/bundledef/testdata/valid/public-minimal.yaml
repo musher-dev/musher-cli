@@ -1,0 +1,9 @@
+namespace: acme
+slug: my-public-bundle
+version: 1.0.0
+name: My Public Bundle
+visibility: public
+assets:
+  - id: example-skill
+    src: skills/example/SKILL.md
+    kind: skill

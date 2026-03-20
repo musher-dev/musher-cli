@@ -60,17 +60,6 @@
       "description": "Bundle assets."
     }
   },
-  "if": {
-    "properties": { "visibility": { "const": "public" } },
-    "required": ["visibility"]
-  },
-  "then": {
-    "required": ["description", "readme"],
-    "anyOf": [
-      { "required": ["license"] },
-      { "required": ["licenseFile"] }
-    ]
-  },
   "unevaluatedProperties": false,
   "$defs": {
     "namespace": {

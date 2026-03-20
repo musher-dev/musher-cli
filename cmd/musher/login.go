@@ -90,7 +90,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 	}
 
 	displayName := identity.CredentialName
-	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s", displayName))
+	spin.StopWithSuccess(fmt.Sprintf("Auth successful with %q", displayName))
 
 	// Store the key
 	if err := auth.StoreAPIKey(apiKey); err != nil {
@@ -99,15 +99,15 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 	}
 
 	if identity.User != nil && identity.User.Email != "" {
-		out.Muted("Logged in as %s", identity.User.Email)
+		out.Muted("  User:      %s", identity.User.Email)
 	}
 
 	if identity.Organization != nil && identity.Organization.Name != "" {
-		out.Muted("Organization: %s", identity.Organization.Name)
+		out.Muted("  Org:       %s", identity.Organization.Name)
 	}
 
 	for _, ns := range identity.Namespaces {
-		out.Muted("Namespace: %s", ns.Handle)
+		out.Muted("  Namespace: %s", ns.Handle)
 	}
 
 	return nil

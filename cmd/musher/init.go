@@ -89,7 +89,7 @@ name: "{{ .Name }}"
 description: A starter Musher bundle with one Agent Skill.
 
 # Visibility controls who can see your bundle.
-# Options: private (default), public (requires description, readme, and license).
+# Options: private (default), public (hub publishing requires description, readme, and license).
 visibility: private
 
 assets:
@@ -109,7 +109,7 @@ name: "{{ .Name }}"
 description: A brief description of your bundle.
 
 # Visibility controls who can see your bundle.
-# Options: private (default), public (requires description, readme, and license).
+# Options: private (default), public (hub publishing requires description, readme, and license).
 visibility: private
 `))
 
