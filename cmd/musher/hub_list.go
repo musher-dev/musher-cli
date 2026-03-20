@@ -65,7 +65,7 @@ func runHubList(cmd *cobra.Command, out *output.Writer, namespace string, limit 
 		b := &result.Data[i]
 		out.Print("%s/%s", b.Publisher.Handle, b.Slug)
 		if b.LatestVersion != "" {
-			out.Print("@%s", b.LatestVersion)
+			out.Print(":%s", b.LatestVersion)
 		}
 		out.Print("\n")
 
