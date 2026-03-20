@@ -227,6 +227,16 @@ func UnyankFailed(version string, cause error) *CLIError {
 	})
 }
 
+// ImportFailed returns an error for import failures.
+func ImportFailed(cause error) *CLIError {
+	return enrichFromCause(&CLIError{
+		Message: "Import failed",
+		Hint:    "Check the source paths and try again",
+		Cause:   cause,
+		Code:    ExitGeneral,
+	})
+}
+
 func containsAny(s string, substrings ...string) bool {
 	lower := strings.ToLower(s)
 	for _, sub := range substrings {

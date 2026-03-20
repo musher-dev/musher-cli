@@ -166,6 +166,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	unyankCmd.GroupID = "publish"
 	rootCmd.AddCommand(unyankCmd)
 
+	importCmd := newImportCmd()
+	importCmd.GroupID = "publish"
+	rootCmd.AddCommand(importCmd)
+
 	// Hub group
 	hubCmd := newHubCmd()
 	hubCmd.GroupID = "hub"

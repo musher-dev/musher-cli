@@ -22,6 +22,42 @@ type frontmatter struct {
 	AllowedTools  any               `yaml:"allowed-tools,omitempty"`
 }
 
+// ParseFrontmatter extracts the name and description from a SKILL.md file's
+// YAML frontmatter without checking that the name matches the parent directory.
+// This is used during import discovery where skills live in source directories
+// whose names may not match the skill name.
+func ParseFrontmatter(path string) (name, description string, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", fmt.Errorf("read skill file: %w", err)
+	}
+
+	raw := string(data)
+	if !strings.HasPrefix(raw, "---\n") {
+		return "", "", fmt.Errorf("missing YAML frontmatter")
+	}
+
+	parts := strings.SplitN(raw, "\n---\n", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("frontmatter must be closed with '---'")
+	}
+
+	var matter frontmatter
+	if err := yaml.Unmarshal([]byte(parts[0][4:]), &matter); err != nil {
+		return "", "", fmt.Errorf("parse frontmatter: %w", err)
+	}
+
+	if matter.Name == "" {
+		return "", "", fmt.Errorf("name is required in frontmatter")
+	}
+
+	if !skillNamePattern.MatchString(matter.Name) {
+		return "", "", fmt.Errorf("name %q must contain only lowercase letters, numbers, and single hyphens", matter.Name)
+	}
+
+	return matter.Name, matter.Description, nil
+}
+
 // ValidateFile validates a SKILL.md file against the Agent Skills spec.
 func ValidateFile(path string) error {
 	data, err := os.ReadFile(path)
