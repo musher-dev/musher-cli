@@ -83,7 +83,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 
 	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
 
-	identity, err := c.ValidateKey(cmd.Context())
+	identity, err := c.GetPublisherIdentity(cmd.Context())
 	if err != nil {
 		spin.StopWithFailure("Authentication failed")
 		return clierrors.AuthFailed(err)
@@ -98,8 +98,16 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 		out.Info("Set MUSHER_API_KEY environment variable instead")
 	}
 
-	if identity.OrganizationName != "" {
-		out.Muted("Organization: %s", identity.OrganizationName)
+	if identity.User != nil && identity.User.Email != "" {
+		out.Muted("Logged in as %s", identity.User.Email)
+	}
+
+	if identity.Organization != nil && identity.Organization.Name != "" {
+		out.Muted("Organization: %s", identity.Organization.Name)
+	}
+
+	for _, ns := range identity.Namespaces {
+		out.Muted("Namespace: %s", ns.Handle)
 	}
 
 	return nil

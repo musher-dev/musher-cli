@@ -114,6 +114,28 @@ func (i *Identity) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// PublisherIdentityUser represents the user associated with a publisher credential.
+type PublisherIdentityUser struct {
+	Email    string `json:"email"`
+	FullName string `json:"fullName"`
+}
+
+// PublisherIdentityOrg represents the organization associated with a publisher credential.
+type PublisherIdentityOrg struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// PublisherIdentity represents the authenticated publisher identity from /v1/publisher/me.
+type PublisherIdentity struct {
+	CredentialType string                 `json:"credentialType"`
+	CredentialID   string                 `json:"credentialId"`
+	CredentialName string                 `json:"credentialName"`
+	User           *PublisherIdentityUser `json:"user"`
+	Organization   *PublisherIdentityOrg  `json:"organization"`
+	Namespaces     []NamespaceHandle      `json:"namespaces"`
+}
+
 // ResponseMeta contains correlation metadata from an API response.
 type ResponseMeta struct {
 	RequestID string `json:"requestId,omitempty"`
@@ -161,6 +183,8 @@ func (c *Client) ValidateKey(ctx context.Context) (*Identity, error) {
 
 // ValidateKeyWithMeta validates the API key and returns identity plus
 // request/trace metadata from the response headers.
+//
+//nolint:dupl // intentionally parallel to GetPublisherIdentityWithMeta (different endpoint, type, and error messages)
 func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseMeta, error) {
 	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/runner/me", http.NoBody)
 	if err != nil {
@@ -192,6 +216,53 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 
 	var identity Identity
 	if err := decodeJSON(resp.Body, &identity, "failed to parse identity"); err != nil {
+		return nil, meta, err
+	}
+
+	return &identity, meta, nil
+}
+
+// GetPublisherIdentity returns the publisher identity for the authenticated credential.
+func (c *Client) GetPublisherIdentity(ctx context.Context) (*PublisherIdentity, error) {
+	identity, _, err := c.GetPublisherIdentityWithMeta(ctx)
+	return identity, err
+}
+
+// GetPublisherIdentityWithMeta returns the publisher identity plus
+// request/trace metadata from the response headers.
+//
+//nolint:dupl // intentionally parallel to ValidateKeyWithMeta (different endpoint, type, and error messages)
+func (c *Client) GetPublisherIdentityWithMeta(ctx context.Context) (*PublisherIdentity, *ResponseMeta, error) {
+	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/publisher/me", http.NoBody)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := c.do(req, "/v1/publisher/me")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	meta := &ResponseMeta{
+		RequestID: strings.TrimSpace(resp.Header.Get("X-Request-Id")),
+		TraceID:   responseTraceID(resp),
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, meta, fmt.Errorf("invalid or expired API key")
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, meta, fmt.Errorf("API key does not have publisher permissions")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, meta, unexpectedStatus("get publisher identity", resp)
+	}
+
+	var identity PublisherIdentity
+	if err := decodeJSON(resp.Body, &identity, "failed to parse publisher identity"); err != nil {
 		return nil, meta, err
 	}
 

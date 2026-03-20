@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -78,9 +79,9 @@ func slugToName(slug string) string {
 
 var defaultTemplate = template.Must(template.New("default").Parse(
 	`# yaml-language-server: $schema=https://schemas.musher.dev/bundledef/v1alpha1.json
-
-# Replace with your namespace from ` + "`musher whoami`" + `.
-namespace: your-namespace
+{{ if eq .Namespace "your-namespace" }}
+# Replace with your namespace from ` + "`musher whoami`" + `.{{ end }}
+namespace: {{ .Namespace }}
 
 slug: "{{ .Slug }}"
 version: 0.1.0
@@ -101,9 +102,9 @@ assets:
 
 var emptyTemplate = template.Must(template.New("empty").Parse(
 	`# yaml-language-server: $schema=https://schemas.musher.dev/bundledef/v1alpha1.json
-
-# Replace with your namespace from ` + "`musher whoami`" + `.
-namespace: your-namespace
+{{ if eq .Namespace "your-namespace" }}
+# Replace with your namespace from ` + "`musher whoami`" + `.{{ end }}
+namespace: {{ .Namespace }}
 
 slug: "{{ .Slug }}"
 version: 0.1.0
@@ -116,8 +117,37 @@ visibility: public
 `))
 
 type initData struct {
-	Slug string
-	Name string
+	Slug      string
+	Name      string
+	Namespace string
+}
+
+func resolveNamespace(out *output.Writer) string {
+	_, c, err := newAPIClient()
+	if err != nil {
+		return "your-namespace"
+	}
+
+	identity, err := c.GetPublisherIdentity(context.Background())
+	if err != nil {
+		return "your-namespace"
+	}
+
+	switch len(identity.Namespaces) {
+	case 0:
+		return "your-namespace"
+	case 1:
+		return identity.Namespaces[0].Handle
+	default:
+		var handles []string
+		for _, ns := range identity.Namespaces {
+			handles = append(handles, ns.Handle)
+		}
+
+		out.Info("Multiple namespaces available: %s", strings.Join(handles, ", "))
+
+		return "your-namespace"
+	}
 }
 
 func runInit(out *output.Writer, force, empty bool) error {
@@ -136,9 +166,11 @@ func runInit(out *output.Writer, force, empty bool) error {
 	}
 
 	slug := sanitizeSlug(filepath.Base(workDir))
+	namespace := resolveNamespace(out)
 	data := initData{
-		Slug: slug,
-		Name: slugToName(slug),
+		Slug:      slug,
+		Name:      slugToName(slug),
+		Namespace: namespace,
 	}
 
 	var created []string
@@ -213,7 +245,13 @@ Follow these steps:
 
 	out.Println()
 	out.Info("Next steps:")
-	out.Info("  1. Set 'namespace' in musher.yaml (run 'musher whoami' to see your namespaces)")
+
+	if namespace == "your-namespace" {
+		out.Info("  1. Set 'namespace' in musher.yaml (run 'musher whoami' to see your namespaces)")
+	} else {
+		out.Info("  1. Namespace set to '%s' — change if needed", namespace)
+	}
+
 	out.Info("  2. Edit bundle metadata and skill instructions")
 	out.Info("  3. Run 'musher validate' to check your bundle")
 	out.Info("  4. Run 'musher push' to publish")

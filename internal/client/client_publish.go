@@ -150,7 +150,12 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 
 // GetMyNamespaces returns namespace handles associated with the authenticated user.
 func (c *Client) GetMyNamespaces(ctx context.Context) ([]NamespaceHandle, error) {
-	return c.GetRunnerNamespaces(ctx)
+	identity, err := c.GetPublisherIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return identity.Namespaces, nil
 }
 
 // UnyankBundleVersion restores a previously yanked bundle version.

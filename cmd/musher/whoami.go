@@ -34,11 +34,11 @@ func runWhoami(cmd *cobra.Command, out *output.Writer) error {
 
 	ctx := cmd.Context()
 
-	// Validate credentials
+	// Fetch publisher identity (single call)
 	spin := out.Spinner("Checking credentials")
 	spin.Start()
 
-	identity, err := c.ValidateKey(ctx)
+	identity, err := c.GetPublisherIdentity(ctx)
 	if err != nil {
 		spin.StopWithFailure("Authentication failed")
 		return clierrors.CredentialsInvalid(err)
@@ -47,18 +47,21 @@ func runWhoami(cmd *cobra.Command, out *output.Writer) error {
 	displayName := identity.CredentialName
 	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s (via %s)", displayName, source))
 
-	if identity.OrganizationName != "" {
-		out.Muted("Organization: %s", identity.OrganizationName)
+	if identity.User != nil {
+		if identity.User.Email != "" {
+			if identity.User.FullName != "" {
+				out.Muted("User: %s (%s)", identity.User.FullName, identity.User.Email)
+			} else {
+				out.Muted("User: %s", identity.User.Email)
+			}
+		}
 	}
 
-	// Fetch writable namespaces
-	namespaces, err := c.GetMyNamespaces(ctx)
-	if err != nil {
-		out.Warning("Could not fetch writable namespaces: %v", err)
-		return nil
+	if identity.Organization != nil && identity.Organization.Name != "" {
+		out.Muted("Organization: %s", identity.Organization.Name)
 	}
 
-	if len(namespaces) == 0 {
+	if len(identity.Namespaces) == 0 {
 		out.Muted("No writable namespaces associated with this account")
 		return nil
 	}
@@ -66,7 +69,7 @@ func runWhoami(cmd *cobra.Command, out *output.Writer) error {
 	out.Println()
 	out.Print("Writable namespaces:\n")
 
-	for _, ns := range namespaces {
+	for _, ns := range identity.Namespaces {
 		if ns.DisplayName != "" {
 			out.Print("  %s (%s)\n", ns.Handle, ns.DisplayName)
 		} else {
