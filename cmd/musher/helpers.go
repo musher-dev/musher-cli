@@ -8,30 +8,23 @@ import (
 )
 
 // newAPIClient creates an authenticated API client using stored credentials.
+// Config is loaded first to determine the API URL, then credentials are resolved.
 func newAPIClient() (auth.CredentialSource, *client.Client, error) {
-	source, apiKey := auth.GetCredentials()
+	cfg := config.Load()
+	apiURL := cfg.APIURL()
+
+	source, apiKey := auth.GetCredentials(apiURL)
 	if apiKey == "" {
 		return "", nil, clierrors.NotAuthenticated()
 	}
 
-	apiClient, err := newAPIClientWithKey(apiKey)
-	if err != nil {
-		return "", nil, err
-	}
-
-	return source, apiClient, nil
-}
-
-func newAPIClientWithKey(apiKey string) (*client.Client, error) {
-	cfg := config.Load()
-
 	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
 	if err != nil {
-		return nil, clierrors.ConfigFailed("initialize HTTP client", err).
+		return "", nil, clierrors.ConfigFailed("initialize HTTP client", err).
 			WithHint("Set MUSHER_NETWORK_CA_CERT_FILE to a readable PEM bundle, or unset it and retry")
 	}
 
-	return client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient), nil
+	return source, client.NewWithHTTPClient(apiURL, apiKey, httpClient), nil
 }
 
 // requireAuth returns an authenticated API client or a CLIError.

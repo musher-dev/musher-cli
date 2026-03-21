@@ -93,7 +93,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 	spin.StopWithSuccess(fmt.Sprintf("Auth successful with %q", displayName))
 
 	// Store the key
-	if err := auth.StoreAPIKey(apiKey); err != nil {
+	if err := auth.StoreAPIKey(cfg.APIURL(), apiKey); err != nil {
 		out.Warning("Could not store API key: %v", err)
 		out.Info("Set MUSHER_API_KEY environment variable instead")
 	}

@@ -125,8 +125,10 @@ func checkDirectoryStructure(context.Context) Result {
 
 	roots := []root{
 		{"config", paths.ConfigRoot},
+		{"data", paths.DataRoot},
 		{"state", paths.StateRoot},
 		{"cache", paths.CacheRoot},
+		{"runtime", paths.RuntimeRoot},
 	}
 
 	var missing []string
@@ -187,7 +189,7 @@ func checkDirectoryStructure(context.Context) Result {
 
 	return Result{
 		Status:  StatusPass,
-		Message: "Config, state, and cache directories OK",
+		Message: "Config, data, state, cache, and runtime directories OK",
 	}
 }
 
@@ -236,7 +238,17 @@ func checkConfigFile(context.Context) Result {
 
 // checkCredentialsFile checks permissions on the credentials fallback file.
 func checkCredentialsFile(context.Context) Result {
-	credPath, err := paths.CredentialsFile()
+	cfg := config.Load()
+
+	hostID, err := paths.HostIDFromURL(cfg.APIURL())
+	if err != nil {
+		return Result{
+			Status:  StatusPass,
+			Message: "Not present (using keyring or env)",
+		}
+	}
+
+	credPath, err := paths.CredentialFilePath(hostID)
 	if err != nil {
 		return Result{
 			Status:  StatusPass,
@@ -305,7 +317,8 @@ func checkAPIConnectivity(ctx context.Context) Result {
 
 // checkAuthentication validates stored credentials.
 func checkAuthentication(ctx context.Context) Result {
-	source, apiKey := auth.GetCredentials()
+	cfg := config.Load()
+	source, apiKey := auth.GetCredentials(cfg.APIURL())
 
 	if apiKey == "" {
 		return Result{
@@ -314,9 +327,6 @@ func checkAuthentication(ctx context.Context) Result {
 			Detail:  "Run 'musher login' to authenticate",
 		}
 	}
-
-	// Validate the key
-	cfg := config.Load()
 
 	httpClient, clientErr := client.NewInstrumentedHTTPClient(cfg.CACertFile())
 	if clientErr != nil {
@@ -329,7 +339,7 @@ func checkAuthentication(ctx context.Context) Result {
 
 	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
 
-	identity, err := c.ValidateKey(ctx)
+	identity, err := c.GetPublisherIdentity(ctx)
 	if err != nil {
 		return Result{
 			Status:  StatusFail,

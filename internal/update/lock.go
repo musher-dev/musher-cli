@@ -17,9 +17,9 @@ const (
 )
 
 func lockPath() (string, error) {
-	root, err := paths.StateRoot()
+	root, err := paths.RuntimeRoot()
 	if err != nil {
-		return "", fmt.Errorf("resolve state root: %w", err)
+		return "", fmt.Errorf("resolve runtime root: %w", err)
 	}
 
 	return filepath.Join(root, lockFileName), nil
