@@ -124,7 +124,7 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 	if info.UpdateAvailable {
 		spin.StopWithSuccess(fmt.Sprintf("Update available: v%s -> v%s", currentVersion, info.LatestVersion))
 	} else {
-		spin.StopWithSuccess(fmt.Sprintf("Reinstalling v%s", info.LatestVersion))
+		spin.StopWithSuccess("Reinstalling v" + info.LatestVersion)
 	}
 
 	reexeced, err := ensureUpdateWritable(install)
@@ -136,7 +136,7 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 		return nil
 	}
 
-	spin = out.Spinner(fmt.Sprintf("Downloading v%s", info.LatestVersion))
+	spin = out.Spinner("Downloading v" + info.LatestVersion)
 	spin.Start()
 
 	if err := updater.Apply(ctx, info.Release); err != nil {
@@ -146,7 +146,7 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 			WithHint("Try again or download manually from GitHub Releases")
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Updated to v%s", info.LatestVersion))
+	spin.StopWithSuccess("Updated to v" + info.LatestVersion)
 
 	if info.ReleaseURL != "" {
 		out.Muted("Release notes: %s", info.ReleaseURL)
@@ -169,7 +169,7 @@ func updateToVersion(ctx context.Context, out *output.Writer, updater *update.Up
 
 	var spin *output.Spinner
 	if !out.JSON {
-		spin = out.Spinner(fmt.Sprintf("Installing v%s", version))
+		spin = out.Spinner("Installing v" + version)
 		spin.Start()
 	}
 
@@ -179,7 +179,7 @@ func updateToVersion(ctx context.Context, out *output.Writer, updater *update.Up
 			spin.Stop()
 		}
 
-		cliErr := clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to install v%s", version), err)
+		cliErr := clierrors.Wrap(clierrors.ExitGeneral, "Failed to install v"+version, err)
 		if strings.Contains(err.Error(), "not found") {
 			cliErr = cliErr.WithHint("Check available versions at https://github.com/musher-dev/musher-cli/releases")
 		}
@@ -188,14 +188,14 @@ func updateToVersion(ctx context.Context, out *output.Writer, updater *update.Up
 	}
 
 	if spin != nil {
-		spin.StopWithSuccess(fmt.Sprintf("Installed v%s", release.Version()))
+		spin.StopWithSuccess("Installed v" + release.Version())
 	}
 
 	return nil
 }
 
 func saveCheckState(current, latest, releaseURL string) {
-	_ = update.SaveCheckResult(current, latest, releaseURL)
+	_ = update.SaveCheckResult(current, latest, releaseURL) //nolint:errcheck // best-effort state persistence
 }
 
 func ensureUpdateWritable(install update.InstallContext) (bool, error) {

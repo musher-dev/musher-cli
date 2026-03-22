@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,7 +76,7 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 
 		data, readErr := safeio.ReadFile(assetPath)
 		if readErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to read asset: %s", asset.Src), readErr)
+			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read asset: "+asset.Src, readErr)
 		}
 
 		assets = append(assets, client.PushBundleAsset{
@@ -103,7 +102,7 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 	}
 
 	// Push bundle in a single request
-	spin := out.Spinner(fmt.Sprintf("Pushing %s", bundle.VersionRef()))
+	spin := out.Spinner("Pushing " + bundle.VersionRef())
 	spin.Start()
 
 	if pushErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req); pushErr != nil {
@@ -122,7 +121,7 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 		return clierrors.PublishFailed(pushErr)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Pushed %s", bundle.VersionRef()))
+	spin.StopWithSuccess("Pushed " + bundle.VersionRef())
 
 	return nil
 }
@@ -183,7 +182,7 @@ func handleVisibilityRecovery(
 	// Update in-memory request and retry.
 	req.Visibility = "public"
 
-	spin := out.Spinner(fmt.Sprintf("Retrying push %s", bundle.VersionRef()))
+	spin := out.Spinner("Retrying push " + bundle.VersionRef())
 	spin.Start()
 
 	if retryErr := c.PushBundle(cmd.Context(), bundle.Namespace, bundle.Slug, req); retryErr != nil {
@@ -191,7 +190,7 @@ func handleVisibilityRecovery(
 		return clierrors.PublishFailed(retryErr)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Pushed %s (public)", bundle.VersionRef()))
+	spin.StopWithSuccess("Pushed " + bundle.VersionRef() + " (public)")
 
 	return nil
 }

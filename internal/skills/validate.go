@@ -2,6 +2,7 @@ package skills
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,19 +28,19 @@ type frontmatter struct {
 // This is used during import discovery where skills live in source directories
 // whose names may not match the skill name.
 func ParseFrontmatter(path string) (name, description string, err error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
 		return "", "", fmt.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
 	if !strings.HasPrefix(raw, "---\n") {
-		return "", "", fmt.Errorf("missing YAML frontmatter")
+		return "", "", errors.New("missing YAML frontmatter")
 	}
 
 	parts := strings.SplitN(raw, "\n---\n", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("frontmatter must be closed with '---'")
+		return "", "", errors.New("frontmatter must be closed with '---'")
 	}
 
 	var matter frontmatter
@@ -48,7 +49,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 	}
 
 	if matter.Name == "" {
-		return "", "", fmt.Errorf("name is required in frontmatter")
+		return "", "", errors.New("name is required in frontmatter")
 	}
 
 	if !skillNamePattern.MatchString(matter.Name) {
@@ -60,19 +61,19 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 
 // ValidateFile validates a SKILL.md file against the Agent Skills spec.
 func ValidateFile(path string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
 		return fmt.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
 	if !strings.HasPrefix(raw, "---\n") {
-		return fmt.Errorf("missing YAML frontmatter")
+		return errors.New("missing YAML frontmatter")
 	}
 
 	parts := strings.SplitN(raw, "\n---\n", 2)
 	if len(parts) != 2 {
-		return fmt.Errorf("frontmatter must be closed with '---'")
+		return errors.New("frontmatter must be closed with '---'")
 	}
 
 	var rawFields map[string]any

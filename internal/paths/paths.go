@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -27,7 +28,7 @@ func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (strin
 
 	if musherHome := os.Getenv("MUSHER_HOME"); musherHome != "" {
 		if !filepath.IsAbs(musherHome) {
-			return "", fmt.Errorf("MUSHER_HOME must be an absolute path")
+			return "", errors.New("MUSHER_HOME must be an absolute path")
 		}
 
 		return filepath.Join(musherHome, musherHomeSuffix), nil
@@ -51,7 +52,7 @@ func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (strin
 		return "", err
 	}
 
-	return "", fmt.Errorf("resolve user home directory")
+	return "", errors.New("resolve user home directory")
 }
 
 func configRoot() (string, error) {
@@ -60,7 +61,7 @@ func configRoot() (string, error) {
 
 func dataRoot() (string, error) {
 	noOSDefault := func() (string, error) {
-		return "", fmt.Errorf("no OS data directory function")
+		return "", errors.New("no OS data directory function")
 	}
 
 	return resolveRoot("MUSHER_DATA_HOME", "data", "XDG_DATA_HOME", noOSDefault, filepath.Join(".local", "share"))
@@ -68,7 +69,7 @@ func dataRoot() (string, error) {
 
 func stateRoot() (string, error) {
 	noOSDefault := func() (string, error) {
-		return "", fmt.Errorf("no OS state directory function")
+		return "", errors.New("no OS state directory function")
 	}
 
 	return resolveRoot("MUSHER_STATE_HOME", "state", "XDG_STATE_HOME", noOSDefault, filepath.Join(".local", "state"))
@@ -102,7 +103,7 @@ func CacheRoot() (string, error) {
 func RuntimeRoot() (string, error) {
 	if branded := os.Getenv("MUSHER_RUNTIME_DIR"); branded != "" {
 		if !filepath.IsAbs(branded) {
-			return "", fmt.Errorf("MUSHER_RUNTIME_DIR must be an absolute path")
+			return "", errors.New("MUSHER_RUNTIME_DIR must be an absolute path")
 		}
 
 		return filepath.Clean(branded), nil
@@ -110,7 +111,7 @@ func RuntimeRoot() (string, error) {
 
 	if musherHome := os.Getenv("MUSHER_HOME"); musherHome != "" {
 		if !filepath.IsAbs(musherHome) {
-			return "", fmt.Errorf("MUSHER_HOME must be an absolute path")
+			return "", errors.New("MUSHER_HOME must be an absolute path")
 		}
 
 		return filepath.Join(musherHome, "run"), nil

@@ -2,7 +2,7 @@ package update
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 	"time"
 
@@ -16,8 +16,10 @@ type AgentConfig struct {
 	AutoApply      bool
 }
 
+const blockedReasonManagedInstall = "managed_install"
+
 // errApplyBlocked indicates a staged apply did not succeed (state was saved).
-var errApplyBlocked = fmt.Errorf("staged apply did not succeed")
+var errApplyBlocked = errors.New("staged apply did not succeed")
 
 // RunAgent performs a single background update tick.
 func RunAgent(cfg AgentConfig) error {
@@ -43,8 +45,8 @@ func RunAgent(cfg AgentConfig) error {
 
 		allowedBySource := AutoApplyAllowed(source)
 		if !allowedBySource {
-			state.AutoApplyBlockedReason = "managed_install"
-		} else if state.AutoApplyBlockedReason == "managed_install" {
+			state.AutoApplyBlockedReason = blockedReasonManagedInstall
+		} else if state.AutoApplyBlockedReason == blockedReasonManagedInstall {
 			// Source changed from managed to standalone — clear stale reason.
 			state.AutoApplyBlockedReason = ""
 		}
@@ -91,7 +93,7 @@ func RunAgent(cfg AgentConfig) error {
 			if !cfg.AutoApply {
 				state.AutoApplyBlockedReason = "auto_apply_disabled"
 			} else if !allowedBySource {
-				state.AutoApplyBlockedReason = "managed_install"
+				state.AutoApplyBlockedReason = blockedReasonManagedInstall
 			}
 		} else {
 			state.ClearStaged()
@@ -104,14 +106,14 @@ func RunAgent(cfg AgentConfig) error {
 
 func applyStaged(state *State, execPath string) error {
 	if execPath == "" {
-		return fmt.Errorf("executable path unavailable")
+		return errors.New("executable path unavailable")
 	}
 
 	if NeedsElevation(execPath) {
 		state.LastApplyAttemptAt = time.Now()
 		state.LastApplyError = "background apply requires elevated permissions"
 		state.AutoApplyBlockedReason = "elevation_required"
-		_ = SaveState(state)
+		_ = SaveState(state) //nolint:errcheck // best-effort state persistence
 
 		return errApplyBlocked
 	}
@@ -124,7 +126,7 @@ func applyStaged(state *State, execPath string) error {
 		state.LastApplyAttemptAt = time.Now()
 		state.LastApplyError = err.Error()
 		state.AutoApplyBlockedReason = "apply_error"
-		_ = SaveState(state)
+		_ = SaveState(state) //nolint:errcheck // best-effort state persistence
 
 		return errApplyBlocked
 	}
@@ -135,7 +137,7 @@ func applyStaged(state *State, execPath string) error {
 	if err != nil {
 		state.LastApplyError = err.Error()
 		state.AutoApplyBlockedReason = "apply_error"
-		_ = SaveState(state)
+		_ = SaveState(state) //nolint:errcheck // best-effort state persistence
 
 		return errApplyBlocked
 	}

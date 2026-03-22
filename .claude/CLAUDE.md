@@ -38,7 +38,6 @@ Flat verbs for authoring, `hub` subcommand for catalog operations.
 - `hub_publish.go` — Publish a listing to the hub
 - `hub_deprecate.go` — Deprecate a hub bundle
 - `hub_undeprecate.go` — Remove deprecation from a hub bundle
-- `hub_star.go` — Star/unstar hub bundles
 - `doctor.go` — Diagnostic checks
 - `update.go` — Self-update
 - `version.go` — Version display
@@ -77,7 +76,7 @@ Flat verbs for authoring, `hub` subcommand for catalog operations.
 
 **No TUI** — Publishing is batch-oriented. No bubbletea, no tcell, no PTY.
 
-**Shared namespace** — Both Musher and Mush share `~/.config/musher/`, keyring `dev.musher.musher`, env var `MUSHER_API_KEY`.
+**Shared namespace** — Both Musher and Mush share `~/.config/musher/`, keyring `musher/{hostname}`, env var `MUSHER_API_KEY`.
 
 ## Development
 
@@ -93,7 +92,8 @@ task fmt          # Format code
 - **Binary**: `musher`
 - **Config dir**: `~/.config/musher/` (XDG)
 - **State dir**: `~/.local/state/musher/` (XDG)
-- **Credentials**: OS Keyring (`dev.musher.musher`), falls back to `~/.config/musher/api-key`
+- **Data dir**: `~/.local/share/musher/` (XDG)
+- **Credentials**: OS Keyring (`musher/{hostname}`), falls back to `~/.local/share/musher/credentials/{hostID}/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log` (default sink)
 - **API endpoint**: `api.url` config key or `MUSHER_API_URL` env var
 - **Auth**: `MUSHER_API_KEY` env var or `musher login`

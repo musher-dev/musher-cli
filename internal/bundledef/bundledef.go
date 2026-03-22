@@ -60,7 +60,7 @@ var kindPrefixes = []struct {
 func Load(dir string) (*Def, error) {
 	path := filepath.Join(dir, FileName)
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + constant filename
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("bundle definition file not found: %s (run 'musher init' to create one)", path)
@@ -99,7 +99,7 @@ func Save(dir string, d *Def) error {
 func SetVisibility(dir, visibility string) error {
 	path := filepath.Join(dir, FileName)
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + constant filename
 	if err != nil {
 		return fmt.Errorf("read bundle definition: %w", err)
 	}
@@ -244,8 +244,8 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 				continue
 			}
 
-			absRoot, _ := filepath.Abs(bundleRoot)
-			absTarget, _ := filepath.Abs(target)
+			absRoot, _ := filepath.Abs(bundleRoot) //nolint:errcheck // best-effort path resolution
+			absTarget, _ := filepath.Abs(target)   //nolint:errcheck // best-effort path resolution
 
 			if !strings.HasPrefix(absTarget, absRoot+string(filepath.Separator)) {
 				errs = append(errs, fmt.Sprintf("asset %q: symlink escapes bundle root: %s", asset.ID, asset.Src))
@@ -267,14 +267,14 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 	if d.Readme != "" {
 		readmePath := filepath.Join(bundleRoot, d.Readme)
 		if _, err := os.Stat(readmePath); err != nil {
-			errs = append(errs, fmt.Sprintf("readme file not found: %s", d.Readme))
+			errs = append(errs, "readme file not found: "+d.Readme)
 		}
 	}
 
 	if d.LicenseFile != "" {
 		licensePath := filepath.Join(bundleRoot, d.LicenseFile)
 		if _, err := os.Stat(licensePath); err != nil {
-			errs = append(errs, fmt.Sprintf("license file not found: %s", d.LicenseFile))
+			errs = append(errs, "license file not found: "+d.LicenseFile)
 		}
 	}
 

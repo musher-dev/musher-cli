@@ -37,7 +37,7 @@ func runValidate(out *output.Writer) error {
 	// Run schema validation first.
 	yamlPath := filepath.Join(workDir, bundledef.FileName)
 
-	yamlData, err := os.ReadFile(yamlPath)
+	yamlData, err := os.ReadFile(yamlPath) //nolint:gosec // path constructed from working directory + constant filename
 	if err == nil {
 		if schemaErrs := bundledef.ValidateSchema(yamlData); len(schemaErrs) > 0 {
 			parts := make([]string, 0, len(schemaErrs)+1)

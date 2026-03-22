@@ -3,9 +3,11 @@ package client
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"strconv"
 	"time"
 )
 
@@ -85,7 +87,7 @@ type NamespaceHandle struct {
 }
 
 // ErrEndpointNotAvailable indicates the API endpoint is not yet deployed.
-var ErrEndpointNotAvailable = fmt.Errorf("endpoint not available")
+var ErrEndpointNotAvailable = errors.New("endpoint not available")
 
 // SearchHubBundles searches for bundles in the hub (public, no auth required).
 func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort string, limit int, cursor string) (*HubSearchResponse, error) {
@@ -112,7 +114,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 	}
 
 	if limit > 0 {
-		params.Set("limit", fmt.Sprintf("%d", limit))
+		params.Set("limit", strconv.Itoa(limit))
 	}
 
 	if cursor != "" {
@@ -190,7 +192,7 @@ func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle strin
 	params := endpoint.Query()
 
 	if limit > 0 {
-		params.Set("limit", fmt.Sprintf("%d", limit))
+		params.Set("limit", strconv.Itoa(limit))
 	}
 
 	if cursor != "" {

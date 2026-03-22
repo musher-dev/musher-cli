@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,7 +78,7 @@ func DeleteAPIKey(apiURL string) error {
 	fileErr = deleteCredentialsFile(apiURL)
 
 	if keyringErr != nil && fileErr != nil {
-		return fmt.Errorf("no stored credentials found")
+		return errors.New("no stored credentials found")
 	}
 
 	return nil
@@ -119,7 +120,7 @@ func readCredentialsFile(apiURL string) string {
 func writeCredentialsFile(apiURL, apiKey string) error {
 	path := credentialFilePath(apiURL)
 	if path == "" {
-		return fmt.Errorf("could not determine credential file path")
+		return errors.New("could not determine credential file path")
 	}
 
 	dir := filepath.Dir(path)
@@ -137,12 +138,12 @@ func writeCredentialsFile(apiURL, apiKey string) error {
 func deleteCredentialsFile(apiURL string) error {
 	path := credentialFilePath(apiURL)
 	if path == "" {
-		return fmt.Errorf("could not determine credential file path")
+		return errors.New("could not determine credential file path")
 	}
 
 	err := os.Remove(path)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("credentials file not found")
+		return errors.New("credentials file not found")
 	}
 
 	if err != nil {

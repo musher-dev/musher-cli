@@ -10,7 +10,7 @@ import (
 
 // ReadFile centralizes trusted-path reads.
 func ReadFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // trusted path wrapper, callers validate input
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
@@ -52,7 +52,7 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 
 // Open centralizes trusted-path opens.
 func Open(path string) (*os.File, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // trusted path wrapper, callers validate input
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
@@ -62,7 +62,7 @@ func Open(path string) (*os.File, error) {
 
 // OpenFile centralizes trusted-path open flags.
 func OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
-	file, err := os.OpenFile(path, flag, perm)
+	file, err := os.OpenFile(path, flag, perm) //nolint:gosec // trusted path wrapper, callers validate input
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
@@ -82,33 +82,33 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	tmp := tmpFile.Name()
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmp)
+		_ = tmpFile.Close() //nolint:errcheck // best-effort cleanup
+		_ = os.Remove(tmp)  //nolint:errcheck // best-effort cleanup
 
 		return fmt.Errorf("write temp file: %w", writeErr)
 	}
 
 	if chmodErr := os.Chmod(tmp, perm); chmodErr != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmp)
+		_ = tmpFile.Close() //nolint:errcheck // best-effort cleanup
+		_ = os.Remove(tmp)  //nolint:errcheck // best-effort cleanup
 
 		return fmt.Errorf("chmod temp file: %w", chmodErr)
 	}
 
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		_ = os.Remove(tmp)
+		_ = os.Remove(tmp) //nolint:errcheck // best-effort cleanup
 		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
 	if renameErr := os.Rename(tmp, path); renameErr != nil {
 		// Fallback for Windows: remove dest then retry rename.
 		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
-			_ = os.Remove(tmp)
+			_ = os.Remove(tmp) //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("remove existing file: %w", removeErr)
 		}
 
 		if retryErr := os.Rename(tmp, path); retryErr != nil {
-			_ = os.Remove(tmp)
+			_ = os.Remove(tmp) //nolint:errcheck // best-effort cleanup
 			return fmt.Errorf("replace file: %w", retryErr)
 		}
 	}

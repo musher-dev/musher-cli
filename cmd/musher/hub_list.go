@@ -37,13 +37,13 @@ func runHubList(cmd *cobra.Command, out *output.Writer, namespace string, limit 
 		c = newPublicAPIClient(cfg)
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Listing bundles for %s", namespace))
+	spin := out.Spinner("Listing bundles for " + namespace)
 	spin.Start()
 
 	result, err := c.ListPublisherBundles(cmd.Context(), namespace, limit, "")
 	if err != nil {
 		spin.StopWithFailure("Failed to list bundles")
-		return clierrors.Wrap(clierrors.ExitGeneral, fmt.Sprintf("Failed to list bundles for %s", namespace), err)
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to list bundles for "+namespace, err)
 	}
 
 	spin.Stop()
@@ -62,15 +62,15 @@ func runHubList(cmd *cobra.Command, out *output.Writer, namespace string, limit 
 	}
 
 	for i := range result.Data {
-		b := &result.Data[i]
-		out.Print("%s/%s", b.Publisher.Handle, b.Slug)
-		if b.LatestVersion != "" {
-			out.Print(":%s", b.LatestVersion)
+		bundle := &result.Data[i]
+		out.Print("%s/%s", bundle.Publisher.Handle, bundle.Slug)
+		if bundle.LatestVersion != "" {
+			out.Print(":%s", bundle.LatestVersion)
 		}
 		out.Print("\n")
 
-		if b.Summary != "" {
-			out.Muted("  %s", b.Summary)
+		if bundle.Summary != "" {
+			out.Muted("  %s", bundle.Summary)
 		}
 	}
 

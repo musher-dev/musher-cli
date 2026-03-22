@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -142,7 +143,7 @@ func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 func openLogFile(path string) (*os.File, error) {
 	cleanPath := strings.TrimSpace(path)
 	if cleanPath == "" {
-		return nil, fmt.Errorf("log file path cannot be empty")
+		return nil, errors.New("log file path cannot be empty")
 	}
 
 	if mkErr := os.MkdirAll(filepath.Dir(cleanPath), 0o700); mkErr != nil {
@@ -197,7 +198,7 @@ func rotateLogFile(path string, maxBytes int64, maxBackups int) error {
 		}
 	}
 
-	firstBackup := fmt.Sprintf("%s.1", path)
+	firstBackup := path + ".1"
 	if err := os.Rename(path, firstBackup); err != nil {
 		return fmt.Errorf("rotate current log to backup: %w", err)
 	}
