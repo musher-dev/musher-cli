@@ -38,6 +38,18 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 	// If a local musher.yaml exists, validate hub-readiness before proceeding.
 	workDir, _ := os.Getwd() //nolint:errcheck // non-critical working directory lookup
 	if def, loadErr := bundledef.Load(workDir); loadErr == nil {
+		if def.Namespace != namespace || def.Slug != slug {
+			return &clierrors.CLIError{
+				Message: fmt.Sprintf(
+					"Local bundle %s/%s does not match requested ref %s/%s",
+					def.Namespace, def.Slug, namespace, slug),
+				Hint: fmt.Sprintf(
+					"Run from the directory containing the %s/%s bundle, or from a directory without musher.yaml",
+					namespace, slug),
+				Code: clierrors.ExitUsage,
+			}
+		}
+
 		if hubErr := def.ValidateHubReadiness(); hubErr != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
 		}

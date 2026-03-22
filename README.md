@@ -9,12 +9,14 @@ Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush)
 ## Install
 
 ```bash
-# From GitHub Releases
+# From GitHub Releases (macOS / Linux)
 curl -fsSL https://get.musher.dev | sh
 
-# From source (requires Go 1.26.1+)
+# From source (requires Go 1.26.1+, all platforms)
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
+
+**Windows:** Download the latest `.zip` from [GitHub Releases](https://github.com/musher-dev/musher-cli/releases) and add the binary to your `PATH`.
 
 ## Quick Start
 
@@ -141,6 +143,15 @@ assets:
 **API endpoint:** `--api-url` flag > `MUSHER_API_URL` env var > `api.url` config key (default: `https://api.musher.dev`).
 
 All paths follow XDG conventions. Override with `MUSHER_CONFIG_HOME`, `MUSHER_DATA_HOME`, `MUSHER_STATE_HOME`, or `MUSHER_HOME`.
+
+### Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--api-url` | Override the API endpoint |
+| `--api-key` | Provide an API key directly (overrides keyring) |
+| `--json` | Output results as JSON |
+| `--no-input` | Disable interactive prompts |
 
 ## Development
 

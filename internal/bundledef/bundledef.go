@@ -285,7 +285,15 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 	return nil
 }
 
-// MapAssetType maps a bundle definition asset kind to the API's AssetType enum value.
+// MapAssetType maps a bundle definition asset kind (as written in musher.yaml)
+// to the API's AssetType enum value. The musher.yaml field is called "kind"
+// while the API field is "assetType". Some values also differ:
+//
+//	kind: agent → assetType: agent_spec
+//	kind: tool  → assetType: toolset
+//
+// The reverse aliases (agent_spec, toolset, etc.) are also accepted in
+// musher.yaml for users who encounter these values in API responses.
 func MapAssetType(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "skill":

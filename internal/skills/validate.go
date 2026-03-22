@@ -35,7 +35,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 
 	raw := string(data)
 	if !strings.HasPrefix(raw, "---\n") {
-		return "", "", errors.New("missing YAML frontmatter")
+		return "", "", errors.New("missing YAML frontmatter; SKILL.md must begin with:\n---\nname: <skill-name>\ndescription: <what this skill does>\n---")
 	}
 
 	parts := strings.SplitN(raw, "\n---\n", 2)
@@ -49,7 +49,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 	}
 
 	if matter.Name == "" {
-		return "", "", errors.New("name is required in frontmatter")
+		return "", "", errors.New("name is required in frontmatter; add 'name: <skill-name>' where the name matches the parent directory")
 	}
 
 	if !skillNamePattern.MatchString(matter.Name) {
@@ -68,7 +68,7 @@ func ValidateFile(path string) error {
 
 	raw := string(data)
 	if !strings.HasPrefix(raw, "---\n") {
-		return errors.New("missing YAML frontmatter")
+		return errors.New("missing YAML frontmatter; SKILL.md must begin with:\n---\nname: <skill-name>\ndescription: <what this skill does>\n---")
 	}
 
 	parts := strings.SplitN(raw, "\n---\n", 2)
@@ -108,18 +108,18 @@ func ValidateFile(path string) error {
 
 	switch {
 	case matter.Name == "":
-		errs = append(errs, "name is required")
+		errs = append(errs, "name is required in frontmatter; add 'name: <skill-name>' where the name matches the parent directory")
 	case len(matter.Name) > 64:
 		errs = append(errs, "name must be 1-64 characters")
 	case !skillNamePattern.MatchString(matter.Name):
 		errs = append(errs, "name must contain only lowercase letters, numbers, and single hyphens")
 	case matter.Name != parentDir:
-		errs = append(errs, fmt.Sprintf("name %q must match parent directory %q", matter.Name, parentDir))
+		errs = append(errs, fmt.Sprintf("name %q must match parent directory %q; either rename the directory to %q or change the frontmatter name to %q", matter.Name, parentDir, matter.Name, parentDir))
 	}
 
 	switch {
 	case strings.TrimSpace(matter.Description) == "":
-		errs = append(errs, "description is required")
+		errs = append(errs, "description is required in frontmatter; add 'description: <what this skill does>'")
 	case len(matter.Description) > 1024:
 		errs = append(errs, "description must be 1-1024 characters")
 	}
