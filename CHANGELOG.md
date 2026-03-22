@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/musher-dev/musher-cli/compare/v0.2.1...v0.2.2) (2026-03-22)
+
+
+### Features
+
+* add --publish-to-hub flag, asset kind aliases, and improved error messages ([c0946a3](https://github.com/musher-dev/musher-cli/commit/c0946a303cd17fce1e859d690834bd916dcb553d))
+* add --publish-to-hub flag, asset kind aliases, and improved error messages ([cd81f00](https://github.com/musher-dev/musher-cli/commit/cd81f00170c8601a201d551f658e543acee95800))
+
 ## [0.2.1](https://github.com/musher-dev/musher-cli/compare/v0.2.0...v0.2.1) (2026-03-20)
 
 
