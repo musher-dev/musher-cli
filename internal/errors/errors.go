@@ -170,7 +170,7 @@ func APIKeyEmpty() *CLIError {
 // ConfigFailed returns an error for configuration save failures.
 func ConfigFailed(operation string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
-		Message: fmt.Sprintf("Failed to %s", operation),
+		Message: "Failed to " + operation,
 		Hint:    "Check file permissions for your Musher config directory or run 'musher doctor'",
 		Cause:   cause,
 		Code:    ExitConfig,
@@ -207,7 +207,7 @@ func VersionConflict(versionRef string, cause error) *CLIError {
 // ValidateFailed returns an error for validation failures.
 func ValidateFailed(msg string) *CLIError {
 	return &CLIError{
-		Message: fmt.Sprintf("Validation failed: %s", msg),
+		Message: "Validation failed: " + msg,
 		Hint:    "Fix the issues above and run 'musher validate' again",
 		Code:    ExitGeneral,
 	}
@@ -216,7 +216,7 @@ func ValidateFailed(msg string) *CLIError {
 // InvalidBundleDef returns an error for invalid bundle definitions.
 func InvalidBundleDef(detail string) *CLIError {
 	return &CLIError{
-		Message: fmt.Sprintf("Invalid bundle definition: %s", detail),
+		Message: "Invalid bundle definition: " + detail,
 		Hint:    "Check musher.yaml for required fields",
 		Code:    ExitConfig,
 	}
@@ -225,7 +225,7 @@ func InvalidBundleDef(detail string) *CLIError {
 // YankFailed returns an error for yank failures.
 func YankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
-		Message: fmt.Sprintf("Failed to yank version %s", version),
+		Message: "Failed to yank version " + version,
 		Hint:    "Check the version exists and you have namespace access. Yanked versions are hidden from search/install but remain fetchable by digest",
 		Cause:   cause,
 		Code:    ExitGeneral,
@@ -235,7 +235,7 @@ func YankFailed(version string, cause error) *CLIError {
 // UnyankFailed returns an error for unyank failures.
 func UnyankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
-		Message: fmt.Sprintf("Failed to unyank version %s", version),
+		Message: "Failed to unyank version " + version,
 		Hint:    "Check the version exists, is currently yanked, and you have namespace access",
 		Cause:   cause,
 		Code:    ExitGeneral,

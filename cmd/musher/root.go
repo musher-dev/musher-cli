@@ -12,6 +12,14 @@ import (
 	"github.com/musher-dev/musher-cli/internal/validate"
 )
 
+// Command group IDs.
+const (
+	groupAuth        = "auth"
+	groupPublish     = "publish"
+	groupHub         = "hub"
+	groupMaintenance = "maintenance"
+)
+
 func newRootCmd() *cobra.Command {
 	var (
 		jsonOutput bool
@@ -101,10 +109,10 @@ listings.`,
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "", "Override Musher API URL for this command")
 	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "", "API key override (prefer MUSHER_API_KEY env var)")
 
-	_ = rootCmd.PersistentFlags().MarkHidden("log-level")
-	_ = rootCmd.PersistentFlags().MarkHidden("log-format")
-	_ = rootCmd.PersistentFlags().MarkHidden("log-file")
-	_ = rootCmd.PersistentFlags().MarkHidden("log-stderr")
+	_ = rootCmd.PersistentFlags().MarkHidden("log-level")  //nolint:errcheck // MarkHidden cannot fail for registered flags
+	_ = rootCmd.PersistentFlags().MarkHidden("log-format") //nolint:errcheck // MarkHidden cannot fail for registered flags
+	_ = rootCmd.PersistentFlags().MarkHidden("log-file")   //nolint:errcheck // MarkHidden cannot fail for registered flags
+	_ = rootCmd.PersistentFlags().MarkHidden("log-stderr") //nolint:errcheck // MarkHidden cannot fail for registered flags
 
 	rootCmd.SuggestionsMinimumDistance = 2
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
@@ -122,66 +130,66 @@ listings.`,
 
 func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
-		&cobra.Group{ID: "auth", Title: "Authentication:"},
-		&cobra.Group{ID: "publish", Title: "Publishing:"},
-		&cobra.Group{ID: "hub", Title: "Hub:"},
-		&cobra.Group{ID: "maintenance", Title: "Maintenance:"},
+		&cobra.Group{ID: groupAuth, Title: "Authentication:"},
+		&cobra.Group{ID: groupPublish, Title: "Publishing:"},
+		&cobra.Group{ID: groupHub, Title: "Hub:"},
+		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},
 	)
 
 	// Auth group
 	loginCmd := newLoginCmd()
-	loginCmd.GroupID = "auth"
+	loginCmd.GroupID = groupAuth
 	rootCmd.AddCommand(loginCmd)
 
 	logoutCmd := newLogoutCmd()
-	logoutCmd.GroupID = "auth"
+	logoutCmd.GroupID = groupAuth
 	rootCmd.AddCommand(logoutCmd)
 
 	whoamiCmd := newWhoamiCmd()
-	whoamiCmd.GroupID = "auth"
+	whoamiCmd.GroupID = groupAuth
 	rootCmd.AddCommand(whoamiCmd)
 
 	// Publish group
 	initCmd := newInitCmd()
-	initCmd.GroupID = "publish"
+	initCmd.GroupID = groupPublish
 	rootCmd.AddCommand(initCmd)
 
 	validateCmd := newValidateCmd()
-	validateCmd.GroupID = "publish"
+	validateCmd.GroupID = groupPublish
 	rootCmd.AddCommand(validateCmd)
 
 	pushCmd := newPushCmd()
-	pushCmd.GroupID = "publish"
+	pushCmd.GroupID = groupPublish
 	rootCmd.AddCommand(pushCmd)
 
 	yankCmd := newYankCmd()
-	yankCmd.GroupID = "publish"
+	yankCmd.GroupID = groupPublish
 	rootCmd.AddCommand(yankCmd)
 
 	unyankCmd := newUnyankCmd()
-	unyankCmd.GroupID = "publish"
+	unyankCmd.GroupID = groupPublish
 	rootCmd.AddCommand(unyankCmd)
 
 	// Hub group
 	hubCmd := newHubCmd()
-	hubCmd.GroupID = "hub"
+	hubCmd.GroupID = groupHub
 	rootCmd.AddCommand(hubCmd)
 
 	// Maintenance group
 	doctorCmd := newDoctorCmd()
-	doctorCmd.GroupID = "maintenance"
+	doctorCmd.GroupID = groupMaintenance
 	rootCmd.AddCommand(doctorCmd)
 
 	updateCmd := newUpdateCmd()
-	updateCmd.GroupID = "maintenance"
+	updateCmd.GroupID = groupMaintenance
 	rootCmd.AddCommand(updateCmd)
 
 	versionCmd := newVersionCmd()
-	versionCmd.GroupID = "maintenance"
+	versionCmd.GroupID = groupMaintenance
 	rootCmd.AddCommand(versionCmd)
 
 	completionCmd := newCompletionCmd()
-	completionCmd.GroupID = "maintenance"
+	completionCmd.GroupID = groupMaintenance
 	rootCmd.AddCommand(completionCmd)
 }
 

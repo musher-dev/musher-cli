@@ -15,6 +15,8 @@ import (
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
+const tlsCertError = "TLS certificate error"
+
 const probeTimeout = 3 * time.Second
 
 // ProbeResult holds the outcome of a lightweight API health probe.
@@ -160,12 +162,12 @@ func summarizeNetworkError(err error) string {
 
 	var certErr *x509.UnknownAuthorityError
 	if errors.As(err, &certErr) {
-		return "TLS certificate error"
+		return tlsCertError
 	}
 
 	var certHostErr *x509.HostnameError
 	if errors.As(err, &certHostErr) {
-		return "TLS certificate error"
+		return tlsCertError
 	}
 
 	// Fall back to string matching for common patterns.
@@ -176,7 +178,7 @@ func summarizeNetworkError(err error) string {
 	case strings.Contains(lower, "connection refused"):
 		return "connection refused"
 	case strings.Contains(lower, "certificate"):
-		return "TLS certificate error"
+		return tlsCertError
 	case strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded"):
 		return "connection timed out"
 	case strings.Contains(lower, "no such host"):

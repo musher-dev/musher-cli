@@ -45,13 +45,23 @@ linters:
     - wastedassign    # Detect wasted assignments
     - godot           # Require period at end of comments
     - whitespace      # Remove unnecessary blank lines
+    - intrange        # Go 1.22+ integer range suggestions
+    - reassign        # Package-level variable reassignment detection
+    - containedctx    # context.Context in structs
+    - makezero        # Slice initialization correctness
+    - mirror          # Prefer mirror stdlib functions
+    - perfsprint      # Faster string formatting alternatives
+    - sloglint        # Consistent slog usage
+    - exhaustive      # Exhaustive switch/map on enums
+    - goconst         # Repeated literals that should be constants
+    - nakedret        # Naked returns in long functions
   settings:
     govet:
       enable:
         - shadow        # Variable shadowing detection
     errcheck:
       check-type-assertions: true
-      check-blank: false
+      check-blank: true
       exclude-functions:
         - fmt.Fprint
         - fmt.Fprintf
@@ -65,12 +75,28 @@ linters:
       severity: error
       rules:
         - name: exported
-          disabled: false
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: if-return
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
     gocritic:
       enabled-tags:
         - diagnostic
         - style
         - performance
+        - opinionated
     depguard:
       rules:
         internal_no_cmd_import:
@@ -114,7 +140,6 @@ linters:
       excludes:
         - G104
         - G115
-        - G304
         - G703
         - G704
       config:
@@ -153,22 +178,26 @@ linters:
         - c
         - p
         - r
-        - h
-        - s
-        - b
-        - n
-        - f
       ignore-decls:
         - c *cobra.Command
         - c *client.Client
         - p *prompt.Prompter
         - w http.ResponseWriter
         - r *http.Request
+        - f *os.File
+        - h slog.Handler
     nolintlint:
       require-explanation: true
       require-specific: true
     godot:
       scope: declarations
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    nakedret:
+      max-func-lines: 15
   exclusions:
     rules:
       - path: _test\.go
@@ -180,9 +209,9 @@ linters:
       - path: _test\.go
         linters:
           - varnamelen
-      - path: internal/.*
+      - path: _test\.go
         linters:
-          - gocognit
+          - goconst
 
 formatters:
   enable:

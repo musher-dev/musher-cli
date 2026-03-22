@@ -45,7 +45,7 @@ func WithAgentLock(runFn func() error) error {
 		return nil
 	}
 
-	defer func() { _ = os.Remove(path) }()
+	defer func() { _ = os.Remove(path) }() //nolint:errcheck // best-effort cleanup
 
 	return runFn()
 }
@@ -53,7 +53,7 @@ func WithAgentLock(runFn func() error) error {
 func tryAcquire(path string) (bool, error) {
 	file, err := safeio.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err == nil {
-		defer func() { _ = file.Close() }()
+		defer func() { _ = file.Close() }() //nolint:errcheck // best-effort cleanup
 
 		_, _ = fmt.Fprintf(file, "pid=%d time=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339))
 

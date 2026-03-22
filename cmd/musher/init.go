@@ -16,6 +16,8 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
+const placeholderNamespace = "your-namespace"
+
 func newInitCmd() *cobra.Command {
 	var (
 		force bool
@@ -48,21 +50,21 @@ Edit it to configure your bundle before publishing.`,
 
 // sanitizeSlug turns a directory name into a valid bundle slug.
 func sanitizeSlug(name string) string {
-	s := strings.ToLower(name)
-	s = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(s, "-")
-	s = regexp.MustCompile(`-{2,}`).ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
+	slug := strings.ToLower(name)
+	slug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(slug, "-")
+	slug = regexp.MustCompile(`-{2,}`).ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
 
-	if len(s) > 100 {
-		s = s[:100]
-		s = strings.TrimRight(s, "-")
+	if len(slug) > 100 {
+		slug = slug[:100]
+		slug = strings.TrimRight(slug, "-")
 	}
 
-	if s == "" {
+	if slug == "" {
 		return "my-bundle"
 	}
 
-	return s
+	return slug
 }
 
 // slugToName converts a slug like "my-cool-bundle" to "My Cool Bundle".
@@ -122,17 +124,17 @@ type initData struct {
 func resolveNamespace(out *output.Writer) string {
 	_, c, err := newAPIClient()
 	if err != nil {
-		return "your-namespace"
+		return placeholderNamespace
 	}
 
 	identity, err := c.GetPublisherIdentity(context.Background())
 	if err != nil {
-		return "your-namespace"
+		return placeholderNamespace
 	}
 
 	switch len(identity.Namespaces) {
 	case 0:
-		return "your-namespace"
+		return placeholderNamespace
 	case 1:
 		return identity.Namespaces[0].Handle
 	default:
@@ -143,7 +145,7 @@ func resolveNamespace(out *output.Writer) string {
 
 		out.Info("Multiple namespaces available: %s", strings.Join(handles, ", "))
 
-		return "your-namespace"
+		return placeholderNamespace
 	}
 }
 
@@ -243,7 +245,7 @@ Follow these steps:
 	out.Println()
 	out.Info("Next steps:")
 
-	if namespace == "your-namespace" {
+	if namespace == placeholderNamespace {
 		out.Info("  1. Set 'namespace' in musher.yaml (run 'musher whoami' to see your namespaces)")
 	} else {
 		out.Info("  1. Namespace set to '%s' — change if needed", namespace)
@@ -262,7 +264,7 @@ func writeTemplate(path string, tmpl *template.Template, data initData) error {
 		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // best-effort cleanup
 
 	if err := tmpl.Execute(f, data); err != nil {
 		return fmt.Errorf("write template to %s: %w", filepath.Base(path), err)

@@ -3,6 +3,7 @@ package prompt
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -64,44 +65,44 @@ func (p *Prompter) Password(prompt string) (string, error) {
 		return "", fmt.Errorf("failed to set raw mode: %w", err)
 	}
 
-	defer func() { _ = term.Restore(stdinFd, oldState) }()
+	defer func() { _ = term.Restore(stdinFd, oldState) }() //nolint:errcheck // best-effort terminal restore
 
 	var (
 		buf []byte
-		b   [1]byte
+		key [1]byte
 	)
 
 	for {
-		_, err := os.Stdin.Read(b[:])
+		_, err := os.Stdin.Read(key[:])
 		if err != nil {
 			p.out.Println()
 			return "", fmt.Errorf("failed to read input: %w", err)
 		}
 
 		switch {
-		case b[0] == '\r' || b[0] == '\n':
-			_ = term.Restore(stdinFd, oldState)
+		case key[0] == '\r' || key[0] == '\n':
+			_ = term.Restore(stdinFd, oldState) //nolint:errcheck // best-effort terminal restore
 
 			p.out.Println()
 
 			return string(buf), nil
-		case b[0] == 0x03: // Ctrl+C
-			_ = term.Restore(stdinFd, oldState)
+		case key[0] == 0x03: // Ctrl+C
+			_ = term.Restore(stdinFd, oldState) //nolint:errcheck // best-effort terminal restore
 
 			p.out.Println()
 
-			proc, _ := os.FindProcess(os.Getpid())
-			_ = proc.Signal(os.Interrupt)
+			proc, _ := os.FindProcess(os.Getpid()) //nolint:errcheck // best-effort signal delivery
+			_ = proc.Signal(os.Interrupt)          //nolint:errcheck // best-effort signal delivery
 
-			return "", fmt.Errorf("interrupted")
-		case b[0] == 127 || b[0] == 0x08: // Backspace / Delete
+			return "", errors.New("interrupted")
+		case key[0] == 127 || key[0] == 0x08: // Backspace / Delete
 			if len(buf) > 0 {
 				buf = buf[:len(buf)-1]
 
 				p.out.Print("\b \b")
 			}
-		case b[0] >= 32: // Printable character
-			buf = append(buf, b[0])
+		case key[0] >= 32: // Printable character
+			buf = append(buf, key[0])
 
 			p.out.Print("*")
 		}

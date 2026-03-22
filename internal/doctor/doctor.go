@@ -175,14 +175,14 @@ func checkDirectoryStructure(context.Context) Result {
 			}
 		}
 
-		_ = f.Close()
-		_ = os.Remove(f.Name())
+		_ = f.Close()           //nolint:errcheck // best-effort cleanup
+		_ = os.Remove(f.Name()) //nolint:errcheck // best-effort cleanup
 	}
 
 	if len(missing) > 0 {
 		return Result{
 			Status:  StatusWarn,
-			Message: fmt.Sprintf("Missing directories: %s", strings.Join(missing, ", ")),
+			Message: "Missing directories: " + strings.Join(missing, ", "),
 			Detail:  "Created on first use by any musher command",
 		}
 	}
@@ -285,7 +285,7 @@ func checkCredentialsFile(context.Context) Result {
 		return Result{
 			Status:  StatusWarn,
 			Message: fmt.Sprintf("Credentials file too permissive (%04o)", mode),
-			Detail:  fmt.Sprintf("chmod 600 %s", credPath),
+			Detail:  "chmod 600 " + credPath,
 		}
 	}
 
@@ -417,7 +417,7 @@ func checkProxyEnvironment(context.Context) Result {
 
 	return Result{
 		Status:  StatusWarn,
-		Message: fmt.Sprintf("Proxy variables detected: %s", strings.Join(active, ", ")),
+		Message: "Proxy variables detected: " + strings.Join(active, ", "),
 		Detail:  "If requests fail with TLS errors, configure MUSHER_NETWORK_CA_CERT_FILE with your corporate proxy CA bundle",
 	}
 }

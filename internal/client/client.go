@@ -9,6 +9,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -203,11 +204,11 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, meta, fmt.Errorf("invalid or expired API key")
+		return nil, meta, errors.New("invalid or expired API key")
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		return nil, meta, fmt.Errorf("API key does not have runner permissions")
+		return nil, meta, errors.New("API key does not have runner permissions")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -250,11 +251,11 @@ func (c *Client) GetPublisherIdentityWithMeta(ctx context.Context) (*PublisherId
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, meta, fmt.Errorf("invalid or expired API key")
+		return nil, meta, errors.New("invalid or expired API key")
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		return nil, meta, fmt.Errorf("API key does not have publisher permissions")
+		return nil, meta, errors.New("API key does not have publisher permissions")
 	}
 
 	if resp.StatusCode != http.StatusOK {

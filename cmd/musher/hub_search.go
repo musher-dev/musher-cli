@@ -94,19 +94,19 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 	}
 
 	for i := range result.Data {
-		b := &result.Data[i]
-		out.Print("%s/%s", b.Publisher.Handle, b.Slug)
-		if b.LatestVersion != "" {
-			out.Print(":%s", b.LatestVersion)
+		bundle := &result.Data[i]
+		out.Print("%s/%s", bundle.Publisher.Handle, bundle.Slug)
+		if bundle.LatestVersion != "" {
+			out.Print(":%s", bundle.LatestVersion)
 		}
 		out.Print("\n")
 
-		if b.Summary != "" {
-			out.Muted("  %s", b.Summary)
+		if bundle.Summary != "" {
+			out.Muted("  %s", bundle.Summary)
 		}
 
 		out.Muted("  %s | %d stars | %d downloads",
-			fmt.Sprintf("%v", b.AssetTypes), b.StarsCount, b.DownloadsTotal)
+			fmt.Sprintf("%v", bundle.AssetTypes), bundle.StarsCount, bundle.DownloadsTotal)
 	}
 
 	if result.Meta.HasMore {

@@ -36,7 +36,7 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 	}
 
 	// If a local musher.yaml exists, validate hub-readiness before proceeding.
-	workDir, _ := os.Getwd()
+	workDir, _ := os.Getwd() //nolint:errcheck // non-critical working directory lookup
 	if def, loadErr := bundledef.Load(workDir); loadErr == nil {
 		if hubErr := def.ValidateHubReadiness(); hubErr != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)

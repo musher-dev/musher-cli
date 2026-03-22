@@ -73,7 +73,7 @@ func wrapPostRunCleanup(postRun func(*cobra.Command, []string) error, cleanup fu
 	return func(cmd *cobra.Command, args []string) error {
 		if postRun != nil {
 			if err := postRun(cmd, args); err != nil {
-				_ = cleanup()
+				_ = cleanup() //nolint:errcheck // best-effort cleanup
 				return err
 			}
 		}

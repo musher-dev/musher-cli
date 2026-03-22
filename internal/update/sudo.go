@@ -3,6 +3,7 @@
 package update
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,8 +21,8 @@ func NeedsElevation(binaryPath string) bool {
 		return true
 	}
 
-	_ = f.Close()
-	_ = os.Remove(f.Name())
+	_ = f.Close()           //nolint:errcheck // best-effort cleanup
+	_ = os.Remove(f.Name()) //nolint:errcheck // best-effort cleanup
 
 	return false
 }
@@ -31,7 +32,7 @@ func NeedsElevation(binaryPath string) bool {
 func ReExecWithSudo() error {
 	sudoPath, err := exec.LookPath("sudo")
 	if err != nil {
-		return fmt.Errorf("sudo not found in PATH; run this command with elevated permissions manually")
+		return errors.New("sudo not found in PATH; run this command with elevated permissions manually")
 	}
 
 	execPath, err := os.Executable()
