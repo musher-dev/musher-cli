@@ -30,3 +30,30 @@ func TestIsVisibilityError(t *testing.T) {
 		})
 	}
 }
+
+func TestReadmeFormatFromPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"README.md", "markdown"},
+		{"docs/readme.markdown", "markdown"},
+		{"README.html", "html"},
+		{"readme.htm", "html"},
+		{"README.txt", "plaintext"},
+		{"README.rst", "plaintext"},
+		{"README", "plaintext"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+
+			if got := readmeFormatFromPath(tt.path); got != tt.want {
+				t.Errorf("readmeFormatFromPath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}

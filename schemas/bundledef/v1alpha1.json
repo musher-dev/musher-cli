@@ -94,8 +94,8 @@
     },
     "assetKind": {
       "type": "string",
-      "enum": ["skill", "agent", "prompt", "tool", "config"],
-      "description": "Asset kind. Can be inferred from src path prefix."
+      "enum": ["skill", "agent", "agent_spec", "agent_definition", "prompt", "tool", "toolset", "tool_config", "config"],
+      "description": "Asset kind. Can be inferred from src path prefix. Aliases: agent_spec and agent_definition map to agent; toolset and tool_config map to tool."
     },
     "asset": {
       "type": "object",

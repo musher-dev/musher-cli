@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,15 +20,20 @@ import (
 )
 
 func newPushCmd() *cobra.Command {
-	return &cobra.Command{
+	var publishToHub bool
+
+	cmd := &cobra.Command{
 		Use:   "push",
 		Short: "Validate and push the bundle to the registry",
 		Long: `Validate the bundle definition file and assets, then push
 the bundle to the Musher registry.
 
-You must be authenticated ('musher login') and have a writable namespace.`,
-		Example: `  musher push`,
-		Args:    noArgs,
+You must be authenticated ('musher login') and have a writable namespace.
+
+Use --publish-to-hub to also create a Hub listing after pushing (public bundles only).`,
+		Example: `  musher push
+  musher push --publish-to-hub`,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 
@@ -34,12 +41,16 @@ You must be authenticated ('musher login') and have a writable namespace.`,
 				return err
 			}
 
-			return runPush(cmd, out)
+			return runPush(cmd, out, publishToHub)
 		},
 	}
+
+	cmd.Flags().BoolVar(&publishToHub, "publish-to-hub", false, "Also publish a Hub listing after pushing (public bundles only)")
+
+	return cmd
 }
 
-func runPush(cmd *cobra.Command, out *output.Writer) error {
+func runPush(cmd *cobra.Command, out *output.Writer, publishToHub bool) error {
 	ctx := cmd.Context()
 
 	c, err := requireAuth()
@@ -66,6 +77,26 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 		return clierrors.ValidateFailed(err.Error())
 	}
 
+	visibility := bundle.Visibility
+	if visibility == "" {
+		visibility = "private"
+	}
+
+	// Validate --publish-to-hub preconditions before pushing.
+	if publishToHub {
+		if visibility != "public" {
+			return &clierrors.CLIError{
+				Message: "--publish-to-hub requires visibility: public",
+				Hint:    "Set 'visibility: public' in musher.yaml or remove the --publish-to-hub flag",
+				Code:    clierrors.ExitUsage,
+			}
+		}
+
+		if hubErr := bundle.ValidateHubReadiness(); hubErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
+		}
+	}
+
 	out.Print("Pushing %s...\n", bundle.VersionRef())
 
 	// Build assets payload
@@ -87,18 +118,29 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 		})
 	}
 
-	visibility := bundle.Visibility
-	if visibility == "" {
-		visibility = "private"
+	// Read README content if specified.
+	var readmeContent, readmeFormat string
+	if bundle.Readme != "" {
+		readmePath := filepath.Join(workDir, bundle.Readme)
+
+		data, readErr := safeio.ReadFile(readmePath)
+		if readErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read readme: "+bundle.Readme, readErr)
+		}
+
+		readmeContent = string(data)
+		readmeFormat = readmeFormatFromPath(bundle.Readme)
 	}
 
 	req := &client.PushBundleRequest{
-		Slug:        bundle.Slug,
-		Name:        bundle.Name,
-		Description: bundle.Description,
-		Visibility:  visibility,
-		Version:     bundle.Version,
-		Assets:      assets,
+		Slug:          bundle.Slug,
+		Name:          bundle.Name,
+		Description:   bundle.Description,
+		Visibility:    visibility,
+		Version:       bundle.Version,
+		ReadmeContent: readmeContent,
+		ReadmeFormat:  readmeFormat,
+		Assets:        assets,
 	}
 
 	// Push bundle in a single request
@@ -114,7 +156,16 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 			case httpErr.Status == http.StatusConflict:
 				return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
 			case httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail):
-				return handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
+				recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
+				if recoverErr != nil {
+					return recoverErr
+				}
+
+				if recovered && publishToHub {
+					return hubPublishAfterPush(ctx, out, c, bundle)
+				}
+
+				return nil
 			}
 		}
 
@@ -122,6 +173,10 @@ func runPush(cmd *cobra.Command, out *output.Writer) error {
 	}
 
 	spin.StopWithSuccess("Pushed " + bundle.VersionRef())
+
+	if publishToHub {
+		return hubPublishAfterPush(ctx, out, c, bundle)
+	}
 
 	return nil
 }
@@ -142,6 +197,7 @@ func isVisibilityError(detail string) bool {
 
 // handleVisibilityRecovery offers to switch visibility to public and retry the push
 // when a 403 indicates the user's plan doesn't allow more private bundles.
+// Returns (true, nil) when recovery succeeded and the push was retried successfully.
 func handleVisibilityRecovery(
 	cmd *cobra.Command,
 	out *output.Writer,
@@ -150,10 +206,10 @@ func handleVisibilityRecovery(
 	c *client.Client,
 	req *client.PushBundleRequest,
 	originalErr error,
-) error {
+) (bool, error) {
 	p := prompt.New(out)
 	if !p.CanPrompt() {
-		return clierrors.PublishFailed(originalErr)
+		return false, clierrors.PublishFailed(originalErr)
 	}
 
 	out.Println()
@@ -165,16 +221,16 @@ func handleVisibilityRecovery(
 
 	confirmed, confirmErr := p.Confirm("Set visibility to public and retry push?", false)
 	if confirmErr != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
 	}
 
 	if !confirmed {
-		return clierrors.PublishFailed(originalErr)
+		return false, clierrors.PublishFailed(originalErr)
 	}
 
 	// Update musher.yaml on disk.
 	if err := bundledef.SetVisibility(workDir, "public"); err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to update musher.yaml", err)
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Failed to update musher.yaml", err)
 	}
 
 	out.Success("Updated musher.yaml: visibility set to public")
@@ -187,10 +243,61 @@ func handleVisibilityRecovery(
 
 	if retryErr := c.PushBundle(cmd.Context(), bundle.Namespace, bundle.Slug, req); retryErr != nil {
 		spin.StopWithFailure("Push failed")
-		return clierrors.PublishFailed(retryErr)
+		return false, clierrors.PublishFailed(retryErr)
 	}
 
 	spin.StopWithSuccess("Pushed " + bundle.VersionRef() + " (public)")
 
+	return true, nil
+}
+
+// hubPublishAfterPush creates a Hub listing after a successful push.
+// If the Hub publish fails, it warns the user but does not return an error
+// since the push itself succeeded.
+func hubPublishAfterPush(
+	ctx context.Context,
+	out *output.Writer,
+	c *client.Client,
+	bundle *bundledef.Def,
+) error {
+	p := prompt.New(out)
+	if p.CanPrompt() {
+		confirmed, confirmErr := p.Confirm(
+			fmt.Sprintf("Publish %s to the Hub?", bundle.Ref()), true)
+		if confirmErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
+		}
+
+		if !confirmed {
+			out.Muted("Skipped Hub listing")
+			return nil
+		}
+	}
+
+	spin := out.Spinner(fmt.Sprintf("Publishing %s to Hub", bundle.Ref()))
+	spin.Start()
+
+	if err := c.CreateHubListing(ctx, bundle.Namespace, bundle.Slug); err != nil {
+		spin.StopWithFailure("Failed to publish Hub listing")
+		out.Warning("Bundle was pushed successfully but Hub listing failed: %v", err)
+		out.Info("Run 'musher hub publish %s' to retry.", bundle.Ref())
+
+		return nil
+	}
+
+	spin.StopWithSuccess(fmt.Sprintf("Published %s to Hub", bundle.Ref()))
+
 	return nil
+}
+
+// readmeFormatFromPath returns the readme format based on the file extension.
+func readmeFormatFromPath(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown":
+		return "markdown"
+	case ".html", ".htm":
+		return "html"
+	default:
+		return "plaintext"
+	}
 }

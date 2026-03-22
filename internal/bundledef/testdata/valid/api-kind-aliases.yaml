@@ -1,0 +1,11 @@
+namespace: acme
+slug: alias-bundle
+version: 1.0.0
+name: Alias Bundle
+assets:
+  - id: my-agent
+    src: agents/example.md
+    kind: agent_spec
+  - id: my-tool
+    src: tools/example.md
+    kind: toolset

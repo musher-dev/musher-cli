@@ -105,11 +105,13 @@ func TestPushBundle(t *testing.T) {
 		})
 
 		req := &client.PushBundleRequest{
-			Slug:        "my-bundle",
-			Name:        "My Bundle",
-			Description: "A test bundle",
-			Visibility:  "private",
-			Version:     "1.0.0",
+			Slug:          "my-bundle",
+			Name:          "My Bundle",
+			Description:   "A test bundle",
+			Visibility:    "private",
+			Version:       "1.0.0",
+			ReadmeContent: "# My Bundle\nA test bundle.",
+			ReadmeFormat:  "markdown",
 			Assets: []client.PushBundleAsset{
 				{
 					LogicalPath: "prompts/hello.txt",
@@ -151,6 +153,14 @@ func TestPushBundle(t *testing.T) {
 
 		if gotBody.Assets[0].LogicalPath != "prompts/hello.txt" {
 			t.Errorf("body.Manifest[0].logicalPath = %q, want %q", gotBody.Assets[0].LogicalPath, "prompts/hello.txt")
+		}
+
+		if gotBody.ReadmeContent != "# My Bundle\nA test bundle." {
+			t.Errorf("body.ReadmeContent = %q, want %q", gotBody.ReadmeContent, "# My Bundle\nA test bundle.")
+		}
+
+		if gotBody.ReadmeFormat != "markdown" {
+			t.Errorf("body.ReadmeFormat = %q, want %q", gotBody.ReadmeFormat, "markdown")
 		}
 	})
 

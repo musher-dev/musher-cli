@@ -94,6 +94,8 @@ description: A starter Musher bundle with one Agent Skill.
 # Options: private (default), public (hub publishing requires description, readme, and license).
 visibility: private
 
+# Each skill asset must point to a SKILL.md inside skills/<name>/.
+# The frontmatter "name" field must match the parent directory name.
 assets:
   - id: "{{ .Slug }}"
     src: skills/{{ .Slug }}/SKILL.md
@@ -208,8 +210,13 @@ Use this skill when you need to [describe the task or trigger].
 
 ## What to edit
 
-- Update the **name** and **description** in the front matter above.
-- Replace the instructions below with your own.
+**Front-matter rules** (the YAML block between ` + "`---`" + ` markers):
+
+- **name** — Must be lowercase letters, numbers, and single hyphens (e.g. ` + "`my-skill`" + `). Max 64 characters. Must match the parent directory name.
+- **description** — Required, max 1024 characters.
+- Optional fields: ` + "`license`" + `, ` + "`compatibility`" + `, ` + "`metadata`" + `, ` + "`allowed-tools`" + `. No other fields are allowed.
+
+Replace the instructions below with your own.
 
 ## Instructions
 
@@ -251,7 +258,7 @@ Follow these steps:
 		out.Info("  1. Namespace set to '%s' — change if needed", namespace)
 	}
 
-	out.Info("  2. Edit bundle metadata and skill instructions")
+	out.Info("  2. Edit bundle metadata and skill instructions (see SKILL.md for frontmatter rules)")
 	out.Info("  3. Run 'musher validate' to check your bundle")
 	out.Info("  4. Run 'musher push' to publish")
 

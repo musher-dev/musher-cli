@@ -1,5 +1,11 @@
 # Contributing to Musher CLI
 
+## Prerequisites
+
+- **Go 1.26.1+** — see `GO_VERSION` in `Taskfile.yml` for the exact version used in CI
+- **[Task](https://taskfile.dev/)** — task runner (replaces Make)
+- **shellcheck** — must be on `PATH` for shell script linting (`task check:shell`)
+
 ## Development Setup
 
 ```bash
@@ -7,13 +13,14 @@
 git clone https://github.com/musher-dev/musher-cli.git
 cd musher-cli
 
-# Install dependencies and tools
+# Install dependencies, tools (golangci-lint, govulncheck, shfmt, actionlint),
+# and Lefthook git hooks
 task setup
 
 # Build
 task build
 
-# Run all checks
+# Run the full quality suite (fmt, lint, vuln, test, cross-compile)
 task check
 ```
 

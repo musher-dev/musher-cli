@@ -61,6 +61,7 @@ tasks:
       - GOOS=linux GOARCH=amd64 go build -o {{.BINARY}}-linux-amd64 ./cmd/musher
       - GOOS=linux GOARCH=arm64 go build -o {{.BINARY}}-linux-arm64 ./cmd/musher
       - GOOS=windows GOARCH=amd64 go build -o {{.BINARY}}-windows-amd64.exe ./cmd/musher
+      - GOOS=windows GOARCH=arm64 go build -o {{.BINARY}}-windows-arm64.exe ./cmd/musher
 
   run:
     desc: Run musher with arguments
@@ -214,6 +215,7 @@ tasks:
       - GOOS=linux   GOARCH=amd64 go build ./cmd/musher
       - GOOS=linux   GOARCH=arm64 go build ./cmd/musher
       - GOOS=windows GOARCH=amd64 go build ./cmd/musher
+      - GOOS=windows GOARCH=arm64 go build ./cmd/musher
 
   check:pre-push:
     desc: Run the pre-push verification suite

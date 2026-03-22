@@ -29,12 +29,14 @@ type PushBundleAsset struct {
 
 // PushBundleRequest is the payload for the single-request push endpoint.
 type PushBundleRequest struct {
-	Slug        string            `json:"slug"`
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Visibility  string            `json:"visibility"`
-	Version     string            `json:"version"`
-	Assets      []PushBundleAsset `json:"manifest"`
+	Slug          string            `json:"slug"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	Visibility    string            `json:"visibility"`
+	Version       string            `json:"version"`
+	ReadmeContent string            `json:"readmeContent,omitempty"`
+	ReadmeFormat  string            `json:"readmeFormat,omitempty"`
+	Assets        []PushBundleAsset `json:"manifest"`
 }
 
 // PushBundle pushes a bundle and all its assets in a single request.
