@@ -162,6 +162,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	pushCmd.GroupID = groupPublish
 	rootCmd.AddCommand(pushCmd)
 
+	pullCmd := newPullCmd()
+	pullCmd.GroupID = groupPublish
+	rootCmd.AddCommand(pullCmd)
+
 	yankCmd := newYankCmd()
 	yankCmd.GroupID = groupPublish
 	rootCmd.AddCommand(yankCmd)

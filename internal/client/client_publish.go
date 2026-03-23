@@ -160,6 +160,98 @@ func (c *Client) GetMyNamespaces(ctx context.Context) ([]NamespaceHandle, error)
 	return identity.Namespaces, nil
 }
 
+// PullBundleAsset represents a single asset in a pull response.
+type PullBundleAsset struct {
+	LogicalPath string `json:"logicalPath"`
+	AssetType   string `json:"assetType"`
+	ContentText string `json:"contentText"`
+	MediaType   string `json:"mediaType,omitempty"`
+}
+
+// PullBundleResponse is the response from downloading a bundle version.
+type PullBundleResponse struct {
+	Namespace   string            `json:"namespace"`
+	Slug        string            `json:"slug"`
+	Version     string            `json:"version"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Assets      []PullBundleAsset `json:"manifest"`
+}
+
+// PullBundleVersion downloads a bundle version's definition and assets.
+//
+//nolint:dupl // intentionally parallel to PullPublicBundleVersion (different auth and endpoint)
+func (c *Client) PullBundleVersion(ctx context.Context, namespace, slug, version string) (*PullBundleResponse, error) {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s/versions/%s:pull",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(slug),
+		neturl.PathEscape(version),
+	)
+
+	req, err := c.newRequest(ctx, "GET", c.baseURL+path, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return nil, fmt.Errorf("pull bundle version: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, unexpectedStatus("pull bundle version", resp)
+	}
+
+	var result PullBundleResponse
+	if err := decodeJSON(resp.Body, &result, "failed to parse pull response"); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// PullPublicBundleVersion downloads a public bundle version (no auth required).
+//
+//nolint:dupl // intentionally parallel to PullBundleVersion (different auth and endpoint)
+func (c *Client) PullPublicBundleVersion(ctx context.Context, namespace, slug, version string) (*PullBundleResponse, error) {
+	path := fmt.Sprintf("/v1/hub/bundles/%s/%s/versions/%s:pull",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(slug),
+		neturl.PathEscape(version),
+	)
+
+	req, err := c.newPublicRequest(ctx, "GET", c.baseURL+path, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return nil, fmt.Errorf("pull public bundle version: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, unexpectedStatus("pull public bundle version", resp)
+	}
+
+	var result PullBundleResponse
+	if err := decodeJSON(resp.Body, &result, "failed to parse pull response"); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 // UnyankBundleVersion restores a previously yanked bundle version.
 func (c *Client) UnyankBundleVersion(ctx context.Context, namespace, bundle, version string) error {
 	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s/versions/%s:unyank",

@@ -219,6 +219,16 @@ func CredentialFilePath(hostID string) (string, error) {
 	return filepath.Join(root, "credentials", hostID, "api-key"), nil
 }
 
+// BundleCacheDir returns the cache directory for a specific bundle version.
+func BundleCacheDir(namespace, slug, version string) (string, error) {
+	root, err := cacheRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "bundles", namespace, slug, version), nil
+}
+
 // OCIStoreDir returns the OCI store directory for Musher.
 func OCIStoreDir() (string, error) {
 	root, err := dataRoot()
