@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/creativeprojects/go-selfupdate v1.5.2
-	github.com/fatih/color v1.18.0
+	github.com/fatih/color v1.19.0
 	github.com/google/uuid v1.6.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
