@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/musher-dev/musher-cli/compare/v0.3.0...v0.3.1) (2026-03-23)
+
+
+### Features
+
+* add pull command to download bundles from registry ([17d4ea2](https://github.com/musher-dev/musher-cli/commit/17d4ea2155010c67697c6ba7b367526ce95fc43f))
+* add pull command to download bundles from registry ([7e46299](https://github.com/musher-dev/musher-cli/commit/7e462997a82e37c466a2a0ce6d64960856961157))
+
 ## [0.3.0](https://github.com/musher-dev/musher-cli/compare/v0.2.2...v0.3.0) (2026-03-22)
 
 
