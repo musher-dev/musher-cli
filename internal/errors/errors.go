@@ -222,6 +222,22 @@ func InvalidBundleDef(detail string) *CLIError {
 	}
 }
 
+// PullFailed returns an error for bundle pull failures.
+func PullFailed(cause error) *CLIError {
+	hint := "Check the bundle reference and your credentials, then try again"
+
+	if containsAny(errorString(cause), "not found") {
+		hint = "Verify the namespace, slug, and version are correct"
+	}
+
+	return enrichFromCause(&CLIError{
+		Message: "Pull failed",
+		Hint:    hint,
+		Cause:   cause,
+		Code:    ExitGeneral,
+	})
+}
+
 // YankFailed returns an error for yank failures.
 func YankFailed(version string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
