@@ -154,6 +154,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	initCmd.GroupID = groupPublish
 	rootCmd.AddCommand(initCmd)
 
+	addCmd := newAddCmd()
+	addCmd.GroupID = groupPublish
+	rootCmd.AddCommand(addCmd)
+
 	validateCmd := newValidateCmd()
 	validateCmd.GroupID = groupPublish
 	rootCmd.AddCommand(validateCmd)

@@ -15,16 +15,38 @@ import (
 // visibilityLineRE matches a YAML visibility line (e.g. "visibility: private").
 var visibilityLineRE = regexp.MustCompile(`(?m)^(\s*visibility:\s*).*$`)
 
-// FileName is the expected bundle definition file name.
+// FileName is the preferred bundle definition file name.
 const FileName = "musher.yaml"
+
+// FileNameAlt is the alternative bundle definition file name.
+const FileNameAlt = "musher.yml"
+
+// Resolve returns the path to the bundle definition file in the given directory.
+// It checks for musher.yaml first, then musher.yml. Returns an error if neither exists.
+func Resolve(dir string) (string, error) {
+	primary := filepath.Join(dir, FileName)
+	if _, err := os.Stat(primary); err == nil {
+		return primary, nil
+	}
+
+	alt := filepath.Join(dir, FileNameAlt)
+	if _, err := os.Stat(alt); err == nil {
+		return alt, nil
+	}
+
+	return "", fmt.Errorf("bundle definition file not found: %s or %s (run 'musher init' to create one)", primary, alt)
+}
+
+// kindSkill is the asset kind for skills.
+const kindSkill = "skill"
 
 // Def represents a musher bundle definition.
 type Def struct {
+	Name        string            `yaml:"name"`
+	Description string            `yaml:"description,omitempty"`
 	Namespace   string            `yaml:"namespace"`
 	Slug        string            `yaml:"slug"`
 	Version     string            `yaml:"version"`
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description,omitempty"`
 	Visibility  string            `yaml:"visibility,omitempty"`
 	Readme      string            `yaml:"readme,omitempty"`
 	License     string            `yaml:"license,omitempty"`
@@ -43,12 +65,32 @@ type Asset struct {
 	MediaType string `yaml:"mediaType,omitempty"`
 }
 
+// SanitizeSlug turns a name into a valid bundle slug (lowercase, alphanumeric
+// and hyphens only, max 100 characters). Returns "my-bundle" for empty input.
+func SanitizeSlug(name string) string {
+	slug := strings.ToLower(name)
+	slug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(slug, "-")
+	slug = regexp.MustCompile(`-{2,}`).ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+
+	if len(slug) > 100 {
+		slug = slug[:100]
+		slug = strings.TrimRight(slug, "-")
+	}
+
+	if slug == "" {
+		return "my-bundle"
+	}
+
+	return slug
+}
+
 // kindPrefixes maps directory prefixes to asset kinds for inference.
 var kindPrefixes = []struct {
 	prefix string
 	kind   string
 }{
-	{"skills/", "skill"},
+	{"skills/", kindSkill},
 	{"agents/", "agent"},
 	{"prompts/", "prompt"},
 	{"tools/", "tool"},
@@ -56,16 +98,15 @@ var kindPrefixes = []struct {
 	{"config/", "config"},
 }
 
-// Load reads a musher.yaml bundle definition from the given directory.
+// Load reads a musher.yaml (or musher.yml) bundle definition from the given directory.
 func Load(dir string) (*Def, error) {
-	path := filepath.Join(dir, FileName)
-
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + constant filename
+	path, err := Resolve(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("bundle definition file not found: %s (run 'musher init' to create one)", path)
-		}
+		return nil, err
+	}
 
+	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	if err != nil {
 		return nil, fmt.Errorf("read bundle definition: %w", err)
 	}
 
@@ -97,9 +138,12 @@ func Save(dir string, d *Def) error {
 // musher.yaml, preserving comments and formatting. If no visibility line exists,
 // one is inserted after the name line (or before assets as fallback).
 func SetVisibility(dir, visibility string) error {
-	path := filepath.Join(dir, FileName)
+	path, err := Resolve(dir)
+	if err != nil {
+		return err
+	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + constant filename
+	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
 		return fmt.Errorf("read bundle definition: %w", err)
 	}
@@ -109,9 +153,9 @@ func SetVisibility(dir, visibility string) error {
 	if visibilityLineRE.MatchString(content) {
 		content = visibilityLineRE.ReplaceAllString(content, "${1}"+visibility)
 	} else {
-		// Insert after "name:" line, or before "assets:" as fallback.
-		nameRE := regexp.MustCompile(`(?m)^(name:.*)$`)
-		if loc := nameRE.FindStringIndex(content); loc != nil {
+		// Insert after "version:" line, or before "assets:" as fallback.
+		versionRE := regexp.MustCompile(`(?m)^(version:.*)$`)
+		if loc := versionRE.FindStringIndex(content); loc != nil {
 			insertAt := loc[1]
 			content = content[:insertAt] + "\nvisibility: " + visibility + content[insertAt:]
 		} else {
@@ -187,7 +231,7 @@ func (d *Def) Validate() error {
 
 		// Infer kind from src prefix if not explicitly set.
 		if strings.TrimSpace(asset.Kind) == "" {
-			inferred := inferKind(asset.Src)
+			inferred := InferKind(asset.Src)
 			if inferred == "" {
 				errs = append(errs, fmt.Sprintf(
 					"assets[%d].kind is required when src is not under a reserved directory (skills/, agents/, prompts/, tools/, config/)",
@@ -205,8 +249,8 @@ func (d *Def) Validate() error {
 	return nil
 }
 
-// inferKind returns the asset kind based on the src path prefix, or "" if none matches.
-func inferKind(src string) string {
+// InferKind returns the asset kind based on the src path prefix, or "" if none matches.
+func InferKind(src string) string {
 	normalized := filepath.ToSlash(src)
 	for _, kp := range kindPrefixes {
 		if strings.HasPrefix(normalized, kp.prefix) {
@@ -252,7 +296,7 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 			}
 		}
 
-		if strings.EqualFold(strings.TrimSpace(asset.Kind), "skill") {
+		if strings.EqualFold(strings.TrimSpace(asset.Kind), kindSkill) {
 			if filepath.Base(asset.Src) != "SKILL.md" {
 				errs = append(errs, fmt.Sprintf("asset %q: skill assets must point to SKILL.md: %s", asset.ID, asset.Src))
 				continue
@@ -296,8 +340,8 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 // musher.yaml for users who encounter these values in API responses.
 func MapAssetType(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "skill":
-		return "skill"
+	case kindSkill:
+		return kindSkill
 	case "agent", "agent_spec", "agent_definition":
 		return "agent_spec"
 	case "tool", "toolset", "tool_config":

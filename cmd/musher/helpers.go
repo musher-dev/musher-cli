@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
 // newAPIClient creates an authenticated API client using stored credentials.
@@ -41,4 +48,49 @@ func configForPublicClient() string {
 // newPublicAPIClient creates an unauthenticated client for public endpoints.
 func newPublicAPIClient(apiURL string) *client.Client {
 	return client.New(apiURL, "")
+}
+
+// inlineLogin performs an interactive login flow inline (without requiring the
+// login subcommand). Returns the validated PublisherIdentity on success so the
+// caller can use namespace data immediately without a second API call.
+func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
+	p := prompt.New(out)
+
+	apiKey, err := p.APIKey()
+	if err != nil {
+		return nil, fmt.Errorf("read API key: %w", err)
+	}
+
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, errors.New("API key is empty")
+	}
+
+	spin := out.Spinner("Validating credentials")
+	spin.Start()
+
+	cfg := config.Load()
+
+	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
+	if err != nil {
+		spin.Stop()
+		return nil, fmt.Errorf("initialize HTTP client: %w", err)
+	}
+
+	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
+
+	identity, err := c.GetPublisherIdentity(context.Background())
+	if err != nil {
+		spin.StopWithFailure("Authentication failed")
+		return nil, fmt.Errorf("validate credentials: %w", err)
+	}
+
+	spin.StopWithSuccess("Authenticated as " + identity.CredentialName)
+
+	if storeErr := auth.StoreAPIKey(cfg.APIURL(), apiKey); storeErr != nil {
+		out.Warning("Could not store API key: %v", storeErr)
+		out.Info("Set MUSHER_API_KEY environment variable instead.")
+	}
+
+	return identity, nil
 }

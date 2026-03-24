@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -35,9 +34,12 @@ func runValidate(out *output.Writer) error {
 	}
 
 	// Run schema validation first.
-	yamlPath := filepath.Join(workDir, bundledef.FileName)
+	yamlPath, err := bundledef.Resolve(workDir)
+	if err != nil {
+		return clierrors.InvalidBundleDef(err.Error())
+	}
 
-	yamlData, err := os.ReadFile(yamlPath) //nolint:gosec // path constructed from working directory + constant filename
+	yamlData, err := os.ReadFile(yamlPath) //nolint:gosec // path constructed from working directory + resolved filename
 	if err == nil {
 		if schemaErrs := bundledef.ValidateSchema(yamlData); len(schemaErrs) > 0 {
 			parts := make([]string, 0, len(schemaErrs)+1)
