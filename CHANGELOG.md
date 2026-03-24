@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/musher-dev/musher-cli/compare/v0.3.1...v0.3.2) (2026-03-24)
+
+
+### Features
+
+* add `musher add` command and enhance init with interactive login ([46ce888](https://github.com/musher-dev/musher-cli/commit/46ce8887607ef6bde548a2ffb5494621c1d6ce6f))
+* add musher add command and enhance init with interactive login ([81a2588](https://github.com/musher-dev/musher-cli/commit/81a25880b1045b52a8e4a3f3245155674b074943))
+
 ## [0.3.1](https://github.com/musher-dev/musher-cli/compare/v0.3.0...v0.3.1) (2026-03-23)
 
 
