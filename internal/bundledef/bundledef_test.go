@@ -278,14 +278,15 @@ assets:
 	}
 }
 
-func TestSetVisibilityInsertsAfterName(t *testing.T) {
+func TestSetVisibilityInsertsAfterVersion(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	content := `namespace: acme
+	content := `name: My Bundle
+description: A test bundle
+namespace: acme
 slug: my-bundle
 version: 1.0.0
-name: My Bundle
 assets:
   - id: a
     src: skills/a.md
@@ -305,13 +306,13 @@ assets:
 		t.Errorf("expected visibility: public, got:\n%s", result)
 	}
 
-	// visibility should appear between name and assets
-	nameIdx := strings.Index(result, "name: My Bundle")
+	// visibility should appear between version and assets
+	versionIdx := strings.Index(result, "version: 1.0.0")
 	visIdx := strings.Index(result, "visibility: public")
 	assetsIdx := strings.Index(result, "assets:")
 
-	if visIdx <= nameIdx || visIdx >= assetsIdx {
-		t.Errorf("visibility should be between name and assets, got:\n%s", result)
+	if visIdx <= versionIdx || visIdx >= assetsIdx {
+		t.Errorf("visibility should be between version and assets, got:\n%s", result)
 	}
 }
 
@@ -364,7 +365,83 @@ func TestSetVisibilityMissingFileError(t *testing.T) {
 		t.Fatal("expected error for missing file")
 	}
 
-	if !strings.Contains(err.Error(), "read bundle definition") {
-		t.Errorf("error = %q, want it to mention read failure", err.Error())
+	if !strings.Contains(err.Error(), "bundle definition file not found") {
+		t.Errorf("error = %q, want it to mention file not found", err.Error())
 	}
+}
+
+func TestResolve(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prefers musher.yaml", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, FileName), []byte("namespace: acme\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, FileNameAlt), []byte("namespace: acme\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := Resolve(dir)
+		if err != nil {
+			t.Fatalf("Resolve() error = %v", err)
+		}
+
+		if filepath.Base(got) != FileName {
+			t.Errorf("Resolve() = %q, want musher.yaml to take precedence", got)
+		}
+	})
+
+	t.Run("falls back to musher.yml", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, FileNameAlt), []byte("namespace: acme\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := Resolve(dir)
+		if err != nil {
+			t.Fatalf("Resolve() error = %v", err)
+		}
+
+		if filepath.Base(got) != FileNameAlt {
+			t.Errorf("Resolve() = %q, want musher.yml", got)
+		}
+	})
+
+	t.Run("only musher.yaml", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, FileName), []byte("namespace: acme\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := Resolve(dir)
+		if err != nil {
+			t.Fatalf("Resolve() error = %v", err)
+		}
+
+		if filepath.Base(got) != FileName {
+			t.Errorf("Resolve() = %q, want musher.yaml", got)
+		}
+	})
+
+	t.Run("neither exists", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+
+		_, err := Resolve(dir)
+		if err == nil {
+			t.Fatal("expected error when neither file exists")
+		}
+
+		if !strings.Contains(err.Error(), "musher.yaml") || !strings.Contains(err.Error(), "musher.yml") {
+			t.Errorf("error = %q, want it to mention both extensions", err.Error())
+		}
+	})
 }

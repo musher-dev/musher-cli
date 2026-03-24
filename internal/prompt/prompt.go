@@ -142,6 +142,81 @@ func (p *Prompter) Select(message string, options []string) (int, error) {
 	}
 }
 
+// SelectMultiple prompts the user to select one or more items from a list.
+// Accepts comma-separated numbers (e.g. "1,3,5") or "all".
+// Returns selected indices (0-based).
+func (p *Prompter) SelectMultiple(message string, options []string) ([]int, error) {
+	p.out.Println(message)
+
+	for i, opt := range options {
+		p.out.Print("  [%d] %s\n", i+1, opt)
+	}
+
+	p.out.Println()
+
+	for {
+		p.out.Print("Select [1-%d, comma-separated, or \"all\"]: ", len(options))
+
+		input, err := p.reader.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("failed to read input: %w", err)
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
+		if strings.EqualFold(input, "all") {
+			indices := make([]int, len(options))
+			for i := range options {
+				indices[i] = i
+			}
+
+			return indices, nil
+		}
+
+		parts := strings.Split(input, ",")
+		seen := make(map[int]bool)
+
+		var indices []int
+
+		valid := true
+
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+
+			num, err := strconv.Atoi(part)
+			if err != nil || num < 1 || num > len(options) {
+				p.out.Warning("Invalid selection %q. Please enter numbers between 1 and %d", part, len(options))
+
+				valid = false
+
+				break
+			}
+
+			idx := num - 1
+			if !seen[idx] {
+				seen[idx] = true
+				indices = append(indices, idx)
+			}
+		}
+
+		if !valid {
+			continue
+		}
+
+		if len(indices) == 0 {
+			continue
+		}
+
+		return indices, nil
+	}
+}
+
 // APIKey prompts for an API key with masked input (asterisks).
 func (p *Prompter) APIKey() (string, error) {
 	return p.Password("Enter your API key")

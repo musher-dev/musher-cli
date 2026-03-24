@@ -6,9 +6,6 @@
   "type": "object",
   "required": ["namespace", "slug", "version", "name", "assets"],
   "properties": {
-    "namespace": { "$ref": "#/$defs/namespace" },
-    "slug": { "$ref": "#/$defs/slug" },
-    "version": { "$ref": "#/$defs/semver" },
     "name": {
       "type": "string",
       "minLength": 1,
@@ -20,6 +17,9 @@
       "maxLength": 1000,
       "description": "Short description of the bundle."
     },
+    "namespace": { "$ref": "#/$defs/namespace" },
+    "slug": { "$ref": "#/$defs/slug" },
+    "version": { "$ref": "#/$defs/semver" },
     "visibility": {
       "type": "string",
       "enum": ["private", "public"],
