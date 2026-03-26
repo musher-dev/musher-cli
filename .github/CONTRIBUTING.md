@@ -24,6 +24,18 @@ task build
 task check
 ```
 
+Local git hooks are managed by [Lefthook](https://github.com/evilmartians/lefthook) and installed automatically by `task setup`.
+
+### Additional Task Commands
+
+| Command | Description |
+|---------|-------------|
+| `task check:ci` | Canonical CI quality gate |
+| `task check:test` | Run tests only |
+| `task check:shell` | Lint shell scripts (requires shellcheck on `PATH`) |
+| `task check:workflow` | Lint GitHub Actions workflows |
+| `task fmt` | Format Go and shell code, tidy modules |
+
 ## Commit Conventions
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/).
