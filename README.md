@@ -1,18 +1,36 @@
-# Musher CLI
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-light-transparent.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" />
+    <img alt="Musher CLI" src="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" height="80" />
+  </picture>
+  <h3>Publish agent bundles to the Musher registry.</h3>
 
-Publish agent bundles to the [Musher](https://musher.dev) registry.
+  <a href="https://github.com/musher-dev/musher-cli/actions/workflows/ci.yml"><img src="https://github.com/musher-dev/musher-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/musher-dev/musher-cli/releases"><img src="https://img.shields.io/github/v/release/musher-dev/musher-cli" alt="Release" /></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/github/go-mod/go-version/musher-dev/musher-cli" alt="Go" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/musher-dev/musher-cli" alt="License" /></a>
 
-[Docs](https://docs.musher.dev) | [Hub](https://hub.musher.dev) | [Releases](https://github.com/musher-dev/musher-cli/releases)
+  <p>
+    <a href="https://docs.musher.dev">Documentation</a> ·
+    <a href="https://hub.musher.dev">Musher Hub</a> ·
+    <a href="https://discord.gg/SaVMzMgX2c">Discord</a>
+  </p>
+</div>
 
 Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush) — while Mush loads and runs bundles locally, Musher handles creating, validating, and publishing them. Think `docker push` vs `docker run`.
 
 ## Install
 
-```bash
-# From GitHub Releases (macOS / Linux)
-curl -fsSL https://get.musher.dev | sh
+**macOS / Linux:**
 
-# From source (requires Go 1.26.1+, all platforms)
+```bash
+curl -fsSL https://get.musher.dev | sh
+```
+
+**From source** (requires Go 1.26.1+):
+
+```bash
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
 
@@ -20,17 +38,35 @@ go install github.com/musher-dev/musher-cli/cmd/musher@latest
 
 ## Quick Start
 
+Authenticate with the Musher registry:
+
 ```bash
 musher login
+```
 
+Initialize a new bundle project:
+
+```bash
 musher init
-# Creates: musher.yaml, skills/<slug>/SKILL.md, README.md
-# Use --empty to create musher.yaml only
+```
 
+This creates `musher.yaml`, `skills/<slug>/SKILL.md`, and `README.md`. Use `--empty` to create the definition file only.
+
+Validate your bundle definition:
+
+```bash
 musher validate
-musher push
+```
 
-# Optional: list on the public Hub catalog
+Push the bundle to the registry:
+
+```bash
+musher push
+```
+
+Optionally, list on the public Hub catalog:
+
+```bash
 musher hub publish <namespace/slug>
 ```
 
@@ -153,26 +189,9 @@ All paths follow XDG conventions. Override with `MUSHER_CONFIG_HOME`, `MUSHER_DA
 | `--json` | Output results as JSON |
 | `--no-input` | Disable interactive prompts |
 
-## Development
-
-Requires [Go 1.26.1+](https://go.dev/dl/) and [Task](https://taskfile.dev/).
-
-```bash
-task setup          # Download deps, install pinned tools, install hooks
-task build          # Build binary
-task check          # Full quality suite (fmt + lint + vuln + test)
-task check:ci       # Canonical CI quality gate
-task check:test     # Run tests only
-task check:shell    # Lint shell scripts (requires shellcheck on PATH)
-task check:workflow # Lint GitHub Actions workflows
-task fmt            # Format Go and shell code, tidy modules
-```
-
-Local hooks are managed by [Lefthook](https://github.com/evilmartians/lefthook) and installed automatically by `task setup`.
-
 ## Contributing
 
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup, building, testing, and contribution guidelines.
 
 ## License
 
