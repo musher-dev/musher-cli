@@ -39,6 +39,8 @@ assets not yet tracked in musher.yaml.
 Use --all to add all discoverable conventional assets at once.`,
 		Example: `  musher add skills/review/SKILL.md
   musher add agents/reviewer.md --kind agent --id reviewer
+  musher add "skills/*/SKILL.md"
+  musher add "agents/*.md" "prompts/*.md"
   musher add --all
   musher add --dry-run
   musher add`,
@@ -73,6 +75,16 @@ func runAdd(_ *cobra.Command, out *output.Writer, paths []string, opts addOption
 	def, err := bundledef.Load(workDir)
 	if err != nil {
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to load bundle definition", err)
+	}
+
+	// Expand any glob patterns in paths before dispatching.
+	if len(paths) > 0 {
+		expanded, expandErr := expandGlobs(workDir, paths)
+		if expandErr != nil {
+			return expandErr
+		}
+
+		paths = expanded
 	}
 
 	switch {
@@ -147,6 +159,8 @@ func runAddAll(out *output.Writer, workDir string, def *bundledef.Def, opts addO
 
 	if len(discovered) == 0 {
 		out.Info("No untracked assets found.")
+		out.Muted("Place assets in skills/, agents/, prompts/, tools/, or configs/ directories.")
+
 		return nil
 	}
 
@@ -191,6 +205,8 @@ func runAddInteractive(out *output.Writer, workDir string, def *bundledef.Def, o
 
 	if len(discovered) == 0 {
 		out.Info("No untracked assets found.")
+		out.Muted("Place assets in skills/, agents/, prompts/, tools/, or configs/ directories.")
+
 		return nil
 	}
 

@@ -95,9 +95,9 @@ func As(err error, target **CLIError) bool {
 
 // NotAuthenticated returns an error indicating missing credentials.
 func NotAuthenticated() *CLIError {
-	hint := "Run 'musher login' or set MUSHER_API_KEY"
+	hint := "Run 'musher auth login' or set MUSHER_API_KEY"
 	if os.Getenv("SUDO_USER") != "" {
-		hint = "Credentials from 'musher login' are not accessible under sudo. " +
+		hint = "Credentials from 'musher auth login' are not accessible under sudo. " +
 			"Run without sudo, or pass --api-key, or set MUSHER_API_KEY"
 	}
 
@@ -111,7 +111,7 @@ func NotAuthenticated() *CLIError {
 
 // AuthFailed returns an error for failed authentication.
 func AuthFailed(cause error) *CLIError {
-	hint := "Check your API key or run 'musher login'"
+	hint := "Check your API key or run 'musher auth login'"
 
 	switch {
 	case containsAny(strings.ToLower(errorString(cause)), "certificate", "x509", "tls"):
@@ -131,7 +131,7 @@ func AuthFailed(cause error) *CLIError {
 
 // CredentialsInvalid returns an error for invalid stored credentials.
 func CredentialsInvalid(cause error) *CLIError {
-	hint := "Run 'musher login' to re-authenticate"
+	hint := "Run 'musher auth login' to re-authenticate"
 
 	switch {
 	case containsAny(strings.ToLower(errorString(cause)), "certificate", "x509", "tls"):

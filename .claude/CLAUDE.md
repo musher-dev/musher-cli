@@ -3,31 +3,31 @@
 ## What This Is
 
 Musher is the **publishing CLI** for the Musher Hub registry — it creates,
-validates, and publishes agent bundles. It is the companion to
-[Mush](https://github.com/musher-dev/mush), which loads and runs bundles locally.
+validates, and publishes agent bundles.
 
 **IS**: Bundle publisher, bundle definition validator.
-**IS NOT**: Bundle runner, job executor, worker manager. That's Mush.
-
-Think `docker push` vs `docker run` — Musher publishes, Mush consumes.
+**IS NOT**: Bundle runner, job executor, worker manager.
 
 ## Directory Overview
 
 ### CLI Entry — `cmd/musher/`
 
-Flat verbs for authoring, `hub` subcommand for catalog operations.
+Grouped auth commands, flat verbs for authoring, `hub` subcommand for catalog operations.
 
 - `main.go` — Entry point, version injection, error handling
 - `root.go` — Root command, persistent flags, verb registration
 - `bootstrap.go` — Runtime configuration (logging, output modes)
 - `errors.go` — CLI error rendering and health probes
 - `helpers.go` — Shared helpers (newAPIClient, requireAuth, public client)
-- `login.go` — Authentication with API key
-- `logout.go` — Clear stored credentials
-- `whoami.go` — Show identity and writable namespaces
+- `auth.go` — Auth parent command
+- `auth_login.go` — Authentication with API key
+- `auth_logout.go` — Clear stored credentials
+- `auth_status.go` — Show authentication status and writable namespaces
 - `init.go` — Initialize musher.yaml bundle definition file
+- `add.go` — Add assets to the bundle definition
 - `validate.go` — Validate bundle definition file and check assets
 - `push.go` — Validate and push the bundle to the registry
+- `pull.go` — Download a bundle from the registry
 - `yank.go` — Yank a published version
 - `unyank.go` — Restore a yanked version
 - `hub.go` — Hub parent command + `parseBundleRef` helper
@@ -70,13 +70,13 @@ Flat verbs for authoring, `hub` subcommand for catalog operations.
 
 **Output via context** — All user-facing output goes through `output.FromContext(cmd.Context())`.
 
-**Flat verbs** — Commands are `musher <verb>`, not `musher <noun> <verb>`. Root command directly registers all verbs.
+**Command shape** — Authentication uses `musher auth <verb>`, publishing remains `musher <verb>`, and catalog operations use `musher hub <verb>`.
 
 **Error handling** — Use `CLIError` from `internal/errors` for user-facing errors. Wrap lower-level errors with `fmt.Errorf("context: %w", err)`.
 
 **No TUI** — Publishing is batch-oriented. No bubbletea, no tcell, no PTY.
 
-**Shared namespace** — Both Musher and Mush share `~/.config/musher/`, keyring `musher/{hostname}`, env var `MUSHER_API_KEY`.
+**Shared namespace** — Uses `~/.config/musher/`, keyring `musher/{hostname}`, env var `MUSHER_API_KEY`.
 
 ## Development
 
@@ -96,4 +96,4 @@ task fmt          # Format code
 - **Credentials**: OS Keyring (`musher/{hostname}`), falls back to `~/.local/share/musher/credentials/{hostID}/api-key`
 - **Logs**: `~/.local/state/musher/logs/musher.log` (default sink)
 - **API endpoint**: `api.url` config key or `MUSHER_API_URL` env var
-- **Auth**: `MUSHER_API_KEY` env var or `musher login`
+- **Auth**: `MUSHER_API_KEY` env var or `musher auth login`

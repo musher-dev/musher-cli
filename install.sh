@@ -314,7 +314,7 @@ main() {
 
   say "Get started:"
   say "  musher --help"
-  say "  musher login"
+  say "  musher auth login"
 }
 
 main

@@ -9,24 +9,24 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
-func newWhoamiCmd() *cobra.Command {
+func newAuthStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "whoami",
-		Short: "Show current identity and writable namespaces",
-		Long: `Display the authenticated identity and associated writable namespaces.
+		Use:   "status",
+		Short: "Show current authentication status and writable namespaces",
+		Long: `Display the authenticated identity, credential source, and writable namespaces.
 
 Validates the stored credentials against the API and shows
 which namespaces are available for publishing.`,
-		Example: `  musher whoami`,
+		Example: `  musher auth status`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			return runWhoami(cmd, out)
+			return runAuthStatus(cmd, out)
 		},
 	}
 }
 
-func runWhoami(cmd *cobra.Command, out *output.Writer) error {
+func runAuthStatus(cmd *cobra.Command, out *output.Writer) error {
 	source, c, err := newAPIClient()
 	if err != nil {
 		return err

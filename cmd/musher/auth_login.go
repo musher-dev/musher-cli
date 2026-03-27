@@ -15,7 +15,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
-func newLoginCmd() *cobra.Command {
+func newAuthLoginCmd() *cobra.Command {
 	var apiKeyFlag string
 
 	cmd := &cobra.Command{
@@ -23,13 +23,16 @@ func newLoginCmd() *cobra.Command {
 		Short: "Authenticate with the Musher Hub",
 		Long: `Authenticate with the Musher Hub using an API key.
 
+You can create or manage API keys at:
+  https://console.musher.dev/settings/organization/api-keys
+
 The API key is stored securely in your OS keyring (macOS Keychain,
 Windows Credential Manager, or Linux Secret Service). Falls back
 to a file-based store if the keyring is unavailable.
 
 You can also set MUSHER_API_KEY environment variable instead.`,
-		Example: `  musher login
-  musher login --api-key KEY`,
+		Example: `  musher auth login
+  musher auth login --api-key KEY`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())

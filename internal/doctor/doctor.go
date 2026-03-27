@@ -324,7 +324,7 @@ func checkAuthentication(ctx context.Context) Result {
 		return Result{
 			Status:  StatusFail,
 			Message: "Not authenticated",
-			Detail:  "Run 'musher login' to authenticate",
+			Detail:  "Run 'musher auth login' to authenticate",
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	neturl "net/url"
 )
@@ -67,6 +68,39 @@ func (c *Client) PushBundle(ctx context.Context, namespace, bundleSlug string, r
 	}
 
 	return nil
+}
+
+// CheckBundleVersionExists returns true if the given version already exists on
+// the registry, false if it does not (404), or an error for unexpected statuses.
+func (c *Client) CheckBundleVersionExists(ctx context.Context, namespace, slug, version string) (bool, error) {
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s/versions/%s",
+		neturl.PathEscape(namespace),
+		neturl.PathEscape(slug),
+		neturl.PathEscape(version),
+	)
+
+	req, err := c.newRequest(ctx, "GET", c.baseURL+path, http.NoBody)
+	if err != nil {
+		return false, err
+	}
+
+	resp, err := c.do(req, path)
+	if err != nil {
+		return false, fmt.Errorf("check bundle version: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Drain the body — we only need the status code.
+	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, unexpectedStatus("check bundle version", resp)
+	}
 }
 
 // GetBundleDetail fetches bundle metadata from the authenticated namespace API.

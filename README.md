@@ -1,8 +1,8 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-light-transparent.svg" />
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" />
-    <img alt="Musher CLI" src="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" height="80" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-light-transparent.svg" />
+    <img alt="Musher CLI" src="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-light-transparent.svg" height="80" />
   </picture>
   <h3>Author, validate, and publish Musher bundles.</h3>
 
@@ -20,11 +20,9 @@
 
 Musher is the CLI for bundle authors on [musher.dev](https://musher.dev). Use it to scaffold bundle projects, register assets, validate bundle definitions, publish immutable bundle versions to the Musher registry, and manage public Hub listings.
 
-Bundles published with Musher can be loaded and run locally with [Mush](https://github.com/musher-dev/mush) or consumed programmatically via the [Python SDK](https://github.com/musher-dev/python-sdk) and [TypeScript SDK](https://github.com/musher-dev/typescript-sdk).
-
 ## Install
 
-**macOS / Linux:**
+**macOS / Linux (or WSL):**
 
 ```bash
 curl -fsSL https://get.musher.dev | sh
@@ -42,13 +40,19 @@ irm https://get.musher.dev/install.ps1 | iex
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
 
+## What You'll Need
+
+- **Musher CLI** — installed above.
+- **A Musher account and API key** — create or manage keys at [console.musher.dev](https://console.musher.dev/settings/organization/api-keys).
+- **Agent assets to publish** — start fresh with `musher init` to scaffold a new bundle project, or run `musher init --empty` then `musher add` to bundle existing agent assets in your project.
+
 ## Quick Start
 
 Authenticate and check your identity:
 
 ```bash
-musher login
-musher whoami
+musher auth login
+musher auth status
 ```
 
 **New bundle project:**
@@ -138,9 +142,9 @@ assets:
 
 | Command | Description |
 |---------|-------------|
-| `musher login` | Authenticate with API key |
-| `musher logout` | Clear stored credentials |
-| `musher whoami` | Show current identity and writable namespaces |
+| `musher auth login` | Authenticate with API key |
+| `musher auth logout` | Clear stored credentials |
+| `musher auth status` | Show current authentication status and writable namespaces |
 
 ### Publishing
 
@@ -200,6 +204,11 @@ All paths follow XDG conventions. Override with `MUSHER_CONFIG_HOME`, `MUSHER_DA
 | `--quiet` | Minimal output (for CI) |
 | `--no-color` | Disable colored output |
 | `--no-input` | Disable interactive prompts |
+
+## Using Bundles
+
+Once published, bundles can be installed and run in your projects.
+See the [Using Bundles](https://docs.musher.dev/use-bundles) guide for integration options including the Python SDK, TypeScript SDK, and the Mush CLI.
 
 ## Contributing
 

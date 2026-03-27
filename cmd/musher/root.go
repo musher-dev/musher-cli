@@ -52,7 +52,7 @@ listings.`,
 			if os.Geteuid() == 0 && cmd.Name() != "update" {
 				out.Warning("Running as root is not recommended. Files created will be owned by root.")
 				if os.Getenv("SUDO_USER") != "" {
-					out.Warning("Credentials from 'musher login' are stored per-user and won't be accessible under sudo.")
+					out.Warning("Credentials from 'musher auth login' are stored per-user and won't be accessible under sudo.")
 				}
 			}
 
@@ -114,6 +114,7 @@ listings.`,
 	_ = rootCmd.PersistentFlags().MarkHidden("log-file")   //nolint:errcheck // MarkHidden cannot fail for registered flags
 	_ = rootCmd.PersistentFlags().MarkHidden("log-stderr") //nolint:errcheck // MarkHidden cannot fail for registered flags
 
+	cobra.EnableCommandSorting = false
 	rootCmd.SuggestionsMinimumDistance = 2
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		return &clierrors.CLIError{
@@ -137,17 +138,9 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	)
 
 	// Auth group
-	loginCmd := newLoginCmd()
-	loginCmd.GroupID = groupAuth
-	rootCmd.AddCommand(loginCmd)
-
-	logoutCmd := newLogoutCmd()
-	logoutCmd.GroupID = groupAuth
-	rootCmd.AddCommand(logoutCmd)
-
-	whoamiCmd := newWhoamiCmd()
-	whoamiCmd.GroupID = groupAuth
-	rootCmd.AddCommand(whoamiCmd)
+	authCmd := newAuthCmd()
+	authCmd.GroupID = groupAuth
+	rootCmd.AddCommand(authCmd)
 
 	// Publish group
 	initCmd := newInitCmd()
@@ -157,6 +150,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	addCmd := newAddCmd()
 	addCmd.GroupID = groupPublish
 	rootCmd.AddCommand(addCmd)
+
+	removeCmd := newRemoveCmd()
+	removeCmd.GroupID = groupPublish
+	rootCmd.AddCommand(removeCmd)
 
 	validateCmd := newValidateCmd()
 	validateCmd.GroupID = groupPublish

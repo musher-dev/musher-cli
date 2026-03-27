@@ -16,6 +16,10 @@ var discoveryDirs = []struct {
 }{
 	{dir: "skills", kind: "skill", marker: "SKILL.md"},
 	{dir: "agents", kind: "agent", fileExt: []string{".md", ".yaml", ".yml"}},
+	{dir: "prompts", kind: "prompt", fileExt: []string{".md", ".yaml", ".yml", ".txt"}},
+	{dir: "tools", kind: "tool", fileExt: []string{".md", ".yaml", ".yml", ".json", ".py", ".js", ".ts", ".sh", ".bash"}},
+	{dir: "configs", kind: "config", fileExt: []string{".yaml", ".yml", ".json", ".toml"}},
+	{dir: "config", kind: "config", fileExt: []string{".yaml", ".yml", ".json", ".toml"}},
 }
 
 // DiscoveredAsset represents an asset found on disk but not yet in musher.yaml.

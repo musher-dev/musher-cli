@@ -80,7 +80,7 @@ var defaultTemplate = template.Must(template.New("default").Parse(
 description: A starter Musher bundle — two skills orchestrated by one agent.
 
 # These fields form your bundle's registry address: namespace/slug:version{{ if eq .Namespace "your-namespace" }}
-# Find your namespace with ` + "`musher whoami`" + `.{{ end }}
+# Find your namespace with ` + "`musher auth status`" + `.{{ end }}
 namespace: {{ .Namespace }}
 slug: "{{ .Slug }}"
 version: 0.1.0
@@ -105,7 +105,7 @@ var emptyTemplate = template.Must(template.New("empty").Parse(
 description: A brief description of your bundle.
 
 # These fields form your bundle's registry address: namespace/slug:version{{ if eq .Namespace "your-namespace" }}
-# Find your namespace with ` + "`musher whoami`" + `.{{ end }}
+# Find your namespace with ` + "`musher auth status`" + `.{{ end }}
 namespace: {{ .Namespace }}
 slug: "{{ .Slug }}"
 version: 0.1.0
@@ -250,7 +250,7 @@ func resolveNamespace(out *output.Writer, yes bool) string {
 	ok, confirmErr := prompter.Confirm("Log in now?", true)
 	if confirmErr != nil || !ok {
 		if confirmErr == nil {
-			out.Info("No problem — you can set 'namespace' later or run 'musher login'.")
+			out.Info("No problem — you can set 'namespace' later or run 'musher auth login'.")
 		}
 
 		return placeholderNamespace
@@ -259,7 +259,7 @@ func resolveNamespace(out *output.Writer, yes bool) string {
 	identity, loginErr := inlineLogin(out)
 	if loginErr != nil {
 		out.Warning("Login failed: %v", loginErr)
-		out.Info("You can try again later with 'musher login'.")
+		out.Info("You can try again later with 'musher auth login'.")
 
 		return placeholderNamespace
 	}
@@ -393,7 +393,7 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 	out.Info("Next steps:")
 
 	if namespace == placeholderNamespace {
-		out.Info("  1. Set 'namespace' in musher.yaml (run 'musher whoami' to see your namespaces)")
+		out.Info("  1. Set 'namespace' in musher.yaml (run 'musher auth status' to see your namespaces)")
 	} else {
 		out.Info("  1. Namespace set to '%s' — change if needed", namespace)
 	}
