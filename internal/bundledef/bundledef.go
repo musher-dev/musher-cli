@@ -12,6 +12,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// versionLineRE matches a YAML version line (e.g. "version: 1.0.0").
+var versionLineRE = regexp.MustCompile(`(?m)^(\s*version:\s*).*$`)
+
 // visibilityLineRE matches a YAML visibility line (e.g. "visibility: private").
 var visibilityLineRE = regexp.MustCompile(`(?m)^(\s*visibility:\s*).*$`)
 
@@ -37,8 +40,12 @@ func Resolve(dir string) (string, error) {
 	return "", fmt.Errorf("bundle definition file not found: %s or %s (run 'musher init' to create one)", primary, alt)
 }
 
-// kindSkill is the asset kind for skills.
-const kindSkill = "skill"
+// Asset kind constants.
+const (
+	kindSkill  = "skill"
+	kindPrompt = "prompt"
+	kindConfig = "config"
+)
 
 // Def represents a musher bundle definition.
 type Def struct {
@@ -92,10 +99,10 @@ var kindPrefixes = []struct {
 }{
 	{"skills/", kindSkill},
 	{"agents/", "agent"},
-	{"prompts/", "prompt"},
+	{"prompts/", kindPrompt},
 	{"tools/", "tool"},
-	{"configs/", "config"},
-	{"config/", "config"},
+	{"configs/", kindConfig},
+	{"config/", kindConfig},
 }
 
 // Load reads a musher.yaml (or musher.yml) bundle definition from the given directory.
@@ -128,6 +135,34 @@ func Save(dir string, d *Def) error {
 	}
 
 	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+		return fmt.Errorf("write bundle definition: %w", err)
+	}
+
+	return nil
+}
+
+// SetVersion performs a targeted line replacement of the version field in
+// musher.yaml, preserving comments and formatting.
+func SetVersion(dir, version string) error {
+	path, err := Resolve(dir)
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	if err != nil {
+		return fmt.Errorf("read bundle definition: %w", err)
+	}
+
+	content := string(data)
+
+	if !versionLineRE.MatchString(content) {
+		return fmt.Errorf("version field not found in %s", path)
+	}
+
+	content = versionLineRE.ReplaceAllString(content, "${1}"+version)
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
 		return fmt.Errorf("write bundle definition: %w", err)
 	}
 
@@ -346,10 +381,10 @@ func MapAssetType(kind string) string {
 		return "agent_spec"
 	case "tool", "toolset", "tool_config":
 		return "toolset"
-	case "prompt":
-		return "prompt"
-	case "config":
-		return "config"
+	case kindPrompt:
+		return kindPrompt
+	case kindConfig:
+		return kindConfig
 	default:
 		return "other"
 	}

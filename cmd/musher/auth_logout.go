@@ -11,12 +11,12 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
-func newLogoutCmd() *cobra.Command {
+func newAuthLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "logout",
 		Short:   "Remove stored credentials",
 		Long:    `Remove the stored API key from the OS keyring and credentials file.`,
-		Example: `  musher logout`,
+		Example: `  musher auth logout`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())

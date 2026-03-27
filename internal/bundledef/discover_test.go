@@ -244,6 +244,81 @@ func TestDiscoverAssetsSkillsIgnoresNonMarker(t *testing.T) {
 	}
 }
 
+func TestDiscoverAssetsNewKinds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		dir       string
+		files     map[string]string // relative path → content
+		wantCount int
+		wantKind  string
+	}{
+		{
+			name:      "prompts",
+			dir:       "prompts",
+			files:     map[string]string{"prompts/system.md": "# prompt", "prompts/greet.txt": "hello"},
+			wantCount: 2,
+			wantKind:  "prompt",
+		},
+		{
+			name:      "tools",
+			dir:       "tools",
+			files:     map[string]string{"tools/fetch.py": "# tool", "tools/build.sh": "#!/bin/sh"},
+			wantCount: 2,
+			wantKind:  "tool",
+		},
+		{
+			name:      "configs",
+			dir:       "configs",
+			files:     map[string]string{"configs/settings.yaml": "key: val", "configs/env.json": "{}"},
+			wantCount: 2,
+			wantKind:  "config",
+		},
+		{
+			name:      "config_alt_dir",
+			dir:       "config",
+			files:     map[string]string{"config/defaults.toml": "[section]"},
+			wantCount: 1,
+			wantKind:  "config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+
+			for relPath, content := range tt.files {
+				absPath := filepath.Join(dir, relPath)
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			discovered, err := DiscoverAssets(dir, nil)
+			if err != nil {
+				t.Fatalf("DiscoverAssets() error = %v", err)
+			}
+
+			if len(discovered) != tt.wantCount {
+				t.Fatalf("got %d discovered, want %d", len(discovered), tt.wantCount)
+			}
+
+			for _, d := range discovered {
+				if d.Kind != tt.wantKind {
+					t.Errorf("Kind = %q for %s, want %q", d.Kind, d.Src, tt.wantKind)
+				}
+			}
+		})
+	}
+}
+
 func TestInferID(t *testing.T) {
 	t.Parallel()
 

@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/creativeprojects/go-selfupdate v1.5.2
 	github.com/fatih/color v1.19.0

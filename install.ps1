@@ -272,7 +272,7 @@ function Main {
 
         Write-Host "Get started:"
         Write-Host "  musher --help"
-        Write-Host "  musher login"
+        Write-Host "  musher auth login"
     } finally {
         Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }

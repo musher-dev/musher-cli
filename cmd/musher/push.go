@@ -4,23 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
 
 	"github.com/musher-dev/musher-cli/internal/bundledef"
 	"github.com/musher-dev/musher-cli/internal/client"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/observability"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 func newPushCmd() *cobra.Command {
-	var publishToHub bool
+	var (
+		publishToHub bool
+		yes          bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "push",
@@ -28,10 +34,11 @@ func newPushCmd() *cobra.Command {
 		Long: `Validate the bundle definition file and assets, then push
 the bundle to the Musher registry.
 
-You must be authenticated ('musher login') and have a writable namespace.
+You must be authenticated ('musher auth login') and have a writable namespace.
 
 Use --publish-to-hub to also create a Hub listing after pushing (public bundles only).`,
 		Example: `  musher push
+  musher push --yes
   musher push --publish-to-hub`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,17 +48,22 @@ Use --publish-to-hub to also create a Hub listing after pushing (public bundles 
 				return err
 			}
 
-			return runPush(cmd, out, publishToHub)
+			return runPush(cmd, out, publishToHub, yes)
 		},
 	}
 
 	cmd.Flags().BoolVar(&publishToHub, "publish-to-hub", false, "Also publish a Hub listing after pushing (public bundles only)")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 
 	return cmd
 }
 
-func runPush(cmd *cobra.Command, out *output.Writer, publishToHub bool) error {
+// maxPushAttempts limits how many times we attempt the push (original + retries after version bump).
+const maxPushAttempts = 2
+
+func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) error {
 	ctx := cmd.Context()
+	logger := observability.FromContext(ctx)
 
 	c, err := requireAuth()
 	if err != nil {
@@ -97,9 +109,42 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub bool) error {
 		}
 	}
 
-	out.Print("Pushing %s...\n", bundle.VersionRef())
+	// Show push summary.
+	printPushSummary(out, bundle, visibility)
 
-	// Build assets payload
+	// Pre-check for version conflict.
+	p := prompt.New(out)
+	exists, checkErr := c.CheckBundleVersionExists(ctx, bundle.Namespace, bundle.Slug, bundle.Version)
+
+	if checkErr != nil {
+		// Pre-check unavailable — log and fall through to push (will catch 409 reactively).
+		logger.Debug("version pre-check failed, skipping", slog.String("error", checkErr.Error()))
+	} else if exists {
+		recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
+		if recoverErr != nil {
+			return recoverErr
+		}
+
+		if recovered {
+			// Re-print summary with updated version.
+			printPushSummary(out, bundle, visibility)
+		}
+	}
+
+	// Confirmation prompt.
+	if !yes && p.CanPrompt() {
+		confirmed, confirmErr := p.Confirm(fmt.Sprintf("Push %s?", bundle.VersionRef()), true)
+		if confirmErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
+		}
+
+		if !confirmed {
+			out.Muted("Push canceled.")
+			return nil
+		}
+	}
+
+	// Build assets payload.
 	assets := make([]client.PushBundleAsset, 0, len(bundle.Assets))
 
 	for _, asset := range bundle.Assets {
@@ -143,42 +188,151 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub bool) error {
 		Assets:        assets,
 	}
 
-	// Push bundle in a single request
-	spin := out.Spinner("Pushing " + bundle.VersionRef())
-	spin.Start()
+	// Push bundle with retry on version conflict (when pre-check was unavailable).
+	for attempt := range maxPushAttempts {
+		spin := out.Spinner("Pushing " + bundle.VersionRef())
+		spin.Start()
 
-	if pushErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req); pushErr != nil {
+		pushErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req)
+		if pushErr == nil {
+			spin.StopWithSuccess("Pushed " + bundle.VersionRef())
+
+			if publishToHub {
+				return hubPublishAfterPush(ctx, out, c, bundle)
+			}
+
+			return nil
+		}
+
 		spin.StopWithFailure("Push failed")
 
 		var httpErr *client.HTTPStatusError
-		if errors.As(pushErr, &httpErr) {
-			switch {
-			case httpErr.Status == http.StatusConflict:
-				return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
-			case httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail):
-				recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
-				if recoverErr != nil {
-					return recoverErr
-				}
-
-				if recovered && publishToHub {
-					return hubPublishAfterPush(ctx, out, c, bundle)
-				}
-
-				return nil
-			}
+		if !errors.As(pushErr, &httpErr) {
+			return clierrors.PublishFailed(pushErr)
 		}
 
-		return clierrors.PublishFailed(pushErr)
-	}
+		switch {
+		case httpErr.Status == http.StatusConflict && attempt == 0:
+			// Version conflict on first attempt — offer recovery.
+			recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
+			if recoverErr != nil {
+				return recoverErr
+			}
 
-	spin.StopWithSuccess("Pushed " + bundle.VersionRef())
+			if !recovered {
+				return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
+			}
 
-	if publishToHub {
-		return hubPublishAfterPush(ctx, out, c, bundle)
+			// Update request version and retry.
+			req.Version = bundle.Version
+
+			continue
+
+		case httpErr.Status == http.StatusConflict:
+			return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
+
+		case httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail):
+			recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
+			if recoverErr != nil {
+				return recoverErr
+			}
+
+			if recovered && publishToHub {
+				return hubPublishAfterPush(ctx, out, c, bundle)
+			}
+
+			return nil
+
+		default:
+			return clierrors.PublishFailed(pushErr)
+		}
 	}
 
 	return nil
+}
+
+// printPushSummary displays a summary of what will be pushed.
+func printPushSummary(out *output.Writer, bundle *bundledef.Def, visibility string) {
+	out.Println()
+	out.Print("Push Summary\n")
+	out.Muted("  Bundle:     %s", bundle.Ref())
+	out.Muted("  Version:    %s", bundle.Version)
+	out.Muted("  Visibility: %s", visibility)
+	out.Muted("  Assets:     %d", len(bundle.Assets))
+
+	for _, asset := range bundle.Assets {
+		kind := asset.Kind
+		if kind == "" {
+			kind = bundledef.InferKind(asset.Src)
+		}
+
+		out.Muted("    %s (%s)", asset.Src, kind)
+	}
+
+	out.Println()
+}
+
+// handleVersionConflictRecovery offers to bump the version when a conflict is detected.
+// On success it updates musher.yaml on disk and bundle.Version in memory.
+// Returns (true, nil) when the user selected a new version.
+func handleVersionConflictRecovery(
+	out *output.Writer,
+	workDir string,
+	bundle *bundledef.Def,
+	p *prompt.Prompter,
+) (bool, error) {
+	if !p.CanPrompt() {
+		return false, clierrors.VersionConflict(bundle.VersionRef(), nil)
+	}
+
+	out.Println()
+	out.Warning("Version %s already exists on the registry.", bundle.VersionRef())
+
+	// Parse current version for bump options.
+	current, parseErr := semver.NewVersion(bundle.Version)
+	if parseErr != nil {
+		out.Info("Bump the version in musher.yaml and try again, or use 'musher yank' to remove the existing version.")
+		return false, clierrors.VersionConflict(bundle.VersionRef(), nil)
+	}
+
+	patch := current.IncPatch()
+	minor := current.IncMinor()
+	major := current.IncMajor()
+
+	options := []string{
+		patch.String() + " (patch)",
+		minor.String() + " (minor)",
+		major.String() + " (major)",
+	}
+
+	out.Println()
+	idx, selectErr := p.Select("Select a new version:", options)
+	if selectErr != nil {
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", selectErr)
+	}
+
+	var newVersion string
+
+	switch idx {
+	case 0:
+		newVersion = patch.String()
+	case 1:
+		newVersion = minor.String()
+	case 2:
+		newVersion = major.String()
+	}
+
+	// Update musher.yaml on disk.
+	if err := bundledef.SetVersion(workDir, newVersion); err != nil {
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Failed to update musher.yaml", err)
+	}
+
+	out.Success("Updated musher.yaml: version set to %s", newVersion)
+
+	// Update in-memory bundle.
+	bundle.Version = newVersion
+
+	return true, nil
 }
 
 // isVisibilityError checks whether an API error detail relates to private bundle limits.
