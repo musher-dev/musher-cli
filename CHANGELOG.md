@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.4](https://github.com/musher-dev/musher-cli/compare/v0.3.3...v0.3.4) (2026-03-27)
+
+
+### Features
+
+* group auth commands, add remove command, and improve push UX ([6940881](https://github.com/musher-dev/musher-cli/commit/6940881d9ce5e03c09ad5ed10e18f6590b350256))
+* group auth commands, add remove command, and improve push UX ([0df77c9](https://github.com/musher-dev/musher-cli/commit/0df77c9014497f4852dc7eaa38b7aebca5c6088c))
+
 ## [0.3.3](https://github.com/musher-dev/musher-cli/compare/v0.3.2...v0.3.3) (2026-03-27)
 
 
