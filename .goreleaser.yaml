@@ -55,3 +55,4 @@ release:
   name_template: "{{.Version}}"
   extra_files:
     - glob: install.sh
+    - glob: install.ps1

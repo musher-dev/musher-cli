@@ -4,7 +4,7 @@
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" />
     <img alt="Musher CLI" src="https://raw.githubusercontent.com/musher-dev/brand/main/dist/logo/svg/musher-logo-lockup-horizontal-dark-transparent.svg" height="80" />
   </picture>
-  <h3>Publish agent bundles to the Musher registry.</h3>
+  <h3>Author, validate, and publish Musher bundles.</h3>
 
   <a href="https://github.com/musher-dev/musher-cli/actions/workflows/ci.yml"><img src="https://github.com/musher-dev/musher-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/musher-dev/musher-cli/releases"><img src="https://img.shields.io/github/v/release/musher-dev/musher-cli" alt="Release" /></a>
@@ -18,7 +18,9 @@
   </p>
 </div>
 
-Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush) — while Mush loads and runs bundles locally, Musher handles creating, validating, and publishing them. Think `docker push` vs `docker run`.
+Musher is the CLI for bundle authors on [musher.dev](https://musher.dev). Use it to scaffold bundle projects, register assets, validate bundle definitions, publish immutable bundle versions to the Musher registry, and manage public Hub listings.
+
+Bundles published with Musher can be loaded and run locally with [Mush](https://github.com/musher-dev/mush) or consumed programmatically via the [Python SDK](https://github.com/musher-dev/python-sdk) and [TypeScript SDK](https://github.com/musher-dev/typescript-sdk).
 
 ## Install
 
@@ -28,43 +30,45 @@ Musher is the publishing companion to [Mush](https://github.com/musher-dev/mush)
 curl -fsSL https://get.musher.dev | sh
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+irm https://get.musher.dev/install.ps1 | iex
+```
+
 **From source** (requires Go 1.26.1+):
 
 ```bash
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
 
-**Windows:** Download the latest `.zip` from [GitHub Releases](https://github.com/musher-dev/musher-cli/releases) and add the binary to your `PATH`.
-
 ## Quick Start
 
-Authenticate with the Musher registry:
+Authenticate and check your identity:
 
 ```bash
 musher login
+musher whoami
 ```
 
-Initialize a new bundle project:
+**New bundle project:**
 
 ```bash
-musher init
-```
-
-This creates `musher.yaml`, `skills/<slug>/SKILL.md`, and `README.md`. Use `--empty` to create the definition file only.
-
-Validate your bundle definition:
-
-```bash
+musher init       # scaffolds musher.yaml, skill templates, README.md
 musher validate
-```
-
-Push the bundle to the registry:
-
-```bash
 musher push
 ```
 
-Optionally, list on the public Hub catalog:
+**Existing project:**
+
+```bash
+musher init --empty   # creates musher.yaml only
+musher add --all      # discovers and registers conventional assets
+musher validate
+musher push
+```
+
+Optionally, list on the public Hub:
 
 ```bash
 musher hub publish <namespace/slug>
@@ -72,12 +76,10 @@ musher hub publish <namespace/slug>
 
 ## Registry vs Hub
 
-Musher has a two-step publishing model:
+- **Registry** — Where versioned bundles live. Private by default. Every `musher push` creates an immutable, content-addressable version.
+- **Hub** — The public discovery layer at [hub.musher.dev](https://hub.musher.dev). A separate action (`musher hub publish` or `musher push --publish-to-hub`) creates a listing. Requires `description`, `readme`, and `license` or `licenseFile` in `musher.yaml`.
 
-1. **`musher push`** uploads your bundle to the **registry** (private by default).
-2. **`musher hub publish`** creates or updates a public **Hub catalog listing** for a pushed bundle.
-
-You can push bundles without listing them on the Hub. Hub publishing requires additional metadata: `description`, `readme`, and `license` or `licenseFile`.
+You can push bundles without listing them on the Hub.
 
 ## Core Concepts
 
@@ -85,17 +87,20 @@ You can push bundles without listing them on the Hub. Hub publishing requires ad
 - **Asset** — A single file within a bundle (e.g., a skill markdown file, a prompt template, an agent spec).
 - **Bundle definition** — The `musher.yaml` file that describes your bundle's metadata and assets.
 - **Namespace** — The publishing identity under which bundles are published (e.g., `acme/my-bundle`).
+- **Immutability** — Once a version is pushed, it cannot be changed or overwritten. Yanked versions are hidden from search but remain fetchable by content-addressable digest, so existing lockfiles continue to resolve.
 
 ## `musher.yaml` Bundle Definition
 
 **Minimal (private) bundle:**
 
 ```yaml
+name: My Skill Bundle
+description: A helpful coding skill
+
 namespace: acme
 slug: my-skill
 version: 1.0.0
-name: My Skill Bundle
-description: A helpful coding skill
+
 assets:
   - id: my-skill
     src: skills/my-skill/SKILL.md
@@ -104,11 +109,13 @@ assets:
 **Hub-ready (public) bundle:**
 
 ```yaml
+name: Team Code Review
+description: Consistent code review guidance for engineering teams
+
 namespace: acme
 slug: code-review
 version: 0.1.0
-name: Team Code Review
-description: Consistent code review guidance for engineering teams
+
 visibility: public
 readme: README.md
 licenseFile: LICENSE
@@ -116,6 +123,7 @@ repository: https://github.com/acme/code-review-bundle
 keywords:
   - code-review
   - engineering
+
 assets:
   - id: code-review
     src: skills/code-review/SKILL.md
@@ -138,10 +146,12 @@ assets:
 
 | Command | Description |
 |---------|-------------|
-| `musher init` | Scaffold a bundle project (`musher.yaml`, skill template, `README.md`). Use `--empty` for definition only |
+| `musher init` | Scaffold a bundle project. Use `--empty` for definition only |
+| `musher add [path...]` | Register assets in `musher.yaml`. Use `--all` to discover conventional assets |
 | `musher validate` | Validate bundle definition and assets |
-| `musher push` | Push the bundle to the registry |
-| `musher yank <ns/slug:version>` | Yank a published version |
+| `musher push` | Push bundle to the registry. Use `--publish-to-hub` to also create a Hub listing |
+| `musher pull <ns/slug[:version]>` | Download a bundle. Use `-o` to extract to a directory |
+| `musher yank <ns/slug:version>` | Yank a published version. Use `--reason` to record why |
 | `musher unyank <ns/slug:version>` | Restore a yanked version |
 
 ### Hub
@@ -187,6 +197,8 @@ All paths follow XDG conventions. Override with `MUSHER_CONFIG_HOME`, `MUSHER_DA
 | `--api-url` | Override the API endpoint |
 | `--api-key` | Provide an API key directly (overrides keyring) |
 | `--json` | Output results as JSON |
+| `--quiet` | Minimal output (for CI) |
+| `--no-color` | Disable colored output |
 | `--no-input` | Disable interactive prompts |
 
 ## Contributing
