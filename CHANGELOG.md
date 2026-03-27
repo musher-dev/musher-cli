@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/musher-dev/musher-cli/compare/v0.3.2...v0.3.3) (2026-03-27)
+
+
+### Bug Fixes
+
+* restore canonical go.sum to pass mod tidy check ([993c2e7](https://github.com/musher-dev/musher-cli/commit/993c2e7cbffd685ae5e2c36bc841ceaf32a8b98e))
+
 ## [0.3.2](https://github.com/musher-dev/musher-cli/compare/v0.3.1...v0.3.2) (2026-03-24)
 
 
