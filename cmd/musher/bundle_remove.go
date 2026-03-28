@@ -19,7 +19,7 @@ type removeOptions struct {
 	yes         bool
 }
 
-func newRemoveCmd() *cobra.Command {
+func newBundleRemoveCmd() *cobra.Command {
 	var opts removeOptions
 
 	cmd := &cobra.Command{
@@ -33,10 +33,10 @@ Without arguments (on a TTY): shows an interactive picker of current
 assets to select for removal.
 
 Use --all to remove all assets at once.`,
-		Example: `  musher remove review
-  musher remove skills/review/SKILL.md agents/deploy.md
-  musher remove --all
-  musher remove --dry-run review`,
+		Example: `  musher bundle remove review
+  musher bundle remove skills/review/SKILL.md agents/deploy.md
+  musher bundle remove --all
+  musher bundle remove --dry-run review`,
 		Aliases: []string{"rm"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
@@ -56,7 +56,7 @@ func runRemove(_ *cobra.Command, out *output.Writer, identifiers []string, opts 
 	workDir, err := bundledef.Resolve(".")
 	if err != nil {
 		return clierrors.New(clierrors.ExitUsage, "No musher.yaml or musher.yml found in this directory").
-			WithHint("Run 'musher init' to create one.")
+			WithHint("Run 'musher bundle init' to create one.")
 	}
 
 	// We need the directory, not the file path.
@@ -176,7 +176,7 @@ func runRemoveInteractive(out *output.Writer, workDir string, def *bundledef.Def
 	prompter := prompt.New(out)
 	if !prompter.CanPrompt() {
 		return clierrors.New(clierrors.ExitUsage, "Interactive mode requires a terminal").
-			WithHint("Use 'musher remove <id>' or 'musher remove --all' in non-interactive mode.")
+			WithHint("Use 'musher bundle remove <id>' or 'musher bundle remove --all' in non-interactive mode.")
 	}
 
 	if len(def.Assets) == 0 {

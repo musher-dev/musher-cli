@@ -22,7 +22,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
-func newPushCmd() *cobra.Command {
+func newBundlePushCmd() *cobra.Command {
 	var (
 		publishToHub bool
 		yes          bool
@@ -37,9 +37,9 @@ the bundle to the Musher registry.
 You must be authenticated ('musher auth login') and have a writable namespace.
 
 Use --publish-to-hub to also create a Hub listing after pushing (public bundles only).`,
-		Example: `  musher push
-  musher push --yes
-  musher push --publish-to-hub`,
+		Example: `  musher bundle push
+  musher bundle push --yes
+  musher bundle push --publish-to-hub`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
@@ -290,7 +290,7 @@ func handleVersionConflictRecovery(
 	// Parse current version for bump options.
 	current, parseErr := semver.NewVersion(bundle.Version)
 	if parseErr != nil {
-		out.Info("Bump the version in musher.yaml and try again, or use 'musher yank' to remove the existing version.")
+		out.Info("Bump the version in musher.yaml and try again, or use 'musher bundle yank' to remove the existing version.")
 		return false, clierrors.VersionConflict(bundle.VersionRef(), nil)
 	}
 

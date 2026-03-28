@@ -22,7 +22,7 @@ type addOptions struct {
 	id          string
 }
 
-func newAddCmd() *cobra.Command {
+func newBundleAddCmd() *cobra.Command {
 	var opts addOptions
 
 	cmd := &cobra.Command{
@@ -37,13 +37,13 @@ Without paths (on a TTY): shows an interactive picker of discoverable
 assets not yet tracked in musher.yaml.
 
 Use --all to add all discoverable conventional assets at once.`,
-		Example: `  musher add skills/review/SKILL.md
-  musher add agents/reviewer.md --kind agent --id reviewer
-  musher add "skills/*/SKILL.md"
-  musher add "agents/*.md" "prompts/*.md"
-  musher add --all
-  musher add --dry-run
-  musher add`,
+		Example: `  musher bundle add skills/review/SKILL.md
+  musher bundle add agents/reviewer.md --kind agent --id reviewer
+  musher bundle add "skills/*/SKILL.md"
+  musher bundle add "agents/*.md" "prompts/*.md"
+  musher bundle add --all
+  musher bundle add --dry-run
+  musher bundle add`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 			return runAdd(cmd, out, args, opts)
@@ -69,7 +69,7 @@ func runAdd(_ *cobra.Command, out *output.Writer, paths []string, opts addOption
 	// Require musher.yaml or musher.yml to exist.
 	if _, resolveErr := bundledef.Resolve(workDir); resolveErr != nil {
 		return clierrors.New(clierrors.ExitUsage, "No musher.yaml or musher.yml found in this directory").
-			WithHint("Run 'musher init' to create one.")
+			WithHint("Run 'musher bundle init' to create one.")
 	}
 
 	def, err := bundledef.Load(workDir)
@@ -195,7 +195,7 @@ func runAddInteractive(out *output.Writer, workDir string, def *bundledef.Def, o
 	prompter := prompt.New(out)
 	if !prompter.CanPrompt() {
 		return clierrors.New(clierrors.ExitUsage, "Interactive mode requires a terminal").
-			WithHint("Use 'musher add <path>' or 'musher add --all' in non-interactive mode.")
+			WithHint("Use 'musher bundle add <path>' or 'musher bundle add --all' in non-interactive mode.")
 	}
 
 	discovered, err := bundledef.DiscoverAssets(workDir, def)

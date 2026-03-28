@@ -315,7 +315,7 @@ func TestRunInitCreatesReadme(t *testing.T) {
 }
 
 func TestNewInitCmdFlags(t *testing.T) {
-	cmd := newInitCmd()
+	cmd := newBundleInitCmd()
 
 	for _, name := range []string{"force", "empty", "yes"} {
 		if cmd.Flags().Lookup(name) == nil {
