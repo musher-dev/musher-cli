@@ -178,7 +178,6 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 	}
 
 	req := &client.PushBundleRequest{
-		Slug:          bundle.Slug,
 		Name:          bundle.Name,
 		Description:   bundle.Description,
 		Visibility:    visibility,

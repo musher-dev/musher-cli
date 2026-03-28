@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -134,6 +136,16 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		bundle, err = apiClient.PullPublicBundleVersion(ctx, namespace, slug, bundleVersion)
 	} else {
 		bundle, err = apiClient.PullBundleVersion(ctx, namespace, slug, bundleVersion)
+		// Fall back to the public hub endpoint when the namespace endpoint
+		// returns 403 (e.g. authenticated user pulling another user's public bundle).
+		if err != nil {
+			var httpErr *client.HTTPStatusError
+			if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden {
+				cfg := configForPublicClient()
+				pubClient := newPublicAPIClient(cfg)
+				bundle, err = pubClient.PullPublicBundleVersion(ctx, namespace, slug, bundleVersion)
+			}
+		}
 	}
 
 	if err != nil {
