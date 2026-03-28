@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.5](https://github.com/musher-dev/musher-cli/compare/v0.3.4...v0.3.5) (2026-03-28)
+
+
+### Features
+
+* align CLI with unified publish API and add yank --yes flag ([f454d4c](https://github.com/musher-dev/musher-cli/commit/f454d4cf26f68e87c0b2b5b0b571b1beb88cf570))
+* align CLI with unified publish API and add yank --yes flag ([f191ff6](https://github.com/musher-dev/musher-cli/commit/f191ff6fe4aa9b25e8ee46095fc4e50c301c28ca))
+
 ## [0.3.4](https://github.com/musher-dev/musher-cli/compare/v0.3.3...v0.3.4) (2026-03-27)
 
 
