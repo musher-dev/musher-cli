@@ -1,16 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
 func newYankCmd() *cobra.Command {
+	var yes bool
+
 	cmd := &cobra.Command{
 		Use:   "yank <namespace/slug:version>",
 		Short: "Yank a published bundle version",
@@ -21,20 +23,22 @@ installed by default. However, they remain fetchable by digest
 for reproducibility — existing lockfiles that pin a digest will
 continue to resolve.`,
 		Example: `  musher yank acme/my-bundle:1.0.0
-  musher yank acme/my-bundle:1.0.0 --reason "security vulnerability"`,
+  musher yank acme/my-bundle:1.0.0 --reason "security vulnerability"
+  musher yank acme/my-bundle:1.0.0 --yes`,
 		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			return runYank(cmd, out, args[0])
+			return runYank(cmd, out, args[0], yes)
 		},
 	}
 
 	cmd.Flags().String("reason", "", "reason for yanking this version")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
 
 	return cmd
 }
 
-func runYank(cmd *cobra.Command, out *output.Writer, ref string) error {
+func runYank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) error {
 	namespace, slug, version, err := parseVersionRef(ref)
 	if err != nil {
 		return err
@@ -47,15 +51,32 @@ func runYank(cmd *cobra.Command, out *output.Writer, ref string) error {
 		return authErr
 	}
 
-	spin := out.Spinner(fmt.Sprintf("Yanking %s/%s:%s", namespace, slug, version))
+	versionRef := namespace + "/" + slug + ":" + version
+
+	if !yes {
+		p := prompt.New(out)
+		if p.CanPrompt() {
+			confirmed, confirmErr := p.Confirm("Yank "+versionRef+"?", false)
+			if confirmErr != nil {
+				return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
+			}
+
+			if !confirmed {
+				out.Muted("Yank canceled.")
+				return nil
+			}
+		}
+	}
+
+	spin := out.Spinner("Yanking " + versionRef)
 	spin.Start()
 
 	if err := c.YankBundleVersion(cmd.Context(), namespace, slug, version, reason); err != nil {
-		spin.StopWithFailure(fmt.Sprintf("Failed to yank %s/%s:%s", namespace, slug, version))
+		spin.StopWithFailure("Failed to yank " + versionRef)
 		return clierrors.YankFailed(version, err)
 	}
 
-	spin.StopWithSuccess(fmt.Sprintf("Yanked %s/%s:%s", namespace, slug, version))
+	spin.StopWithSuccess("Yanked " + versionRef)
 
 	return nil
 }

@@ -28,12 +28,11 @@ type PushBundleAsset struct {
 	MediaType   string `json:"mediaType,omitempty"`
 }
 
-// PushBundleRequest is the payload for the single-request push endpoint.
+// PushBundleRequest is the payload for the unified publish endpoint.
 type PushBundleRequest struct {
-	Slug          string            `json:"slug"`
-	Name          string            `json:"name"`
+	Name          string            `json:"name,omitempty"`
 	Description   string            `json:"description,omitempty"`
-	Visibility    string            `json:"visibility"`
+	Visibility    string            `json:"visibility,omitempty"`
 	Version       string            `json:"version"`
 	ReadmeContent string            `json:"readmeContent,omitempty"`
 	ReadmeFormat  string            `json:"readmeFormat,omitempty"`
@@ -42,7 +41,7 @@ type PushBundleRequest struct {
 
 // PushBundle pushes a bundle and all its assets in a single request.
 func (c *Client) PushBundle(ctx context.Context, namespace, bundleSlug string, req *PushBundleRequest) error {
-	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s:push",
+	path := fmt.Sprintf("/v1/namespaces/%s/bundles/%s:publish",
 		neturl.PathEscape(namespace),
 		neturl.PathEscape(bundleSlug),
 	)

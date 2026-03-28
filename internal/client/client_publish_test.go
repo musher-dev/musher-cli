@@ -105,7 +105,6 @@ func TestPushBundle(t *testing.T) {
 		})
 
 		req := &client.PushBundleRequest{
-			Slug:          "my-bundle",
 			Name:          "My Bundle",
 			Description:   "A test bundle",
 			Visibility:    "private",
@@ -131,16 +130,12 @@ func TestPushBundle(t *testing.T) {
 			t.Errorf("method = %q, want POST", gotMethod)
 		}
 
-		if want := "/v1/namespaces/my-namespace/bundles/my-bundle:push"; gotPath != want {
+		if want := "/v1/namespaces/my-namespace/bundles/my-bundle:publish"; gotPath != want {
 			t.Errorf("path = %q, want %q", gotPath, want)
 		}
 
 		if gotAuth != "Bearer test-api-key" {
 			t.Errorf("auth = %q, want %q", gotAuth, "Bearer test-api-key")
-		}
-
-		if gotBody.Slug != "my-bundle" {
-			t.Errorf("body.Slug = %q, want %q", gotBody.Slug, "my-bundle")
 		}
 
 		if gotBody.Version != "1.0.0" {
@@ -170,7 +165,6 @@ func TestPushBundle(t *testing.T) {
 		})
 
 		req := &client.PushBundleRequest{
-			Slug:       "my-bundle",
 			Name:       "My Bundle",
 			Visibility: "private",
 			Version:    "1.0.0",
