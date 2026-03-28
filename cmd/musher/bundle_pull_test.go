@@ -91,7 +91,7 @@ func TestParseBundleRefOptionalVersion(t *testing.T) {
 }
 
 func TestPullCommandRegistered(t *testing.T) {
-	cmd := newPullCmd()
+	cmd := newBundlePullCmd()
 
 	if cmd.Use != "pull <namespace/slug[:version]>" {
 		t.Fatalf("unexpected Use: %q", cmd.Use)

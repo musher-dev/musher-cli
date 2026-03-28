@@ -10,7 +10,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
-func newYankCmd() *cobra.Command {
+func newBundleYankCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
@@ -22,9 +22,9 @@ Yanked versions are hidden from search results and will not be
 installed by default. However, they remain fetchable by digest
 for reproducibility — existing lockfiles that pin a digest will
 continue to resolve.`,
-		Example: `  musher yank acme/my-bundle:1.0.0
-  musher yank acme/my-bundle:1.0.0 --reason "security vulnerability"
-  musher yank acme/my-bundle:1.0.0 --yes`,
+		Example: `  musher bundle yank acme/my-bundle:1.0.0
+  musher bundle yank acme/my-bundle:1.0.0 --reason "security vulnerability"
+  musher bundle yank acme/my-bundle:1.0.0 --yes`,
 		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
@@ -39,7 +39,7 @@ continue to resolve.`,
 }
 
 func runYank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) error {
-	namespace, slug, version, err := parseVersionRef(ref)
+	namespace, slug, ver, err := parseVersionRef(ref)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func runYank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) error
 		return authErr
 	}
 
-	versionRef := namespace + "/" + slug + ":" + version
+	versionRef := namespace + "/" + slug + ":" + ver
 
 	if !yes {
 		p := prompt.New(out)
@@ -71,9 +71,9 @@ func runYank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) error
 	spin := out.Spinner("Yanking " + versionRef)
 	spin.Start()
 
-	if err := c.YankBundleVersion(cmd.Context(), namespace, slug, version, reason); err != nil {
+	if err := c.YankBundleVersion(cmd.Context(), namespace, slug, ver, reason); err != nil {
 		spin.StopWithFailure("Failed to yank " + versionRef)
-		return clierrors.YankFailed(version, err)
+		return clierrors.YankFailed(ver, err)
 	}
 
 	spin.StopWithSuccess("Yanked " + versionRef)

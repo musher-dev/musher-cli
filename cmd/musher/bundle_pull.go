@@ -16,7 +16,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
-func newPullCmd() *cobra.Command {
+func newBundlePullCmd() *cobra.Command {
 	var (
 		outputDir string
 		force     bool
@@ -33,10 +33,10 @@ Use --output-dir to extract to a specific directory instead (flat layout, no sym
 If no version is specified, the latest version is downloaded.
 
 Authentication is attempted first; public bundles can be pulled without credentials.`,
-		Example: `  musher pull acme/my-bundle
-  musher pull acme/my-bundle:1.0.0
-  musher pull acme/my-bundle:1.0.0 --output-dir ./bundles/
-  musher pull acme/my-bundle --json`,
+		Example: `  musher bundle pull acme/my-bundle
+  musher bundle pull acme/my-bundle:1.0.0
+  musher bundle pull acme/my-bundle:1.0.0 --output-dir ./bundles/
+  musher bundle pull acme/my-bundle --json`,
 		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())

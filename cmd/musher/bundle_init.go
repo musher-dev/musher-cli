@@ -19,7 +19,7 @@ import (
 
 const placeholderNamespace = "your-namespace"
 
-func newInitCmd() *cobra.Command {
+func newBundleInitCmd() *cobra.Command {
 	var (
 		force bool
 		empty bool
@@ -34,9 +34,9 @@ file in the current directory.
 
 The bundle definition file defines your bundle's metadata and assets.
 Edit it to configure your bundle before publishing.`,
-		Example: `  musher init
-  musher init --empty
-  musher init --force`,
+		Example: `  musher bundle init
+  musher bundle init --empty
+  musher bundle init --force`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
@@ -279,7 +279,7 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 	// malformed files are not silently overwritten).
 	if !force {
 		if _, err := bundledef.Resolve(workDir); err == nil {
-			out.Warning("Bundle definition already exists. Use 'musher add' to register assets, or --force to overwrite.")
+			out.Warning("Bundle definition already exists. Use 'musher bundle add' to register assets, or --force to overwrite.")
 			return nil
 		}
 	}
@@ -399,8 +399,8 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 	}
 
 	out.Info("  2. Edit the example skills and agent to match your use case")
-	out.Info("  3. Run 'musher validate' to check your bundle")
-	out.Info("  4. Run 'musher push' to publish")
+	out.Info("  3. Run 'musher bundle validate' to check your bundle")
+	out.Info("  4. Run 'musher bundle push' to publish")
 
 	// Hint about any pre-existing assets on disk not yet in the bundle.
 	def, loadErr := bundledef.Load(workDir)
@@ -414,7 +414,7 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 				out.Info("  %s (%s)", d.Src, d.Kind)
 			}
 
-			out.Info("Run 'musher add --all' to register them, or 'musher add' to pick interactively.")
+			out.Info("Run 'musher bundle add --all' to register them, or 'musher bundle add' to pick interactively.")
 		}
 	}
 

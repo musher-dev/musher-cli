@@ -12,7 +12,7 @@ validates, and publishes agent bundles.
 
 ### CLI Entry — `cmd/musher/`
 
-Grouped auth commands, flat verbs for authoring, `hub` subcommand for catalog operations.
+Grouped commands: `auth`, `bundle`, `hub` subcommands.
 
 - `main.go` — Entry point, version injection, error handling
 - `root.go` — Root command, persistent flags, verb registration
@@ -23,13 +23,16 @@ Grouped auth commands, flat verbs for authoring, `hub` subcommand for catalog op
 - `auth_login.go` — Authentication with API key
 - `auth_logout.go` — Clear stored credentials
 - `auth_status.go` — Show authentication status and writable namespaces
-- `init.go` — Initialize musher.yaml bundle definition file
-- `add.go` — Add assets to the bundle definition
-- `validate.go` — Validate bundle definition file and check assets
-- `push.go` — Validate and push the bundle to the registry
-- `pull.go` — Download a bundle from the registry
-- `yank.go` — Yank a published version
-- `unyank.go` — Restore a yanked version
+- `bundle.go` — Bundle parent command + `parseBundleRefOptionalVersion` helper
+- `bundle_init.go` — Initialize musher.yaml bundle definition file
+- `bundle_add.go` — Add assets to the bundle definition
+- `bundle_remove.go` — Remove assets from the bundle definition
+- `bundle_validate.go` — Validate bundle definition file and check assets
+- `bundle_push.go` — Validate and push the bundle to the registry
+- `bundle_pull.go` — Download a bundle from the registry
+- `bundle_yank.go` — Yank a published version
+- `bundle_unyank.go` — Restore a yanked version
+- `bundle_globs.go` — Glob pattern expansion for asset paths
 - `hub.go` — Hub parent command + `parseBundleRef` helper
 - `hub_search.go` — Search hub bundles
 - `hub_info.go` — Show hub bundle details
@@ -70,7 +73,7 @@ Grouped auth commands, flat verbs for authoring, `hub` subcommand for catalog op
 
 **Output via context** — All user-facing output goes through `output.FromContext(cmd.Context())`.
 
-**Command shape** — Authentication uses `musher auth <verb>`, publishing remains `musher <verb>`, and catalog operations use `musher hub <verb>`.
+**Command shape** — Authentication uses `musher auth <verb>`, bundle authoring uses `musher bundle <verb>`, and catalog operations use `musher hub <verb>`.
 
 **Error handling** — Use `CLIError` from `internal/errors` for user-facing errors. Wrap lower-level errors with `fmt.Errorf("context: %w", err)`.
 

@@ -11,14 +11,14 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
-func newValidateCmd() *cobra.Command {
+func newBundleValidateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
 		Short: "Validate the bundle definition file and assets",
 		Long: `Validate the musher.yaml bundle definition file and check that all
 referenced asset files exist. This performs the same checks that
-'musher push' runs before uploading.`,
-		Example: `  musher validate`,
+'musher bundle push' runs before uploading.`,
+		Example: `  musher bundle validate`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())

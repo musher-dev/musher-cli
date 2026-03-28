@@ -15,7 +15,7 @@ import (
 // Command group IDs.
 const (
 	groupAuth        = "auth"
-	groupPublish     = "publish"
+	groupBundle      = "bundle"
 	groupHub         = "hub"
 	groupMaintenance = "maintenance"
 )
@@ -132,7 +132,7 @@ listings.`,
 func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
 		&cobra.Group{ID: groupAuth, Title: "Authentication:"},
-		&cobra.Group{ID: groupPublish, Title: "Publishing:"},
+		&cobra.Group{ID: groupBundle, Title: "Authoring:"},
 		&cobra.Group{ID: groupHub, Title: "Hub:"},
 		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},
 	)
@@ -142,38 +142,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	authCmd.GroupID = groupAuth
 	rootCmd.AddCommand(authCmd)
 
-	// Publish group
-	initCmd := newInitCmd()
-	initCmd.GroupID = groupPublish
-	rootCmd.AddCommand(initCmd)
-
-	addCmd := newAddCmd()
-	addCmd.GroupID = groupPublish
-	rootCmd.AddCommand(addCmd)
-
-	removeCmd := newRemoveCmd()
-	removeCmd.GroupID = groupPublish
-	rootCmd.AddCommand(removeCmd)
-
-	validateCmd := newValidateCmd()
-	validateCmd.GroupID = groupPublish
-	rootCmd.AddCommand(validateCmd)
-
-	pushCmd := newPushCmd()
-	pushCmd.GroupID = groupPublish
-	rootCmd.AddCommand(pushCmd)
-
-	pullCmd := newPullCmd()
-	pullCmd.GroupID = groupPublish
-	rootCmd.AddCommand(pullCmd)
-
-	yankCmd := newYankCmd()
-	yankCmd.GroupID = groupPublish
-	rootCmd.AddCommand(yankCmd)
-
-	unyankCmd := newUnyankCmd()
-	unyankCmd.GroupID = groupPublish
-	rootCmd.AddCommand(unyankCmd)
+	// Bundle group
+	bundleCmd := newBundleCmd()
+	bundleCmd.GroupID = groupBundle
+	rootCmd.AddCommand(bundleCmd)
 
 	// Hub group
 	hubCmd := newHubCmd()
