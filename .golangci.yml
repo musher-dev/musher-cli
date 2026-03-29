@@ -116,6 +116,8 @@ linters:
             - internal/terminal/**/*.go
             - internal/paths/**/*.go
             - internal/observability/**/*.go
+            - internal/bundle/**/*.go
+            - internal/transcript/**/*.go
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: platform/core packages must not depend on output
@@ -127,6 +129,50 @@ linters:
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: doctor package must remain output-agnostic
+        bundledef_no_consumer:
+          files:
+            - internal/bundledef/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/bundle
+              desc: bundledef must not import consumer bundle packages
+            - pkg: github.com/musher-dev/musher-cli/internal/harness
+              desc: bundledef must not import harness
+            - pkg: github.com/musher-dev/musher-cli/internal/tui
+              desc: bundledef must not import TUI
+            - pkg: github.com/musher-dev/musher-cli/internal/transcript
+              desc: bundledef must not import transcript
+        tui_isolation:
+          files:
+            - internal/tui/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/output
+              desc: TUI has own rendering via bubbletea
+            - pkg: github.com/musher-dev/musher-cli/internal/prompt
+              desc: TUI has own prompting via bubbletea
+        harness_isolation:
+          files:
+            - internal/harness/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/cmd/musher
+              desc: harness must not import cmd
+            - pkg: github.com/musher-dev/musher-cli/internal/tui
+              desc: harness must not import TUI
+            - pkg: github.com/musher-dev/musher-cli/internal/output
+              desc: harness must not import output
+            - pkg: github.com/musher-dev/musher-cli/internal/prompt
+              desc: harness must not import prompt
+        client_isolation:
+          files:
+            - internal/client/**/*.go
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/bundle
+              desc: client must not import consumer bundle packages
+            - pkg: github.com/musher-dev/musher-cli/internal/harness
+              desc: client must not import harness
+            - pkg: github.com/musher-dev/musher-cli/internal/tui
+              desc: client must not import TUI
+            - pkg: github.com/musher-dev/musher-cli/internal/transcript
+              desc: client must not import transcript
     forbidigo:
       analyze-types: true
       forbid:
@@ -212,6 +258,12 @@ linters:
       - path: _test\.go
         linters:
           - goconst
+      - path: internal/tui/
+        linters:
+          - forbidigo    # TUI uses bubbletea rendering, not fmt.Print to stdout
+      - path: internal/tui/
+        linters:
+          - containedctx # bubbletea models may pass context via messages
 
 formatters:
   enable:
