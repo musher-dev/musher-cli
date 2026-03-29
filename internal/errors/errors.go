@@ -197,7 +197,7 @@ func PublishFailed(cause error) *CLIError {
 func VersionConflict(versionRef string, cause error) *CLIError {
 	return enrichFromCause(&CLIError{
 		Message:   fmt.Sprintf("Version %s already exists", versionRef),
-		Hint:      "Bump the version in musher.yaml and try again, or use 'musher yank' to remove the existing version",
+		Hint:      "Bump the version in musher.yaml and try again, or use 'musher bundle yank' to remove the existing version",
 		Cause:     cause,
 		Code:      ExitGeneral,
 		ErrorCode: "ERR-PUBLISH-CONFLICT",
@@ -208,7 +208,7 @@ func VersionConflict(versionRef string, cause error) *CLIError {
 func ValidateFailed(msg string) *CLIError {
 	return &CLIError{
 		Message: "Validation failed: " + msg,
-		Hint:    "Fix the issues above and run 'musher validate' again",
+		Hint:    "Fix the issues above and run 'musher bundle validate' again",
 		Code:    ExitGeneral,
 	}
 }

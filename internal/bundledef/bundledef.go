@@ -37,7 +37,7 @@ func Resolve(dir string) (string, error) {
 		return alt, nil
 	}
 
-	return "", fmt.Errorf("bundle definition file not found: %s or %s (run 'musher init' to create one)", primary, alt)
+	return "", fmt.Errorf("bundle definition file not found: %s or %s (run 'musher bundle init' to create one)", primary, alt)
 }
 
 // Asset kind constants.
