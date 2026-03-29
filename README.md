@@ -44,7 +44,7 @@ go install github.com/musher-dev/musher-cli/cmd/musher@latest
 
 - **Musher CLI** — installed above.
 - **A Musher account and API key** — create or manage keys at [console.musher.dev](https://console.musher.dev/settings/organization/api-keys).
-- **Agent assets to publish** — start fresh with `musher init` to scaffold a new bundle project, or run `musher init --empty` then `musher add` to bundle existing agent assets in your project.
+- **Agent assets to publish** — start fresh with `musher bundle init` to scaffold a new bundle project, or run `musher bundle init --empty` then `musher bundle add` to bundle existing agent assets in your project.
 
 ## Quick Start
 
@@ -58,18 +58,18 @@ musher auth status
 **New bundle project:**
 
 ```bash
-musher init       # scaffolds musher.yaml, skill templates, README.md
-musher validate
-musher push
+musher bundle init       # scaffolds musher.yaml, skill templates, README.md
+musher bundle validate
+musher bundle push
 ```
 
 **Existing project:**
 
 ```bash
-musher init --empty   # creates musher.yaml only
-musher add --all      # discovers and registers conventional assets
-musher validate
-musher push
+musher bundle init --empty   # creates musher.yaml only
+musher bundle add --all      # discovers and registers conventional assets
+musher bundle validate
+musher bundle push
 ```
 
 Optionally, list on the public Hub:
@@ -80,8 +80,8 @@ musher hub publish <namespace/slug>
 
 ## Registry vs Hub
 
-- **Registry** — Where versioned bundles live. Private by default. Every `musher push` creates an immutable, content-addressable version.
-- **Hub** — The public discovery layer at [hub.musher.dev](https://hub.musher.dev). A separate action (`musher hub publish` or `musher push --publish-to-hub`) creates a listing. Requires `description`, `readme`, and `license` or `licenseFile` in `musher.yaml`.
+- **Registry** — Where versioned bundles live. Private by default. Every `musher bundle push` creates an immutable, content-addressable version.
+- **Hub** — The public discovery layer at [hub.musher.dev](https://hub.musher.dev). A separate action (`musher hub publish` or `musher bundle push --publish-to-hub`) creates a listing. Requires `description`, `readme`, and `license` or `licenseFile` in `musher.yaml`.
 
 You can push bundles without listing them on the Hub.
 
@@ -146,17 +146,18 @@ assets:
 | `musher auth logout` | Clear stored credentials |
 | `musher auth status` | Show current authentication status and writable namespaces |
 
-### Publishing
+### Authoring
 
 | Command | Description |
 |---------|-------------|
-| `musher init` | Scaffold a bundle project. Use `--empty` for definition only |
-| `musher add [path...]` | Register assets in `musher.yaml`. Use `--all` to discover conventional assets |
-| `musher validate` | Validate bundle definition and assets |
-| `musher push` | Push bundle to the registry. Use `--publish-to-hub` to also create a Hub listing |
-| `musher pull <ns/slug[:version]>` | Download a bundle. Use `-o` to extract to a directory |
-| `musher yank <ns/slug:version>` | Yank a published version. Use `--reason` to record why |
-| `musher unyank <ns/slug:version>` | Restore a yanked version |
+| `musher bundle init` | Scaffold a bundle project. Use `--empty` for definition only |
+| `musher bundle add [path...]` | Register assets in `musher.yaml`. Use `--all` to discover conventional assets |
+| `musher bundle remove [id-or-path...]` | Remove assets from `musher.yaml`. Use `--all` to remove all |
+| `musher bundle validate` | Validate bundle definition and assets |
+| `musher bundle push` | Push bundle to the registry. Use `--publish-to-hub` to also create a Hub listing |
+| `musher bundle pull <ns/slug[:version]>` | Download a bundle. Use `-o` to extract to a directory |
+| `musher bundle yank <ns/slug:version>` | Yank a published version. Use `--reason` to record why |
+| `musher bundle unyank <ns/slug:version>` | Restore a yanked version |
 
 ### Hub
 
