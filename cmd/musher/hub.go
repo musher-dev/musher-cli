@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundledef"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -37,21 +35,16 @@ and interact with the catalog.`,
 	return cmd
 }
 
-// parseBundleRef parses a "namespace/slug" reference.
-func parseBundleRef(ref string) (namespace, slug string, err error) {
-	namespace, slug, ok := strings.Cut(ref, "/")
-	if !ok || namespace == "" || slug == "" {
-		return "", "", clierrors.New(clierrors.ExitUsage, "ref must be in the format <namespace/slug>")
-	}
-
-	// Reject refs that contain a version (namespace/slug:version).
-	if strings.Contains(slug, ":") {
+// parseBundleRef parses a "namespace/slug" reference, rejecting any version component.
+func parseBundleRef(raw string) (namespace, slug string, err error) {
+	ref, parseErr := bundledef.ParseRefNoVersion(raw)
+	if parseErr != nil {
 		return "", "", &clierrors.CLIError{
-			Message: fmt.Sprintf("unexpected version in ref %q", ref),
+			Message: parseErr.Error(),
 			Hint:    "Use the format <namespace/slug> without a version",
 			Code:    clierrors.ExitUsage,
 		}
 	}
 
-	return namespace, slug, nil
+	return ref.Namespace, ref.Slug, nil
 }
