@@ -239,6 +239,14 @@ tasks:
       - task: check:test
       - task: check:compile
 
+  dev:test-live:
+    desc: Run integration tests against live api.musher.dev (requires MUSHER_API_KEY)
+    preconditions:
+      - sh: test -n "$MUSHER_API_KEY"
+        msg: "MUSHER_API_KEY must be set. Export your API key and retry."
+    cmds:
+      - go test -v -race -tags integration ./...
+
   # Quick aliases
   test:
     desc: Run tests (alias for check:test)
