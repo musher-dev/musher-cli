@@ -239,6 +239,46 @@ func OCIStoreDir() (string, error) {
 	return filepath.Join(root, "oci"), nil
 }
 
+// BlobCacheDir returns the content-addressable blob cache directory.
+func BlobCacheDir() (string, error) {
+	root, err := cacheRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "blobs"), nil
+}
+
+// ManifestCacheDir returns the bundle manifest cache directory.
+func ManifestCacheDir() (string, error) {
+	root, err := cacheRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "manifests"), nil
+}
+
+// TranscriptDir returns the session transcript storage directory.
+func TranscriptDir() (string, error) {
+	root, err := stateRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "transcripts"), nil
+}
+
+// InstalledBundlesDir returns the directory for bundle installation tracking data.
+func InstalledBundlesDir() (string, error) {
+	root, err := dataRoot()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "installed"), nil
+}
+
 func isDefaultPort(scheme, port string) bool {
 	return (strings.EqualFold(scheme, "https") && port == "443") ||
 		(strings.EqualFold(scheme, "http") && port == "80")
