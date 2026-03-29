@@ -13,8 +13,10 @@ import (
 )
 
 // Command group IDs.
+// Command group IDs.
 const (
 	groupAuth        = "auth"
+	groupConsumer    = "consumer"
 	groupBundle      = "bundle"
 	groupHub         = "hub"
 	groupMaintenance = "maintenance"
@@ -26,6 +28,7 @@ func newRootCmd() *cobra.Command {
 		quiet      bool
 		noColor    bool
 		noInput    bool
+		noTUI      bool
 		logLevel   string
 		logFormat  string
 		logFile    string
@@ -86,7 +89,7 @@ listings.`,
 			}
 
 			_, err := configureRootRuntime(
-				cmd, out, jsonOutput, quiet, noInput, noColor, logLevel, logFormat, logFile, logStderr,
+				cmd, out, jsonOutput, quiet, noInput, noColor, noTUI, logLevel, logFormat, logFile, logStderr,
 			)
 			if err != nil {
 				return err
@@ -102,6 +105,7 @@ listings.`,
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Minimal output (for CI)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
+	rootCmd.PersistentFlags().BoolVar(&noTUI, "no-tui", false, "Disable TUI mode (use batch output)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "Log level: error, warn, info, debug")
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "", "Log format: json, text")
 	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "Optional structured log file path")
@@ -132,6 +136,8 @@ listings.`,
 func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
 		&cobra.Group{ID: groupAuth, Title: "Authentication:"},
+		// groupConsumer ("Bundles:") will be registered when the first
+		// consumer command (install, load, run, etc.) is added.
 		&cobra.Group{ID: groupBundle, Title: "Authoring:"},
 		&cobra.Group{ID: groupHub, Title: "Hub:"},
 		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},

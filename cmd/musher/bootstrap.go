@@ -14,7 +14,8 @@ import (
 )
 
 type rootRuntimeState struct {
-	out *output.Writer
+	out   *output.Writer
+	noTUI bool
 }
 
 func configureRootRuntime(
@@ -24,6 +25,7 @@ func configureRootRuntime(
 	quiet bool,
 	noInput bool,
 	noColor bool,
+	noTUI bool,
 	logLevel string,
 	logFormat string,
 	logFile string,
@@ -66,7 +68,10 @@ func configureRootRuntime(
 		cmd.PostRunE = wrapPostRunCleanup(cmd.PostRunE, cleanup)
 	}
 
-	return &rootRuntimeState{out: out}, nil
+	return &rootRuntimeState{
+		out:   out,
+		noTUI: pickBoolFlagOrEnv(noTUI, "MUSHER_NO_TUI"),
+	}, nil
 }
 
 func wrapPostRunCleanup(postRun func(*cobra.Command, []string) error, cleanup func() error) func(*cobra.Command, []string) error {
