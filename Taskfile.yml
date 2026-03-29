@@ -13,6 +13,15 @@ vars:
   SHFMT_VERSION: v3.13.0
   ACTIONLINT_VERSION: v1.7.11
   LEFTHOOK_VERSION: v1.13.6
+  GIT_COMMIT:
+    sh: git rev-parse --short HEAD
+  GIT_DATE:
+    sh: date -u '+%Y-%m-%dT%H:%M:%SZ'
+  LDFLAGS: >-
+    -s -w
+    -X main.version=dev
+    -X main.commit={{.GIT_COMMIT}}
+    -X main.date={{.GIT_DATE}}
 
 tasks:
   # ===========================================================================
@@ -51,17 +60,22 @@ tasks:
   build:
     desc: Build the musher binary
     cmds:
-      - go build -o {{.BINARY}} ./cmd/musher
+      - go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}} ./cmd/musher
 
   build:all:
     desc: Build for all platforms
     cmds:
-      - GOOS=darwin GOARCH=amd64 go build -o {{.BINARY}}-darwin-amd64 ./cmd/musher
-      - GOOS=darwin GOARCH=arm64 go build -o {{.BINARY}}-darwin-arm64 ./cmd/musher
-      - GOOS=linux GOARCH=amd64 go build -o {{.BINARY}}-linux-amd64 ./cmd/musher
-      - GOOS=linux GOARCH=arm64 go build -o {{.BINARY}}-linux-arm64 ./cmd/musher
-      - GOOS=windows GOARCH=amd64 go build -o {{.BINARY}}-windows-amd64.exe ./cmd/musher
-      - GOOS=windows GOARCH=arm64 go build -o {{.BINARY}}-windows-arm64.exe ./cmd/musher
+      - GOOS=darwin GOARCH=amd64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-darwin-amd64 ./cmd/musher
+      - GOOS=darwin GOARCH=arm64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-darwin-arm64 ./cmd/musher
+      - GOOS=linux GOARCH=amd64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-linux-amd64 ./cmd/musher
+      - GOOS=linux GOARCH=arm64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-linux-arm64 ./cmd/musher
+      - GOOS=windows GOARCH=amd64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-windows-amd64.exe ./cmd/musher
+      - GOOS=windows GOARCH=arm64 go build -ldflags '{{.LDFLAGS}}' -o {{.BINARY}}-windows-arm64.exe ./cmd/musher
+
+  dev:install:
+    desc: Build with version metadata and install to GOBIN
+    cmds:
+      - go install -ldflags '{{.LDFLAGS}}' ./cmd/musher
 
   run:
     desc: Run musher with arguments
