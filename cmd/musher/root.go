@@ -152,6 +152,11 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	hubCmd.GroupID = groupHub
 	rootCmd.AddCommand(hubCmd)
 
+	// Config group
+	configCmd := newConfigCmd()
+	configCmd.GroupID = groupMaintenance
+	rootCmd.AddCommand(configCmd)
+
 	// Maintenance group
 	doctorCmd := newDoctorCmd()
 	doctorCmd.GroupID = groupMaintenance
