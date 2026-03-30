@@ -8,10 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
+	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
 	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/tui"
 	"github.com/musher-dev/musher-cli/internal/validate"
 )
@@ -281,11 +284,28 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 	reg := harness.NewRegistry()
 	harness.RegisterBuiltins(reg, claude.Module)
 
+	var cacheSummarizer tui.CacheSummarizer
+
+	if cacheRoot, err := paths.CacheRoot(); err == nil {
+		if store, err := cache.NewStore(cacheRoot); err == nil {
+			cacheSummarizer = store
+		}
+	}
+
+	installReg := install.NewRegistry(".")
+
+	var installLister tui.InstallLister
+	if _, err := installReg.List(); err == nil {
+		installLister = installReg
+	}
+
 	deps := &tui.HomeDeps{
 		Searcher:  apiClient,
 		Puller:    apiClient,
 		Harnesses: reg,
 		Auth:      authChecker,
+		Cache:     cacheSummarizer,
+		Install:   installLister,
 		Version:   version,
 	}
 

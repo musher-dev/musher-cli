@@ -8,6 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/harness"
 )
@@ -294,7 +296,7 @@ func TestHomeScreenView_SinglePanel(t *testing.T) {
 		t.Error("expected view to contain brand name")
 	}
 
-	if !strings.Contains(view, "Portable agent bundles") {
+	if !strings.Contains(view, "Discover, load, and manage agent bundles") {
 		t.Error("expected view to contain tagline")
 	}
 
@@ -302,16 +304,20 @@ func TestHomeScreenView_SinglePanel(t *testing.T) {
 		t.Error("expected view to contain 'Load bundle'")
 	}
 
-	if !strings.Contains(view, "Find a bundle") {
-		t.Error("expected view to contain 'Find a bundle'")
+	if !strings.Contains(view, "Find bundles") {
+		t.Error("expected view to contain 'Find bundles'")
 	}
 
-	if !strings.Contains(view, "DEVELOP") {
-		t.Error("expected view to contain section header 'DEVELOP'")
+	if !strings.Contains(view, "USE") {
+		t.Error("expected view to contain section header 'USE'")
 	}
 
-	if !strings.Contains(view, "PUBLISH") {
-		t.Error("expected view to contain section header 'PUBLISH'")
+	if !strings.Contains(view, "CREATE") {
+		t.Error("expected view to contain section header 'CREATE'")
+	}
+
+	if !strings.Contains(view, "MANAGE") {
+		t.Error("expected view to contain section header 'MANAGE'")
 	}
 
 	if !strings.Contains(view, "[r]") {
@@ -336,8 +342,8 @@ func TestHomeScreenView_TwoPanel(t *testing.T) {
 		t.Error("expected view to contain versioned title")
 	}
 
-	if !strings.Contains(view, "Context") {
-		t.Error("expected view to contain 'Context' panel title")
+	if !strings.Contains(view, "Status") {
+		t.Error("expected view to contain 'Status' panel title")
 	}
 
 	if !strings.Contains(view, "Auth") {
@@ -431,18 +437,18 @@ func TestHomeScreenDescription(t *testing.T) {
 	screen.width = 80
 	screen.height = 30
 
-	// Default cursor at 0 ("Load bundle").
+	// Default cursor at 0 ("Find bundles").
 	view := screen.View()
-	if !strings.Contains(view, "Load a bundle to run with a harness") {
-		t.Error("expected description for 'Load bundle'")
+	if !strings.Contains(view, "Search the Hub for agent bundles") {
+		t.Error("expected description for 'Find bundles'")
 	}
 
-	// Move cursor to "Find a bundle" (index 1).
+	// Move cursor to "Load bundle" (index 1).
 	screen.cursor = 1
 	view = screen.View()
 
-	if !strings.Contains(view, "Search the Hub for agent bundles") {
-		t.Error("expected description for 'Find a bundle'")
+	if !strings.Contains(view, "Load a bundle to run with a harness") {
+		t.Error("expected description for 'Load bundle'")
 	}
 }
 
@@ -568,4 +574,176 @@ func TestClampMenuWidth(t *testing.T) {
 			t.Errorf("clampMenuWidth(%d) = %d, want %d", tt.width, got, tt.want)
 		}
 	}
+}
+
+func TestHomeScreenMenuItemCount(t *testing.T) {
+	t.Parallel()
+
+	items := buildMenuItems()
+	if len(items) != 11 {
+		t.Errorf("expected 11 menu items, got %d", len(items))
+	}
+}
+
+func TestHomeScreenMenuSections(t *testing.T) {
+	t.Parallel()
+
+	items := buildMenuItems()
+	sections := make(map[string]int)
+
+	for _, item := range items {
+		sections[item.section]++
+	}
+
+	if sections["USE"] != 4 {
+		t.Errorf("expected 4 USE items, got %d", sections["USE"])
+	}
+
+	if sections["CREATE"] != 4 {
+		t.Errorf("expected 4 CREATE items, got %d", sections["CREATE"])
+	}
+
+	if sections["MANAGE"] != 3 {
+		t.Errorf("expected 3 MANAGE items, got %d", sections["MANAGE"])
+	}
+}
+
+func TestHomeScreenStubDescription(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+	screen.width = 80
+	screen.height = 30
+
+	// Navigate to a stub item ("Installed bundles" at index 2).
+	screen.cursor = 2
+	view := screen.View()
+
+	if !strings.Contains(view, "coming soon") {
+		t.Error("expected stub description to contain 'coming soon'")
+	}
+}
+
+func TestHomeScreenSlashOpensSearch(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+
+	_, cmd := screen.Update(tea.KeyPressMsg{Code: '/'})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for / key")
+	}
+
+	msg := cmd()
+	if _, ok := msg.(pushScreenMsg); !ok {
+		t.Errorf("expected pushScreenMsg, got %T", msg)
+	}
+}
+
+func TestHomeScreenCacheSummary(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+	screen.width = 120
+	screen.height = 30
+
+	// Without cache dep, should show "Cache unavailable".
+	view := screen.View()
+	if !strings.Contains(view, "Cache unavailable") {
+		t.Error("expected 'Cache unavailable' when Cache dep is nil")
+	}
+}
+
+func TestHomeScreenProjectSummary(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+	screen.width = 120
+	screen.height = 30
+
+	// Without install dep, should show "No project detected".
+	view := screen.View()
+	if !strings.Contains(view, "No project detected") {
+		t.Error("expected 'No project detected' when Install dep is nil")
+	}
+}
+
+func TestHomeScreenCacheLoaded(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+	screen.width = 120
+	screen.height = 30
+	screen.deps.Cache = &mockCacheSummarizer{} // non-nil to enable section
+
+	// Simulate cache result.
+	screen.Update(cacheResultMsg{bundleCount: 5, diskBytes: 1024 * 1024 * 48})
+
+	view := screen.View()
+	if !strings.Contains(view, "5 bundles") {
+		t.Error("expected view to contain cache bundle count")
+	}
+
+	if !strings.Contains(view, "48.0 MB") {
+		t.Error("expected view to contain cache disk usage")
+	}
+}
+
+func TestHomeScreenInstallLoaded(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+	screen.width = 120
+	screen.height = 30
+	screen.deps.Install = &mockInstallLister{} // non-nil to enable section
+
+	// Simulate install result.
+	screen.Update(installResultMsg{bundleCount: 3, found: true})
+
+	view := screen.View()
+	if !strings.Contains(view, "3 bundles installed") {
+		t.Error("expected view to contain installed bundle count")
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input int64
+		want  string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1048576, "1.0 MB"},
+		{5242880, "5.0 MB"},
+		{1073741824, "1.0 GB"},
+	}
+
+	for _, tt := range tests {
+		got := formatBytes(tt.input)
+		if got != tt.want {
+			t.Errorf("formatBytes(%d) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// Mock implementations for new interfaces.
+
+type mockCacheSummarizer struct{}
+
+func (m *mockCacheSummarizer) ListCached() ([]cache.CachedBundle, error) {
+	return nil, nil
+}
+
+func (m *mockCacheSummarizer) DiskUsage() (totalBytes int64, blobCount int, err error) {
+	return 0, 0, nil
+}
+
+type mockInstallLister struct{}
+
+func (m *mockInstallLister) List() ([]install.Entry, error) {
+	return nil, nil
 }

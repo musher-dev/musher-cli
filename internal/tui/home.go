@@ -35,6 +35,20 @@ type harnessStatus struct {
 	available   bool
 }
 
+// cacheSummary holds async-loaded cache statistics.
+type cacheSummary struct {
+	bundleCount int
+	diskBytes   int64
+	loaded      bool
+}
+
+// installSummary holds async-loaded project install statistics.
+type installSummary struct {
+	bundleCount int
+	loaded      bool
+	found       bool // true if .musher/installed.json was found
+}
+
 // contextInfo holds async-loaded identity context.
 type contextInfo struct {
 	loading  bool
@@ -58,8 +72,10 @@ type homeScreen struct {
 	cursor    int
 	focusArea int // 0=menu, 1=context (two-panel only)
 
-	ctxInfo   contextInfo
-	harnesses []harnessStatus
+	ctxInfo        contextInfo
+	harnesses      []harnessStatus
+	cacheSummary   cacheSummary
+	installSummary installSummary
 }
 
 // nowFunc is overridden in tests for deterministic greeting.
@@ -85,11 +101,22 @@ func newHomeScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMa
 
 func buildMenuItems() []menuItem {
 	return []menuItem{
-		{label: "Load bundle", description: "Load a bundle to run with a harness", hotkey: 'r', section: "DEVELOP"},
-		{label: "Find a bundle", description: "Search the Hub for agent bundles", hotkey: 'f', section: "DEVELOP"},
-		{label: "Init new bundle", description: "Create a new bundle definition", hotkey: 'i', section: "PUBLISH", stub: true},
-		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "PUBLISH", stub: true},
-		{label: "Hub management", description: "Manage Hub listings", hotkey: 'h', section: "PUBLISH", stub: true},
+		// USE — consumer lifecycle.
+		{label: "Find bundles", description: "Search the Hub for agent bundles", hotkey: 'f', section: "USE"},
+		{label: "Load bundle", description: "Load a bundle to run with a harness", hotkey: 'r', section: "USE"},
+		{label: "Installed bundles", description: "View bundles installed in this project", hotkey: 'l', section: "USE", stub: true},
+		{label: "Bundle info", description: "Inspect a cached or Hub bundle", hotkey: 'b', section: "USE", stub: true},
+
+		// CREATE — authoring lifecycle.
+		{label: "Init new bundle", description: "Create a new bundle definition", hotkey: 'i', section: "CREATE", stub: true},
+		{label: "Validate bundle", description: "Check bundle definition and assets", hotkey: 'v', section: "CREATE", stub: true},
+		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "CREATE", stub: true},
+		{label: "Hub management", description: "Manage Hub listings", hotkey: 'h', section: "CREATE", stub: true},
+
+		// MANAGE — system maintenance.
+		{label: "Cache", description: "View and manage cached bundles", hotkey: 'c', section: "MANAGE", stub: true},
+		{label: "Configuration", description: "View and edit settings", hotkey: 'g', section: "MANAGE", stub: true},
+		{label: "Doctor", description: "Run diagnostic checks", hotkey: 'd', section: "MANAGE", stub: true},
 	}
 }
 
@@ -124,11 +151,21 @@ func greetingForHour(hour int) string {
 
 // Init implements Screen.
 func (h *homeScreen) Init() tea.Cmd {
+	var cmds []tea.Cmd
+
 	if h.deps.Auth != nil {
-		return cmdLoadAuth(h.ctx, h.deps.Auth)
+		cmds = append(cmds, cmdLoadAuth(h.ctx, h.deps.Auth))
 	}
 
-	return nil
+	if h.deps.Cache != nil {
+		cmds = append(cmds, cmdLoadCache(h.deps.Cache))
+	}
+
+	if h.deps.Install != nil {
+		cmds = append(cmds, cmdLoadInstall(h.deps.Install))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // Update implements Screen.
@@ -159,6 +196,24 @@ func (h *homeScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case authErrorMsg:
 		h.ctxInfo.loading = false
 		h.ctxInfo.err = msg.err
+
+		return h, nil
+
+	case cacheResultMsg:
+		h.cacheSummary = cacheSummary{
+			bundleCount: msg.bundleCount,
+			diskBytes:   msg.diskBytes,
+			loaded:      true,
+		}
+
+		return h, nil
+
+	case installResultMsg:
+		h.installSummary = installSummary{
+			bundleCount: msg.bundleCount,
+			loaded:      true,
+			found:       msg.found,
+		}
 
 		return h, nil
 	}
@@ -194,6 +249,13 @@ func (h *homeScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		}
 
 		return h, nil
+	}
+
+	// "/" opens search directly.
+	if key.Matches(msg, h.keys.Search) {
+		cmd := h.pushSearchScreen()
+
+		return h, cmd
 	}
 
 	// Check hotkey runes (only on home screen, no text input conflict).
@@ -268,7 +330,7 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 
 	contextW := menuW
 	rightContent := h.renderContextContent()
-	rightPanel := renderPanel(h.styles, "Context", rightContent, contextW, h.focusArea == 1)
+	rightPanel := renderPanel(h.styles, "Status", rightContent, contextW, h.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
 	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
@@ -350,7 +412,7 @@ func (h *homeScreen) renderHomeMinimal() string {
 func (h *homeScreen) renderBrand() string {
 	ver := formatVersion(h.deps.Version)
 	brand := h.styles.brand.Render("musher") + " " + h.styles.muted.Render(ver)
-	tagline := h.styles.tagline.Render("Portable agent bundles")
+	tagline := h.styles.tagline.Render("Discover, load, and manage agent bundles")
 
 	return lipgloss.JoinVertical(lipgloss.Center, brand, tagline)
 }
@@ -491,22 +553,28 @@ func (h *homeScreen) renderDescription(menuW int) string {
 		return ""
 	}
 
-	return h.styles.description.Width(menuW).Render(h.items[h.cursor].description)
+	item := h.items[h.cursor]
+	desc := item.description
+
+	if item.stub {
+		desc += " " + h.styles.muted.Render("(coming soon)")
+	}
+
+	return h.styles.description.Width(menuW).Render(desc)
 }
 
-// renderContextContent renders the right panel content (auth + harnesses + links).
+// renderContextContent renders the right panel content (auth + project + cache + harnesses + links).
 func (h *homeScreen) renderContextContent() string {
-	var sections []string
+	sections := []string{
+		h.renderContextAuth(),
+		h.renderContextProject(),
+		h.renderContextCache(),
+	}
 
-	// Auth section.
-	sections = append(sections, h.renderContextAuth())
-
-	// Harnesses section.
 	if len(h.harnesses) > 0 {
 		sections = append(sections, h.renderContextHarnesses())
 	}
 
-	// Social links.
 	sections = append(sections, h.renderSocialLinks())
 
 	return strings.Join(sections, "\n\n")
@@ -549,6 +617,61 @@ func (h *homeScreen) renderContextHarnesses() string {
 	}
 
 	return title + "\n" + strings.Join(lines, "\n")
+}
+
+func (h *homeScreen) renderContextProject() string {
+	title := h.styles.contextLabel.Render("Project")
+
+	var body string
+
+	switch {
+	case h.deps.Install == nil:
+		body = h.styles.muted.Render("No project detected")
+	case !h.installSummary.loaded:
+		body = h.styles.placeholder.Render("Loading...")
+	case !h.installSummary.found:
+		body = h.styles.muted.Render("No project detected")
+	case h.installSummary.bundleCount == 0:
+		body = h.styles.muted.Render("No bundles installed")
+	default:
+		count := h.installSummary.bundleCount
+
+		label := "bundle installed"
+		if count != 1 {
+			label = "bundles installed"
+		}
+
+		body = h.styles.success.Render("\u2713") + " " + fmt.Sprintf("%d %s", count, label)
+	}
+
+	return title + "\n" + body
+}
+
+func (h *homeScreen) renderContextCache() string {
+	title := h.styles.contextLabel.Render("Cache")
+
+	var body string
+
+	switch {
+	case h.deps.Cache == nil:
+		body = h.styles.muted.Render("Cache unavailable")
+	case !h.cacheSummary.loaded:
+		body = h.styles.placeholder.Render("Loading...")
+	case h.cacheSummary.bundleCount == 0:
+		body = h.styles.muted.Render("Empty")
+	default:
+		sep := h.styles.hintSep.Render(" \u00B7 ")
+		count := h.cacheSummary.bundleCount
+
+		label := "bundle"
+		if count != 1 {
+			label = "bundles"
+		}
+
+		body = fmt.Sprintf("%d %s", count, label) + sep + formatBytes(h.cacheSummary.diskBytes)
+	}
+
+	return title + "\n" + body
 }
 
 func (h *homeScreen) renderSocialLinks() string {
@@ -635,6 +758,7 @@ func (h *homeScreen) renderFooter(twoPanel bool) string {
 	hints := []string{
 		h.styles.hintKey.Render("\u2191/\u2193") + " " + h.styles.hintDesc.Render("navigate"),
 		h.styles.hintKey.Render("enter") + " " + h.styles.hintDesc.Render("select"),
+		h.styles.hintKey.Render("/") + " " + h.styles.hintDesc.Render("search"),
 	}
 
 	if twoPanel {
@@ -668,5 +792,52 @@ func cmdLoadAuth(ctx context.Context, auth AuthChecker) tea.Cmd {
 		}
 
 		return authResultMsg{identity: identity}
+	}
+}
+
+// --- Async cache loading ---
+
+type cacheResultMsg struct {
+	bundleCount int
+	diskBytes   int64
+}
+
+func cmdLoadCache(summarizer CacheSummarizer) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := summarizer.ListCached()
+		if err != nil {
+			return cacheResultMsg{}
+		}
+
+		totalBytes, _, diskErr := summarizer.DiskUsage()
+		if diskErr != nil {
+			totalBytes = 0
+		}
+
+		return cacheResultMsg{
+			bundleCount: len(entries),
+			diskBytes:   totalBytes,
+		}
+	}
+}
+
+// --- Async install loading ---
+
+type installResultMsg struct {
+	bundleCount int
+	found       bool
+}
+
+func cmdLoadInstall(il InstallLister) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := il.List()
+		if err != nil {
+			return installResultMsg{found: false}
+		}
+
+		return installResultMsg{
+			bundleCount: len(entries),
+			found:       true,
+		}
 	}
 }

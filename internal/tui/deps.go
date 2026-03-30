@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 
+	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/harness"
 )
@@ -31,11 +33,26 @@ type AuthChecker interface {
 	GetPublisherIdentity(ctx context.Context) (*client.PublisherIdentity, error)
 }
 
+// CacheSummarizer provides cache summary statistics.
+// *cache.Store satisfies this interface.
+type CacheSummarizer interface {
+	ListCached() ([]cache.CachedBundle, error)
+	DiskUsage() (totalBytes int64, blobCount int, err error)
+}
+
+// InstallLister lists installed bundles in the current project.
+// *install.Registry satisfies this interface.
+type InstallLister interface {
+	List() ([]install.Entry, error)
+}
+
 // HomeDeps bundles dependencies for the home screen.
 type HomeDeps struct {
 	Searcher  BundleSearcher
 	Puller    BundlePuller
 	Harnesses HarnessLister
-	Auth      AuthChecker // nil when unauthenticated — home screen handles gracefully.
+	Auth      AuthChecker     // nil when unauthenticated — home screen handles gracefully.
+	Cache     CacheSummarizer // nil when cache unavailable.
+	Install   InstallLister   // nil when no project detected.
 	Version   string
 }

@@ -128,6 +128,26 @@ func formatCount(count int) string {
 	}
 }
 
+// formatBytes formats byte counts for display (e.g. 1024 → "1.0 KB", 5242880 → "5.0 MB").
+func formatBytes(bytes int64) string {
+	const (
+		kiloByte = 1024
+		megaByte = kiloByte * 1024
+		gigaByte = megaByte * 1024
+	)
+
+	switch {
+	case bytes >= gigaByte:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gigaByte))
+	case bytes >= megaByte:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(megaByte))
+	case bytes >= kiloByte:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kiloByte))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 func newStyles(isDark bool) styles {
 	lightDark := lipgloss.LightDark(isDark)
 
