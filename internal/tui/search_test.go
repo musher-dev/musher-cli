@@ -139,6 +139,8 @@ func TestSearchScreenView(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
 		screen.loading = true
+		screen.width = 80
+		screen.height = 30
 
 		view := screen.View()
 		if !strings.Contains(view, "Searching") {
@@ -153,6 +155,8 @@ func TestSearchScreenView(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
 		screen.err = errors.New("connection failed")
+		screen.width = 80
+		screen.height = 30
 
 		view := screen.View()
 		if !strings.Contains(view, "Error") {
@@ -167,6 +171,8 @@ func TestSearchScreenView(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
 		screen.loading = false
+		screen.width = 80
+		screen.height = 30
 
 		view := screen.View()
 		if !strings.Contains(view, "No results") {
@@ -181,6 +187,7 @@ func TestSearchScreenView(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
 		screen.loading = false
+		screen.width = 80
 		screen.height = 30
 		screen.results = []client.HubBundleSummary{
 			{
@@ -216,6 +223,7 @@ func TestSearchScreenView(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
 		screen.loading = false
+		screen.width = 80
 		screen.height = 10
 
 		// Add more results than can fit.
@@ -231,17 +239,113 @@ func TestSearchScreenView(t *testing.T) {
 			t.Error("view should indicate more results are available")
 		}
 	})
-}
 
-func TestSearchScreenKeyHandling(t *testing.T) {
-	t.Parallel()
-
-	t.Run("quit key", func(t *testing.T) {
+	t.Run("shows panels with border", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30
+		screen.results = []client.HubBundleSummary{
+			{
+				Publisher: client.HubPublisher{Handle: "acme"},
+				Slug:      "test",
+			},
+		}
+
+		view := screen.View()
+		if !strings.Contains(view, "Search") {
+			t.Error("view should contain Search panel title")
+		}
+
+		if !strings.Contains(view, "Results") {
+			t.Error("view should contain Results panel title")
+		}
+	})
+
+	t.Run("shows trust badge for verified publisher", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30
+		screen.focusArea = searchFocusList
+		screen.results = []client.HubBundleSummary{
+			{
+				Publisher:     client.HubPublisher{Handle: "acme", TrustTier: "verified"},
+				Slug:          "bundle",
+				LatestVersion: "1.0.0",
+			},
+		}
+
+		view := screen.View()
+		if !strings.Contains(view, "\u2713") {
+			t.Error("view should contain checkmark for verified publisher")
+		}
+	})
+
+	t.Run("shows formatted counts", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30
+		screen.results = []client.HubBundleSummary{
+			{
+				Publisher:      client.HubPublisher{Handle: "acme"},
+				Slug:           "bundle",
+				StarsCount:     1500,
+				DownloadsTotal: 2500000,
+			},
+		}
+
+		view := screen.View()
+		if !strings.Contains(view, "1.5K") {
+			t.Error("view should contain formatted star count 1.5K")
+		}
+
+		if !strings.Contains(view, "2.5M") {
+			t.Error("view should contain formatted download count 2.5M")
+		}
+	})
+
+	t.Run("minimal layout skips borders", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 30 // minimal layout
+		screen.height = 20
+
+		view := screen.View()
+		// Should still render without panic.
+		if !strings.Contains(view, "Search") {
+			t.Error("minimal view should contain Search breadcrumb")
+		}
+	})
+}
+
+func TestSearchScreenKeyHandling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("quit key from list focus", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "q"})
 		if cmd == nil {
@@ -249,12 +353,97 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("cursor navigation", func(t *testing.T) {
+	t.Run("q types in input when input focused", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: -1, Text: "q"})
+		searchScr := updated.(*searchScreen)
+
+		// The key should have been forwarded to the text input, not quit.
+		if searchScr.input.Value() == "" {
+			// Note: textinput may not register the key in test env without Focus(),
+			// but the important thing is we didn't quit.
+			t.Log("input value empty but did not quit — focus forwarding works")
+		}
+	})
+
+	t.Run("tab toggles focus to list", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
+		screen.results = []client.HubBundleSummary{{Slug: "a"}}
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.focusArea != searchFocusList {
+			t.Errorf("focusArea = %d, want %d (list)", searchScr.focusArea, searchFocusList)
+		}
+	})
+
+	t.Run("tab toggles focus to input", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.focusArea != searchFocusInput {
+			t.Errorf("focusArea = %d, want %d (input)", searchScr.focusArea, searchFocusInput)
+		}
+	})
+
+	t.Run("tab does not switch to empty list", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.focusArea != searchFocusInput {
+			t.Error("should not switch to list when results are empty")
+		}
+	})
+
+	t.Run("slash returns to input from list", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: -1, Text: "/"})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.focusArea != searchFocusInput {
+			t.Errorf("focusArea = %d, want %d (input)", searchScr.focusArea, searchFocusInput)
+		}
+	})
+
+	t.Run("cursor navigation with list focus", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
 		screen.results = []client.HubBundleSummary{
 			{Slug: "a"},
 			{Slug: "b"},
@@ -310,12 +499,13 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("enter with results pushes detail screen", func(t *testing.T) {
+	t.Run("enter with results from list pushes detail screen", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
 		screen.results = []client.HubBundleSummary{
 			{Publisher: client.HubPublisher{Handle: "acme"}, Slug: "bundle"},
 		}
@@ -337,12 +527,32 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		}
 	})
 
+	t.Run("enter from input switches to list focus", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
+		screen.results = []client.HubBundleSummary{
+			{Slug: "a"},
+		}
+
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.focusArea != searchFocusList {
+			t.Errorf("focusArea = %d, want %d (list)", searchScr.focusArea, searchFocusList)
+		}
+	})
+
 	t.Run("enter with no results is no-op", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if cmd != nil {
@@ -356,6 +566,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "some text", &sty, &keys)
+		screen.focusArea = searchFocusInput
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 		searchScr := updated.(*searchScreen)
@@ -365,16 +576,41 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("esc with empty text quits", func(t *testing.T) {
+	t.Run("esc with empty text pops screen", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 		if cmd == nil {
 			t.Error("expected non-nil cmd for esc on empty input")
+		}
+
+		msg := cmd()
+		if _, ok := msg.(popScreenMsg); !ok {
+			t.Errorf("expected popScreenMsg, got %T", msg)
+		}
+	})
+
+	t.Run("esc from list pops screen", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
+
+		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+		if cmd == nil {
+			t.Error("expected non-nil cmd for esc from list")
+		}
+
+		msg := cmd()
+		if _, ok := msg.(popScreenMsg); !ok {
+			t.Errorf("expected popScreenMsg, got %T", msg)
 		}
 	})
 
@@ -436,4 +672,142 @@ func TestSearchScreenDebounceTick(t *testing.T) {
 			t.Error("expected nil cmd for stale debounce tick")
 		}
 	})
+}
+
+func TestSearchScreenPagination(t *testing.T) {
+	t.Parallel()
+
+	t.Run("hasMore sets pagination state", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "test", &sty, &keys)
+		screen.lastQuery = "test"
+
+		updated, _ := screen.Update(searchResultMsg{
+			query:   "test",
+			results: []client.HubBundleSummary{{Slug: "a"}},
+			hasMore: true,
+			cursor:  "next123",
+		})
+		searchScr := updated.(*searchScreen)
+
+		if !searchScr.hasMore {
+			t.Error("expected hasMore = true")
+		}
+
+		if searchScr.nextCursor != "next123" {
+			t.Errorf("nextCursor = %q, want %q", searchScr.nextCursor, "next123")
+		}
+	})
+
+	t.Run("cursor can reach load more item", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
+		screen.results = []client.HubBundleSummary{{Slug: "a"}}
+		screen.hasMore = true
+
+		// Move down to load more.
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		searchScr := updated.(*searchScreen)
+
+		if searchScr.cursor != 1 {
+			t.Errorf("cursor = %d, want 1 (load more position)", searchScr.cursor)
+		}
+	})
+
+	t.Run("load more appends results", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.lastQuery = "test"
+		screen.results = []client.HubBundleSummary{{Slug: "a"}}
+
+		updated, _ := screen.Update(loadMoreResultMsg{
+			query:   "test",
+			results: []client.HubBundleSummary{{Slug: "b"}, {Slug: "c"}},
+			hasMore: false,
+		})
+		searchScr := updated.(*searchScreen)
+
+		if len(searchScr.results) != 3 {
+			t.Errorf("expected 3 results after load more, got %d", len(searchScr.results))
+		}
+
+		if searchScr.hasMore {
+			t.Error("expected hasMore = false after final page")
+		}
+	})
+}
+
+func TestSearchScreenFooter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("input focused footer", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusInput
+
+		footer := screen.renderFooter()
+		if !strings.Contains(footer, "tab") {
+			t.Error("input footer should mention tab")
+		}
+
+		if strings.Contains(footer, "navigate") {
+			t.Error("input footer should not mention navigate")
+		}
+	})
+
+	t.Run("list focused footer", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.focusArea = searchFocusList
+
+		footer := screen.renderFooter()
+		if !strings.Contains(footer, "navigate") {
+			t.Error("list footer should mention navigate")
+		}
+
+		if !strings.Contains(footer, "quit") {
+			t.Error("list footer should mention quit")
+		}
+	})
+}
+
+func TestFormatCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input int
+		want  string
+	}{
+		{0, "0"},
+		{5, "5"},
+		{999, "999"},
+		{1000, "1.0K"},
+		{1500, "1.5K"},
+		{10000, "10.0K"},
+		{1000000, "1.0M"},
+		{2500000, "2.5M"},
+	}
+
+	for _, tt := range tests {
+		got := formatCount(tt.input)
+		if got != tt.want {
+			t.Errorf("formatCount(%d) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }

@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"image/color"
+	"strconv"
 
 	"charm.land/lipgloss/v2"
 )
@@ -112,6 +114,18 @@ type styles struct {
 
 	// Loading / empty states.
 	placeholder lipgloss.Style
+}
+
+// formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
+func formatCount(count int) string {
+	switch {
+	case count >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(count)/1_000_000)
+	case count >= 1_000:
+		return fmt.Sprintf("%.1fK", float64(count)/1_000)
+	default:
+		return strconv.Itoa(count)
+	}
 }
 
 func newStyles(isDark bool) styles {

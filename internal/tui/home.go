@@ -264,11 +264,11 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 
 	leftContent := h.renderMenuContent(menuW)
 	leftTitle := "musher " + formatVersion(h.deps.Version)
-	leftPanel := h.renderPanel(leftTitle, leftContent, menuW, h.focusArea == 0)
+	leftPanel := renderPanel(h.styles, leftTitle, leftContent, menuW, h.focusArea == 0)
 
 	contextW := menuW
 	rightContent := h.renderContextContent()
-	rightPanel := h.renderPanel("Context", rightContent, contextW, h.focusArea == 1)
+	rightPanel := renderPanel(h.styles, "Context", rightContent, contextW, h.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
 	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
@@ -568,11 +568,11 @@ func hyperlink(url, text string) string {
 }
 
 // renderPanel draws a rounded-border box with an embedded title in the top border.
-func (h *homeScreen) renderPanel(title, content string, width int, active bool) string {
+func renderPanel(sty *styles, title, content string, width int, active bool) string {
 	if title == "" {
-		style := h.styles.panelBorder
+		style := sty.panelBorder
 		if active {
-			style = h.styles.panelBorderActive
+			style = sty.panelBorderActive
 		}
 
 		return style.Width(width).Render(content)

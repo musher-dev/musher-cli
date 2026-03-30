@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
@@ -27,6 +28,9 @@ const (
 	groupHub         = "hub"
 	groupMaintenance = "maintenance"
 )
+
+// Command names referenced in multiple locations.
+const cmdNameUpdate = "update"
 
 func newRootCmd() *cobra.Command {
 	var (
@@ -68,8 +72,20 @@ Run without arguments in a terminal for an interactive experience.`,
 			_, err := configureRootRuntime(
 				cmd, out, jsonOutput, quiet, noInput, noColor, noTUI, logLevel, logFormat, logFile, logStderr,
 			)
+			if err != nil {
+				return err
+			}
 
-			return err
+			maybeStartAgent(buildinfo.Version)
+
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			if shouldShowUpdateNotice(cmd) {
+				renderUpdateNotice(output.FromContext(cmd.Context()), buildinfo.Version)
+			}
+
+			return nil
 		},
 	}
 
@@ -107,7 +123,7 @@ Run without arguments in a terminal for an interactive experience.`,
 }
 
 func warnIfRoot(cmd *cobra.Command, out *output.Writer) {
-	if os.Geteuid() == 0 && cmd.Name() != "update" {
+	if os.Geteuid() == 0 && cmd.Name() != cmdNameUpdate {
 		out.Warning("Running as root is not recommended. Files created will be owned by root.")
 
 		if os.Getenv("SUDO_USER") != "" {
