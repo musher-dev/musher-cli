@@ -2,10 +2,10 @@ package observability
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -78,7 +78,7 @@ func SetupTelemetry(ctx context.Context, cfg *TelemetryConfig) (TelemetryShutdow
 		resource.NewSchemaless(attrs...),
 	)
 	if err != nil {
-		return noopShutdown, fmt.Errorf("merge otel resource: %w", err)
+		return noopShutdown, repoerrors.Errorf("merge otel resource: %w", err)
 	}
 
 	exporterOpts := []otlptracehttp.Option{
@@ -91,7 +91,7 @@ func SetupTelemetry(ctx context.Context, cfg *TelemetryConfig) (TelemetryShutdow
 
 	exporter, err := otlptracehttp.New(ctx, exporterOpts...)
 	if err != nil {
-		return noopShutdown, fmt.Errorf("create otel exporter: %w", err)
+		return noopShutdown, repoerrors.Errorf("create otel exporter: %w", err)
 	}
 
 	provider := sdktrace.NewTracerProvider(
@@ -115,7 +115,7 @@ func SetupTelemetry(ctx context.Context, cfg *TelemetryConfig) (TelemetryShutdow
 		otel.SetErrorHandler(origErrorHandler)
 
 		if err != nil {
-			return fmt.Errorf("shutdown otel provider: %w", err)
+			return repoerrors.Errorf("shutdown otel provider: %w", err)
 		}
 
 		return nil

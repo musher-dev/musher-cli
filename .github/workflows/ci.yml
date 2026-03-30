@@ -13,6 +13,8 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_THRESHOLD: "70.0"
     steps:
       - uses: actions/checkout@v6
 
@@ -32,11 +34,24 @@ jobs:
       - name: Install tools
         run: task setup:tools
 
+      - name: Verify hook bootstrap
+        run: task hooks:install
+
       - name: Run canonical quality gate
         run: task check:ci
 
+      - name: Enforce Coverage Floor
+        run: task check:coverage:floor
+
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
+
+      - name: Validate GoReleaser config
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
 
       - name: Upload coverage artifact
         if: always()
@@ -78,6 +93,9 @@ jobs:
 
       - name: Help smoke test
         run: go run ./cmd/musher --help
+
+      - name: Run policy tests
+        run: go test ./internal/policy
 
       - name: Run tests
         run: go test -race ./...

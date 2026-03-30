@@ -2,20 +2,25 @@ package client
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestProbeHealthReachable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	result := ProbeHealth(context.Background(), server.URL)
+	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		}),
+	})
 
 	if !result.Reachable {
 		t.Errorf("expected reachable for test server, error: %s", result.Error)
@@ -68,12 +73,16 @@ func TestProbeHealthEmptyHost(t *testing.T) {
 }
 
 func TestProbeHealth4xxResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	result := ProbeHealth(context.Background(), server.URL)
+	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		}),
+	})
 
 	// 4xx should still be considered reachable
 	if !result.Reachable {
@@ -86,13 +95,19 @@ func TestProbeHealth4xxResponse(t *testing.T) {
 }
 
 func TestProbeHealthWithDateHeader(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Date", "Mon, 02 Jan 2006 15:04:05 GMT")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			header := make(http.Header)
+			header.Set("Date", "Mon, 02 Jan 2006 15:04:05 GMT")
 
-	result := ProbeHealth(context.Background(), server.URL)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     header,
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		}),
+	})
 
 	if !result.Reachable {
 		t.Error("expected reachable")
@@ -133,4 +148,10 @@ func TestBuildProbeTLSConfigInvalidPEM(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid PEM")
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }

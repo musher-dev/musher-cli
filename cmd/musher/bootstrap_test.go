@@ -11,6 +11,7 @@ import (
 
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/terminal"
+	"github.com/musher-dev/musher-cli/internal/testutil"
 )
 
 func TestPickBoolFlagOrEnvFlagTrue(t *testing.T) {
@@ -134,6 +135,8 @@ func TestPickFlagOrEnvFlagPrecedence(t *testing.T) {
 }
 
 func TestConfigureRootRuntimeDefaults(t *testing.T) {
+	testutil.OverridePaths(t, t.TempDir())
+
 	var stdout, stderr bytes.Buffer
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
@@ -157,6 +160,8 @@ func TestConfigureRootRuntimeDefaults(t *testing.T) {
 }
 
 func TestConfigureRootRuntimeWithFlags(t *testing.T) {
+	testutil.OverridePaths(t, t.TempDir())
+
 	var stdout, stderr bytes.Buffer
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
@@ -188,6 +193,8 @@ func TestConfigureRootRuntimeWithFlags(t *testing.T) {
 }
 
 func TestConfigureRootRuntimeInvalidLogLevel(t *testing.T) {
+	testutil.OverridePaths(t, t.TempDir())
+
 	var stdout, stderr bytes.Buffer
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})

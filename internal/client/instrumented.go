@@ -3,11 +3,11 @@ package client
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
@@ -15,7 +15,7 @@ import (
 func NewInstrumentedHTTPClient(caCertFile string) (*http.Client, error) {
 	baseTransport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
-		return nil, fmt.Errorf("default transport type %T is not *http.Transport", http.DefaultTransport)
+		return nil, repoerrors.Errorf("default transport type %T is not *http.Transport", http.DefaultTransport)
 	}
 
 	transport := baseTransport.Clone()
@@ -25,7 +25,7 @@ func NewInstrumentedHTTPClient(caCertFile string) (*http.Client, error) {
 	if customCAPath != "" {
 		pemData, err := safeio.ReadFile(customCAPath)
 		if err != nil {
-			return nil, fmt.Errorf("read CA cert file %q: %w", customCAPath, err)
+			return nil, repoerrors.Errorf("read CA cert file %q: %w", customCAPath, err)
 		}
 
 		pool, err := x509.SystemCertPool()
@@ -34,7 +34,7 @@ func NewInstrumentedHTTPClient(caCertFile string) (*http.Client, error) {
 		}
 
 		if ok := pool.AppendCertsFromPEM(pemData); !ok {
-			return nil, fmt.Errorf("parse CA cert file %q: no certificates found", customCAPath)
+			return nil, repoerrors.Errorf("parse CA cert file %q: no certificates found", customCAPath)
 		}
 
 		transport.TLSClientConfig.RootCAs = pool

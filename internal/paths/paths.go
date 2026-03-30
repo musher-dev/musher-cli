@@ -2,13 +2,14 @@ package paths
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 const appName = "musher"
@@ -20,7 +21,7 @@ const appName = "musher"
 func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (string, error), homeFallbackDir string) (string, error) {
 	if branded := os.Getenv(brandedEnv); branded != "" {
 		if !filepath.IsAbs(branded) {
-			return "", fmt.Errorf("%s must be an absolute path", brandedEnv)
+			return "", repoerrors.Errorf("%s must be an absolute path", brandedEnv)
 		}
 
 		return filepath.Clean(branded), nil
@@ -172,12 +173,12 @@ func UpdateStateFile() (string, error) {
 func HostIDFromURL(apiURL string) (string, error) {
 	parsed, err := url.Parse(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("parse API URL: %w", err)
+		return "", repoerrors.Errorf("parse API URL: %w", err)
 	}
 
 	hostname := parsed.Hostname()
 	if hostname == "" {
-		return "", fmt.Errorf("API URL has no hostname: %s", apiURL)
+		return "", repoerrors.Errorf("API URL has no hostname: %s", apiURL)
 	}
 
 	port := parsed.Port()
@@ -193,12 +194,12 @@ func HostIDFromURL(apiURL string) (string, error) {
 func KeyringServiceFromURL(apiURL string) (string, error) {
 	parsed, err := url.Parse(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("parse API URL: %w", err)
+		return "", repoerrors.Errorf("parse API URL: %w", err)
 	}
 
 	hostname := parsed.Hostname()
 	if hostname == "" {
-		return "", fmt.Errorf("API URL has no hostname: %s", apiURL)
+		return "", repoerrors.Errorf("API URL has no hostname: %s", apiURL)
 	}
 
 	port := parsed.Port()

@@ -19,6 +19,15 @@ import (
 
 const placeholderNamespace = "your-namespace"
 
+var fetchPublisherIdentity = func(ctx context.Context) (*client.PublisherIdentity, error) {
+	_, apiClient, err := newAPIClient()
+	if err != nil {
+		return nil, err
+	}
+
+	return apiClient.GetPublisherIdentity(ctx)
+}
+
 func newBundleInitCmd() *cobra.Command {
 	var (
 		force bool
@@ -231,12 +240,9 @@ func resolveNamespace(out *output.Writer, yes bool) string {
 	interactive := !yes && prompter.CanPrompt()
 
 	// Try existing credentials first.
-	_, c, err := newAPIClient()
+	identity, err := fetchPublisherIdentity(context.Background())
 	if err == nil {
-		identity, idErr := c.GetPublisherIdentity(context.Background())
-		if idErr == nil {
-			return pickNamespace(out, identity, interactive)
-		}
+		return pickNamespace(out, identity, interactive)
 	}
 
 	// Not authenticated — offer inline login if interactive.
@@ -481,13 +487,13 @@ func hintUndiscoveredAssets(out *output.Writer, workDir string) {
 func writeTemplate(path string, tmpl *template.Template, data initData) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // project files need standard read permissions
 	if err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
+		return clierrors.Errorf("create %s: %w", filepath.Base(path), err)
 	}
 
 	defer func() { _ = f.Close() }() //nolint:errcheck // best-effort cleanup
 
 	if err := tmpl.Execute(f, data); err != nil {
-		return fmt.Errorf("write template to %s: %w", filepath.Base(path), err)
+		return clierrors.Errorf("write template to %s: %w", filepath.Base(path), err)
 	}
 
 	return nil

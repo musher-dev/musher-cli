@@ -76,7 +76,7 @@ func runCacheList(out *output.Writer, pattern string) error {
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(entries); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil

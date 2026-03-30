@@ -3,7 +3,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
 
@@ -81,17 +81,17 @@ func (c *Config) Set(key string, value any) error {
 
 	configDir, err := paths.ConfigRoot()
 	if err != nil {
-		return fmt.Errorf("resolve config directory: %w", err)
+		return repoerrors.Errorf("resolve config directory: %w", err)
 	}
 
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
+		return repoerrors.Errorf("create config directory: %w", err)
 	}
 
 	configFile := filepath.Join(configDir, "config.yaml")
 
 	if err := c.v.WriteConfigAs(configFile); err != nil {
-		return fmt.Errorf("write config file: %w", err)
+		return repoerrors.Errorf("write config file: %w", err)
 	}
 
 	return nil

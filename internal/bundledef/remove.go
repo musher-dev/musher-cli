@@ -1,11 +1,12 @@
 package bundledef
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // RemoveResult describes what happened during asset removal.
@@ -34,7 +35,7 @@ func RemoveAssets(dir string, identifiers []string) (*RemoveResult, error) {
 	}
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return nil, fmt.Errorf("write bundle definition: %w", err)
+		return nil, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return result, nil
@@ -56,12 +57,12 @@ func RemoveAllAssets(dir string) (int, error) {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return 0, fmt.Errorf("read bundle definition: %w", err)
+		return 0, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	def, err := Load(dir)
 	if err != nil {
-		return 0, fmt.Errorf("parse bundle definition: %w", err)
+		return 0, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
 	count := len(def.Assets)
@@ -74,7 +75,7 @@ func RemoveAllAssets(dir string) (int, error) {
 	content = strings.TrimRight(content, "\n") + "\n"
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return 0, fmt.Errorf("write bundle definition: %w", err)
+		return 0, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return count, nil
@@ -90,12 +91,12 @@ func renderRemove(dir string, identifiers []string) (string, *RemoveResult, erro
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return "", nil, fmt.Errorf("read bundle definition: %w", err)
+		return "", nil, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	def, err := Load(dir)
 	if err != nil {
-		return "", nil, fmt.Errorf("parse bundle definition: %w", err)
+		return "", nil, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
 	toRemove, result := resolveRemoveTargets(def.Assets, identifiers)

@@ -167,7 +167,7 @@ func pullBundleWithFallback(
 	if usePublic {
 		bundle, pullErr := apiClient.PullPublicBundleVersion(ctx, namespace, slug, version)
 		if pullErr != nil {
-			return nil, fmt.Errorf("pull public bundle: %w", pullErr)
+			return nil, clierrors.Errorf("pull public bundle: %w", pullErr)
 		}
 
 		return bundle, nil
@@ -185,13 +185,13 @@ func pullBundleWithFallback(
 
 		fallbackBundle, fallbackErr := pubClient.PullPublicBundleVersion(ctx, namespace, slug, version)
 		if fallbackErr != nil {
-			return nil, fmt.Errorf("pull public bundle (fallback): %w", fallbackErr)
+			return nil, clierrors.Errorf("pull public bundle (fallback): %w", fallbackErr)
 		}
 
 		return fallbackBundle, nil
 	}
 
-	return nil, fmt.Errorf("pull bundle: %w", err)
+	return nil, clierrors.Errorf("pull bundle: %w", err)
 }
 
 func cacheBundle(store *cache.Store, bundle *client.PullBundleResponse) (*cache.BundleManifest, error) {

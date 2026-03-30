@@ -7,10 +7,11 @@ package install
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 const stateFile = "installed.json"
@@ -111,12 +112,12 @@ func (r *Registry) load() ([]Entry, error) {
 			return nil, nil
 		}
 
-		return nil, fmt.Errorf("read installed bundles: %w", err)
+		return nil, repoerrors.Errorf("read installed bundles: %w", err)
 	}
 
 	var entries []Entry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("parse installed bundles: %w", err)
+		return nil, repoerrors.Errorf("parse installed bundles: %w", err)
 	}
 
 	return entries, nil
@@ -124,17 +125,17 @@ func (r *Registry) load() ([]Entry, error) {
 
 func (r *Registry) save(entries []Entry) error {
 	if err := os.MkdirAll(r.dir, 0o700); err != nil {
-		return fmt.Errorf("create .musher directory: %w", err)
+		return repoerrors.Errorf("create .musher directory: %w", err)
 	}
 
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal installed bundles: %w", err)
+		return repoerrors.Errorf("marshal installed bundles: %w", err)
 	}
 
 	path := filepath.Join(r.dir, stateFile)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write installed bundles: %w", err)
+		return repoerrors.Errorf("write installed bundles: %w", err)
 	}
 
 	return nil

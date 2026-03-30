@@ -8,9 +8,9 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 var errUnexpectedModel = errors.New("unexpected model type from TUI program")
@@ -49,7 +49,7 @@ func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, fmt.Errorf("TUI error: %w", err)
+		return nil, repoerrors.Errorf("TUI error: %w", err)
 	}
 
 	finalApp, ok := finalModel.(*App)
@@ -76,7 +76,7 @@ func RunSearch(ctx context.Context, searcher BundleSearcher, initialQuery string
 
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, fmt.Errorf("TUI error: %w", err)
+		return nil, repoerrors.Errorf("TUI error: %w", err)
 	}
 
 	finalApp, ok := finalModel.(*App)
@@ -109,7 +109,7 @@ func RunLoad(
 
 	finalModel, err := program.Run()
 	if err != nil {
-		return nil, fmt.Errorf("TUI error: %w", err)
+		return nil, repoerrors.Errorf("TUI error: %w", err)
 	}
 
 	finalApp, ok := finalModel.(*App)

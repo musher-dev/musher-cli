@@ -2,11 +2,12 @@ package cache
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // durationRe matches day (d) and week (w) components that time.ParseDuration
@@ -29,7 +30,7 @@ func ParseCacheDuration(input string) (time.Duration, error) {
 	for _, match := range matches {
 		count, err := strconv.Atoi(match[1])
 		if err != nil {
-			return 0, fmt.Errorf("invalid number in duration %q: %w", input, err)
+			return 0, repoerrors.Errorf("invalid number in duration %q: %w", input, err)
 		}
 
 		var hours int
@@ -46,7 +47,7 @@ func ParseCacheDuration(input string) (time.Duration, error) {
 
 	duration, err := time.ParseDuration(replaced)
 	if err != nil {
-		return 0, fmt.Errorf("invalid duration %q: %w", input, err)
+		return 0, repoerrors.Errorf("invalid duration %q: %w", input, err)
 	}
 
 	return duration, nil

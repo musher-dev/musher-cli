@@ -3,12 +3,12 @@ package transcript
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // Store manages session transcript directories.
@@ -31,7 +31,7 @@ func (s *Store) Create(bundleRef string) (*Session, error) {
 
 	sessDir := filepath.Join(s.dir, sess.ID)
 	if err := os.MkdirAll(sessDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create session directory: %w", err)
+		return nil, repoerrors.Errorf("create session directory: %w", err)
 	}
 
 	if err := s.writeMeta(sess); err != nil {
@@ -49,7 +49,7 @@ func (s *Store) List() ([]Session, error) {
 			return nil, nil
 		}
 
-		return nil, fmt.Errorf("read transcript directory: %w", err)
+		return nil, repoerrors.Errorf("read transcript directory: %w", err)
 	}
 
 	var sessions []Session
@@ -96,12 +96,12 @@ func (s *Store) Prune(olderThan time.Duration) (int, error) {
 func (s *Store) writeMeta(sess *Session) error {
 	data, err := json.MarshalIndent(sess, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal session meta: %w", err)
+		return repoerrors.Errorf("marshal session meta: %w", err)
 	}
 
 	path := filepath.Join(s.dir, sess.ID, "meta.json")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write session meta: %w", err)
+		return repoerrors.Errorf("write session meta: %w", err)
 	}
 
 	return nil
@@ -112,12 +112,12 @@ func (s *Store) readMeta(sessionID string) (*Session, error) {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path derived from directory listing
 	if err != nil {
-		return nil, fmt.Errorf("read session meta: %w", err)
+		return nil, repoerrors.Errorf("read session meta: %w", err)
 	}
 
 	var sess Session
 	if err := json.Unmarshal(data, &sess); err != nil {
-		return nil, fmt.Errorf("parse session meta: %w", err)
+		return nil, repoerrors.Errorf("parse session meta: %w", err)
 	}
 
 	return &sess, nil

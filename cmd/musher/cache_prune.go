@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -101,7 +100,7 @@ func runCachePrune(out *output.Writer, olderThanStr, namespace string, dryRun bo
 			BytesFreed:       totalSize,
 			BytesFreedHuman:  formatBytes(totalSize),
 		}); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil

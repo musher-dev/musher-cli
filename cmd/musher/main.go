@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
-	"github.com/musher-dev/musher-cli/internal/output"
 )
 
 // Version information (set via ldflags during build).
@@ -32,9 +31,9 @@ func run() (exitCode int) {
 	buildinfo.Version = version
 	buildinfo.Commit = commit
 
-	out := output.Default()
+	out := defaultOutput()
 
-	rootCmd := newRootCmd()
+	rootCmd := newRootCmdWithOutput(out)
 	if err := rootCmd.Execute(); err != nil {
 		return handleError(out, err)
 	}

@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
 	"github.com/musher-dev/musher-cli/internal/output"
@@ -68,7 +67,7 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 		namespace, slug, bundleVersion,
 	)
 	if err != nil {
-		return fmt.Errorf("load: %w", err)
+		return repoerrors.Errorf("load: %w", err)
 	}
 
 	if result == nil || result.Action != actionLoad {

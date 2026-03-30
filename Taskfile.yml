@@ -110,6 +110,30 @@ tasks:
       - task: check:contracts
       - task: check:install
 
+  check:repo-policy:
+    desc: Enforce repository policy guardrails
+    cmds:
+      - |
+        fail=0
+        # No floating @latest versions in automation
+        if rg -n '(@latest|version:\s*latest)' .devcontainer/scripts .github/workflows 2>/dev/null; then
+          echo "POLICY: floating @latest versions are not allowed; pin explicitly"
+          fail=1
+        fi
+        # TODO/FIXME/HACK must reference an issue number
+        if rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO' >/dev/null 2>&1; then
+          echo "POLICY: TODO/FIXME/HACK comments must reference an issue number (#NNN)"
+          rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO'
+          fail=1
+        fi
+        # go.mod Go version must match Taskfile GO_VERSION
+        mod_version=$(head -5 go.mod | grep '^go ' | awk '{print $2}')
+        if [ "$mod_version" != "{{.GO_VERSION}}" ]; then
+          echo "POLICY: go.mod says $mod_version but Taskfile expects {{.GO_VERSION}}"
+          fail=1
+        fi
+        exit $fail
+
   check:fmt:
     desc: Check Go formatting and imports
     preconditions:
@@ -200,28 +224,10 @@ tasks:
       - actionlint {{.CLI_ARGS}}
 
   check:policy:
-    desc: Enforce repository policy guardrails
+    desc: Run repository policy and architecture guardrails
     cmds:
-      - |
-        fail=0
-        # No floating @latest versions in automation
-        if rg -n '(@latest|version:\s*latest)' .devcontainer/scripts .github/workflows 2>/dev/null; then
-          echo "POLICY: floating @latest versions are not allowed; pin explicitly"
-          fail=1
-        fi
-        # TODO/FIXME/HACK must reference an issue number
-        if rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO' >/dev/null 2>&1; then
-          echo "POLICY: TODO/FIXME/HACK comments must reference an issue number (#NNN)"
-          rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO'
-          fail=1
-        fi
-        # go.mod Go version must match Taskfile GO_VERSION
-        mod_version=$(head -5 go.mod | grep '^go ' | awk '{print $2}')
-        if [ "$mod_version" != "{{.GO_VERSION}}" ]; then
-          echo "POLICY: go.mod says $mod_version but Taskfile expects {{.GO_VERSION}}"
-          fail=1
-        fi
-        exit $fail
+      - task: check:repo-policy
+      - GOCACHE="$(pwd)/.gocache" GOTMPDIR=/tmp go test ./internal/policy
 
   check:vuln:
     desc: Run govulncheck
@@ -246,14 +252,16 @@ tasks:
         fi
 
   check:coverage:floor:
-    desc: Enforce minimum test coverage (70%)
+    desc: Enforce minimum test coverage
     preconditions:
       - sh: test -f coverage.out
         msg: "coverage.out not found. Run 'task check:test-cover' first."
+      - sh: test -n "${COVERAGE_THRESHOLD:-}"
+        msg: "COVERAGE_THRESHOLD is required."
     cmds:
       - |
         total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
-        threshold=70.0
+        threshold=${COVERAGE_THRESHOLD}
         if awk "BEGIN{exit (!($total < $threshold))}"; then
           printf "FAIL: total coverage %.1f%% is below %.1f%% floor\n" "$total" "$threshold" >&2
           exit 1
@@ -313,6 +321,14 @@ tasks:
       - task: check:test
       - task: check:compile
 
+  check:release:
+    desc: Validate the checked-in GoReleaser configuration
+    preconditions:
+      - sh: command -v goreleaser >/dev/null 2>&1
+        msg: "goreleaser is required to run release config checks."
+    cmds:
+      - goreleaser check
+
   dev:test-live:
     desc: Run integration tests against live api.musher.dev (requires MUSHER_API_KEY)
     preconditions:
@@ -347,6 +363,74 @@ tasks:
       - golangci-lint fmt ./...
       - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -w -i 2 -ci -sr"
       - go mod tidy
+
+  # ===========================================================================
+  # Git Hooks
+  # ===========================================================================
+
+  hooks:install:
+    desc: Install repository git hooks via Lefthook
+    preconditions:
+      - sh: command -v lefthook >/dev/null 2>&1
+        msg: "lefthook is required. Run 'task setup:tools' first."
+    cmds:
+      - git config --unset core.hooksPath || true
+      - lefthook install
+      - task: hooks:doctor
+
+  hooks:doctor:config:
+    desc: Verify hook config prerequisites
+    cmds:
+      - test -f lefthook.yml || (echo "lefthook.yml not found" && exit 1)
+      - command -v lefthook >/dev/null 2>&1 || (echo "lefthook is required" && exit 1)
+      - command -v task >/dev/null 2>&1 || (echo "task is required" && exit 1)
+      - command -v git >/dev/null 2>&1 || (echo "git is required" && exit 1)
+
+  hooks:doctor:
+    desc: Verify Lefthook installation in .git/hooks
+    cmds:
+      - task: hooks:doctor:config
+      - test -z "$(git config --get core.hooksPath || true)" || (echo "core.hooksPath must be unset for Lefthook-managed hooks" && exit 1)
+      - test -x .git/hooks/pre-commit || (echo "missing executable .git/hooks/pre-commit" && exit 1)
+      - test -x .git/hooks/commit-msg || (echo "missing executable .git/hooks/commit-msg" && exit 1)
+      - test -x .git/hooks/pre-push || (echo "missing executable .git/hooks/pre-push" && exit 1)
+
+  hooks:pre-commit:go:
+    desc: Run staged Go formatting, lint, and policy checks
+    preconditions:
+      - sh: test -n "{{.CLI_ARGS}}"
+        msg: "Pass one or more staged Go files after '--'."
+    cmds:
+      - task check:fmt:files -- {{.CLI_ARGS}}
+      - |
+        bash -lc '
+          set -euo pipefail
+          declare -A package_set=()
+
+          for file in "$@"; do
+            dir="$(dirname "$file")"
+            if [[ "$dir" == "." ]]; then
+              package_set["./"]=1
+            else
+              package_set["./$dir/..."]=1
+            fi
+          done
+
+          packages=()
+          for pkg in "${!package_set[@]}"; do
+            packages+=("$pkg")
+          done
+
+          if [[ ${#packages[@]} -gt 0 ]]; then
+            task check:lint:files -- "${packages[@]}"
+          fi
+        ' _ {{.CLI_ARGS}}
+      - task check:policy
+
+  hooks:pre-push:
+    desc: Run the canonical pre-push verification suite
+    cmds:
+      - task: check:pre-push
 
   # ===========================================================================
   # Utilities

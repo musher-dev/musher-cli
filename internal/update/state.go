@@ -3,12 +3,12 @@ package update
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
@@ -39,7 +39,7 @@ type State struct {
 func statePath() (string, error) {
 	path, err := paths.UpdateStateFile()
 	if err != nil {
-		return "", fmt.Errorf("resolve update state path: %w", err)
+		return "", repoerrors.Errorf("resolve update state path: %w", err)
 	}
 
 	return filepath.Clean(path), nil
@@ -58,7 +58,7 @@ func LoadState() (*State, error) {
 			return &State{}, nil
 		}
 
-		return nil, fmt.Errorf("read update state file: %w", err)
+		return nil, repoerrors.Errorf("read update state file: %w", err)
 	}
 
 	state, ok := decodeState(data)
@@ -74,21 +74,21 @@ func LoadState() (*State, error) {
 func SaveState(state *State) error {
 	path, err := statePath()
 	if err != nil {
-		return fmt.Errorf("resolve update state path: %w", err)
+		return repoerrors.Errorf("resolve update state path: %w", err)
 	}
 
 	dir := filepath.Dir(path)
 	if mkdirErr := safeio.MkdirAll(dir, 0o700); mkdirErr != nil {
-		return fmt.Errorf("create update state directory: %w", mkdirErr)
+		return repoerrors.Errorf("create update state directory: %w", mkdirErr)
 	}
 
 	data, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("marshal update state: %w", err)
+		return repoerrors.Errorf("marshal update state: %w", err)
 	}
 
 	if err := safeio.WriteFileAtomic(path, data, 0o600); err != nil {
-		return fmt.Errorf("write update state: %w", err)
+		return repoerrors.Errorf("write update state: %w", err)
 	}
 
 	return nil

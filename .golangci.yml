@@ -125,6 +125,12 @@ linters:
               desc: platform/core packages must not depend on output
             - pkg: github.com/musher-dev/musher-cli/internal/prompt
               desc: platform/core packages must not depend on prompt
+        testutil_no_production:
+          files:
+            - "!**/*_test.go"
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/testutil
+              desc: testutil is for tests only and must not be imported by production code
         doctor_no_output:
           files:
             - internal/doctor/**/*.go
@@ -182,6 +188,8 @@ linters:
           msg: "use output.Writer.Print() or Println() instead"
         - pattern: ^fmt\.Printf$
           msg: "use output.Writer.Print() instead"
+        - pattern: ^fmt\.Errorf$
+          msg: "use internal/errors.Errorf instead of fmt.Errorf"
         - pattern: ^log\.(Print|Fatal|Panic)(ln|f)?$
           msg: "use output.Writer instead of log package"
     gosec:

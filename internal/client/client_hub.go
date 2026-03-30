@@ -9,6 +9,8 @@ import (
 	neturl "net/url"
 	"strconv"
 	"time"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // HubPublisher represents a bundle publisher.
@@ -93,7 +95,7 @@ var ErrEndpointNotAvailable = errors.New("endpoint not available")
 func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort string, limit int, cursor string) (*HubSearchResponse, error) {
 	endpoint, err := neturl.Parse(c.baseURL + "/v1/hub/bundles")
 	if err != nil {
-		return nil, fmt.Errorf("parse hub search endpoint: %w", err)
+		return nil, repoerrors.Errorf("parse hub search endpoint: %w", err)
 	}
 
 	params := endpoint.Query()
@@ -131,7 +133,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 
 	resp, err := c.do(req, "/v1/hub/bundles")
 	if err != nil {
-		return nil, fmt.Errorf("search hub bundles: %w", err)
+		return nil, repoerrors.Errorf("search hub bundles: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -163,12 +165,12 @@ func (c *Client) GetHubBundleDetail(ctx context.Context, publisherHandle, bundle
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("get hub bundle detail: %w", err)
+		return nil, repoerrors.Errorf("get hub bundle detail: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s not found", publisherHandle, bundleSlug)
+		return nil, repoerrors.Errorf("bundle %s/%s not found", publisherHandle, bundleSlug)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -187,7 +189,7 @@ func (c *Client) GetHubBundleDetail(ctx context.Context, publisherHandle, bundle
 func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle string, limit int, cursor string) (*HubSearchResponse, error) {
 	endpoint, err := neturl.Parse(c.baseURL + "/v1/hub/publishers/" + neturl.PathEscape(publisherHandle) + "/bundles")
 	if err != nil {
-		return nil, fmt.Errorf("parse publisher bundles endpoint: %w", err)
+		return nil, repoerrors.Errorf("parse publisher bundles endpoint: %w", err)
 	}
 
 	params := endpoint.Query()
@@ -209,7 +211,7 @@ func (c *Client) ListPublisherBundles(ctx context.Context, publisherHandle strin
 
 	resp, err := c.do(req, "/v1/hub/publishers/{handle}/bundles")
 	if err != nil {
-		return nil, fmt.Errorf("list publisher bundles: %w", err)
+		return nil, repoerrors.Errorf("list publisher bundles: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -235,7 +237,7 @@ func (c *Client) GetRunnerNamespaces(ctx context.Context) ([]NamespaceHandle, er
 
 	resp, err := c.do(req, "/v1/hub/me/publishers")
 	if err != nil {
-		return nil, fmt.Errorf("get runner namespaces: %w", err)
+		return nil, repoerrors.Errorf("get runner namespaces: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -265,7 +267,7 @@ func (c *Client) CreateHubListing(ctx context.Context, publisherHandle, bundleSl
 
 	bundle, err := c.GetBundleDetail(ctx, publisherHandle, bundleSlug)
 	if err != nil {
-		return fmt.Errorf("resolve bundle metadata: %w", err)
+		return repoerrors.Errorf("resolve bundle metadata: %w", err)
 	}
 
 	type createListingRequest struct {
@@ -296,7 +298,7 @@ func (c *Client) CreateHubListing(ctx context.Context, publisherHandle, bundleSl
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return fmt.Errorf("create hub listing: %w", err)
+		return repoerrors.Errorf("create hub listing: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -343,7 +345,7 @@ func (c *Client) DeprecateHubBundle(ctx context.Context, publisherHandle, bundle
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return fmt.Errorf("deprecate hub bundle: %w", err)
+		return repoerrors.Errorf("deprecate hub bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -368,7 +370,7 @@ func (c *Client) UndeprecateHubBundle(ctx context.Context, publisherHandle, bund
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return fmt.Errorf("undeprecate hub bundle: %w", err)
+		return repoerrors.Errorf("undeprecate hub bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -388,7 +390,7 @@ func (c *Client) ListHubCategories(ctx context.Context) ([]HubCategory, error) {
 
 	resp, err := c.do(req, "/v1/hub/categories")
 	if err != nil {
-		return nil, fmt.Errorf("list hub categories: %w", err)
+		return nil, repoerrors.Errorf("list hub categories: %w", err)
 	}
 	defer resp.Body.Close()
 

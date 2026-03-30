@@ -2,7 +2,6 @@ package errors
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 )
 
@@ -185,7 +184,7 @@ func TestAs(t *testing.T) {
 		t.Parallel()
 
 		original := New(ExitAuth, "auth error")
-		wrapped := fmt.Errorf("outer: %w", original)
+		wrapped := Errorf("outer: %w", original)
 
 		var target *CLIError
 		if !As(wrapped, &target) {

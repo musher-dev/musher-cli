@@ -16,13 +16,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
@@ -107,7 +107,7 @@ func NewStore(cacheDir string) (*Store, error) {
 	} {
 		dir := filepath.Join(cacheDir, sub)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("create cache directory %s: %w", dir, err)
+			return nil, repoerrors.Errorf("create cache directory %s: %w", dir, err)
 		}
 	}
 
@@ -140,11 +140,11 @@ func (s *Store) StoreBlob(data []byte) (string, error) {
 	}
 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create blob prefix dir: %w", err)
+		return "", repoerrors.Errorf("create blob prefix dir: %w", err)
 	}
 
 	if err := os.WriteFile(blobFile, data, 0o600); err != nil {
-		return "", fmt.Errorf("write blob %s: %w", digest, err)
+		return "", repoerrors.Errorf("write blob %s: %w", digest, err)
 	}
 
 	return digest, nil
@@ -157,10 +157,10 @@ func (s *Store) GetBlob(digest string) ([]byte, error) {
 	data, err := os.ReadFile(blobFile) //nolint:gosec // path is derived from digest, not user input
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("blob %s: %w", digest, ErrNotFound)
+			return nil, repoerrors.Errorf("blob %s: %w", digest, ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("read blob %s: %w", digest, err)
+		return nil, repoerrors.Errorf("read blob %s: %w", digest, err)
 	}
 
 	return data, nil
@@ -195,16 +195,16 @@ func (s *Store) StoreManifest(hostID, namespace, slug, version string, manifest 
 	manifestFile := s.manifestPath(hostID, namespace, slug, version)
 
 	if err := safeio.MkdirAll(filepath.Dir(manifestFile), 0o700); err != nil {
-		return fmt.Errorf("create manifest dir: %w", err)
+		return repoerrors.Errorf("create manifest dir: %w", err)
 	}
 
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal manifest: %w", err)
+		return repoerrors.Errorf("marshal manifest: %w", err)
 	}
 
 	if err := safeio.WriteFileAtomic(manifestFile, data, 0o600); err != nil {
-		return fmt.Errorf("write manifest: %w", err)
+		return repoerrors.Errorf("write manifest: %w", err)
 	}
 
 	return nil
@@ -218,15 +218,15 @@ func (s *Store) LoadManifest(hostID, namespace, slug, version string) (*BundleMa
 	data, err := os.ReadFile(manifestFile) //nolint:gosec // path constructed from validated components
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("manifest %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
+			return nil, repoerrors.Errorf("manifest %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("read manifest: %w", err)
+		return nil, repoerrors.Errorf("read manifest: %w", err)
 	}
 
 	var manifest BundleManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("unmarshal manifest: %w", err)
+		return nil, repoerrors.Errorf("unmarshal manifest: %w", err)
 	}
 
 	return &manifest, nil
@@ -237,16 +237,16 @@ func (s *Store) StoreManifestMeta(hostID, namespace, slug, version string, meta 
 	metaFile := s.manifestMetaPath(hostID, namespace, slug, version)
 
 	if err := safeio.MkdirAll(filepath.Dir(metaFile), 0o700); err != nil {
-		return fmt.Errorf("create manifest meta dir: %w", err)
+		return repoerrors.Errorf("create manifest meta dir: %w", err)
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal manifest meta: %w", err)
+		return repoerrors.Errorf("marshal manifest meta: %w", err)
 	}
 
 	if err := safeio.WriteFileAtomic(metaFile, data, 0o600); err != nil {
-		return fmt.Errorf("write manifest meta: %w", err)
+		return repoerrors.Errorf("write manifest meta: %w", err)
 	}
 
 	return nil
@@ -260,15 +260,15 @@ func (s *Store) LoadManifestMeta(hostID, namespace, slug, version string) (*Mani
 	data, err := os.ReadFile(metaFile) //nolint:gosec // path constructed from validated components
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("manifest meta %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
+			return nil, repoerrors.Errorf("manifest meta %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("read manifest meta: %w", err)
+		return nil, repoerrors.Errorf("read manifest meta: %w", err)
 	}
 
 	var meta ManifestMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("unmarshal manifest meta: %w", err)
+		return nil, repoerrors.Errorf("unmarshal manifest meta: %w", err)
 	}
 
 	return &meta, nil
@@ -294,16 +294,16 @@ func (s *Store) UpdateRef(hostID, namespace, slug string, ref *RefData) error {
 	refFile := s.refPath(hostID, namespace, slug)
 
 	if err := safeio.MkdirAll(filepath.Dir(refFile), 0o700); err != nil {
-		return fmt.Errorf("create ref dir: %w", err)
+		return repoerrors.Errorf("create ref dir: %w", err)
 	}
 
 	data, err := json.MarshalIndent(ref, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal ref: %w", err)
+		return repoerrors.Errorf("marshal ref: %w", err)
 	}
 
 	if err := safeio.WriteFileAtomic(refFile, data, 0o600); err != nil {
-		return fmt.Errorf("write ref: %w", err)
+		return repoerrors.Errorf("write ref: %w", err)
 	}
 
 	return nil
@@ -317,15 +317,15 @@ func (s *Store) ReadRef(hostID, namespace, slug string) (*RefData, error) {
 	data, err := os.ReadFile(refFile) //nolint:gosec // path constructed from validated components
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("ref %s/%s: %w", namespace, slug, ErrNotFound)
+			return nil, repoerrors.Errorf("ref %s/%s: %w", namespace, slug, ErrNotFound)
 		}
 
-		return nil, fmt.Errorf("read ref: %w", err)
+		return nil, repoerrors.Errorf("read ref: %w", err)
 	}
 
 	var ref RefData
 	if err := json.Unmarshal(data, &ref); err != nil {
-		return nil, fmt.Errorf("unmarshal ref: %w", err)
+		return nil, repoerrors.Errorf("unmarshal ref: %w", err)
 	}
 
 	return &ref, nil
@@ -354,7 +354,7 @@ func (s *Store) CleanExpired() (CleanResult, error) {
 	// Walk manifests and remove expired ones.
 	manifestsRemoved, err := s.removeExpiredManifests(manifestsDir)
 	if err != nil {
-		return result, fmt.Errorf("clean expired manifests: %w", err)
+		return result, repoerrors.Errorf("clean expired manifests: %w", err)
 	}
 
 	result.ManifestsRemoved = manifestsRemoved
@@ -362,7 +362,7 @@ func (s *Store) CleanExpired() (CleanResult, error) {
 	// Walk refs and remove expired ones.
 	refsRemoved, err := s.removeExpiredRefs(refsDir)
 	if err != nil {
-		return result, fmt.Errorf("clean expired refs: %w", err)
+		return result, repoerrors.Errorf("clean expired refs: %w", err)
 	}
 
 	result.RefsRemoved = refsRemoved
@@ -370,7 +370,7 @@ func (s *Store) CleanExpired() (CleanResult, error) {
 	// Garbage-collect orphaned blobs.
 	pruned, err := s.PruneBlobs()
 	if err != nil {
-		return result, fmt.Errorf("prune blobs: %w", err)
+		return result, repoerrors.Errorf("prune blobs: %w", err)
 	}
 
 	result.BlobsRemoved = pruned
@@ -401,7 +401,7 @@ func (s *Store) PruneUnreferenced(referenced map[string]bool) (int, error) {
 			return 0, nil
 		}
 
-		return 0, fmt.Errorf("read blobs directory: %w", err)
+		return 0, repoerrors.Errorf("read blobs directory: %w", err)
 	}
 
 	for _, prefix := range prefixes {
@@ -434,12 +434,12 @@ func (s *Store) PruneUnreferenced(referenced map[string]bool) (int, error) {
 func (s *Store) PurgeBundle(hostID, namespace, slug string) error {
 	manifestDir := filepath.Join(s.root, "manifests", hostID, namespace, slug)
 	if err := os.RemoveAll(manifestDir); err != nil {
-		return fmt.Errorf("remove manifest dir: %w", err)
+		return repoerrors.Errorf("remove manifest dir: %w", err)
 	}
 
 	refDir := filepath.Join(s.root, "refs", hostID, namespace, slug)
 	if err := os.RemoveAll(refDir); err != nil {
-		return fmt.Errorf("remove ref dir: %w", err)
+		return repoerrors.Errorf("remove ref dir: %w", err)
 	}
 
 	return nil
@@ -459,7 +459,7 @@ func (s *Store) PurgeManifest(hostID, namespace, slug, version string) error {
 // ClearAll removes the entire cache directory.
 func (s *Store) ClearAll() error {
 	if err := os.RemoveAll(s.root); err != nil {
-		return fmt.Errorf("remove cache root: %w", err)
+		return repoerrors.Errorf("remove cache root: %w", err)
 	}
 
 	return nil
@@ -494,7 +494,7 @@ func (s *Store) DiskUsage() (totalBytes int64, blobCount int, err error) {
 		return nil
 	})
 	if walkErr != nil {
-		return totalBytes, blobCount, fmt.Errorf("walk cache root: %w", walkErr)
+		return totalBytes, blobCount, repoerrors.Errorf("walk cache root: %w", walkErr)
 	}
 
 	return totalBytes, blobCount, nil
@@ -512,7 +512,7 @@ func (s *Store) EnsureCacheDirTag() error {
 	}
 
 	if writeErr := safeio.WriteFile(tagPath, []byte(cacheDirTagContent), 0o644); writeErr != nil {
-		return fmt.Errorf("write CACHEDIR.TAG: %w", writeErr)
+		return repoerrors.Errorf("write CACHEDIR.TAG: %w", writeErr)
 	}
 
 	return nil
@@ -577,7 +577,7 @@ func (s *Store) collectReferencedDigests() (map[string]bool, error) {
 		return nil
 	})
 	if walkErr != nil {
-		return referenced, fmt.Errorf("walk manifests: %w", walkErr)
+		return referenced, repoerrors.Errorf("walk manifests: %w", walkErr)
 	}
 
 	return referenced, nil
@@ -623,7 +623,7 @@ func (s *Store) removeExpiredManifests(dir string) (int, error) {
 		return nil
 	})
 	if walkErr != nil {
-		return removed, fmt.Errorf("walk expired manifests: %w", walkErr)
+		return removed, repoerrors.Errorf("walk expired manifests: %w", walkErr)
 	}
 
 	return removed, nil
@@ -663,7 +663,7 @@ func (s *Store) removeExpiredRefs(dir string) (int, error) {
 		return nil
 	})
 	if walkErr != nil {
-		return removed, fmt.Errorf("walk expired refs: %w", walkErr)
+		return removed, repoerrors.Errorf("walk expired refs: %w", walkErr)
 	}
 
 	return removed, nil

@@ -110,7 +110,7 @@ func updateToLatest(ctx context.Context, out *output.Writer, updater *update.Upd
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(info); jsonErr != nil {
-			return fmt.Errorf("print update info: %w", jsonErr)
+			return clierrors.Errorf("print update info: %w", jsonErr)
 		}
 
 		return nil

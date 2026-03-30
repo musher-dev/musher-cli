@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
@@ -19,7 +20,7 @@ const (
 func lockPath() (string, error) {
 	root, err := paths.RuntimeRoot()
 	if err != nil {
-		return "", fmt.Errorf("resolve runtime root: %w", err)
+		return "", repoerrors.Errorf("resolve runtime root: %w", err)
 	}
 
 	return filepath.Join(root, lockFileName), nil
@@ -33,7 +34,7 @@ func WithAgentLock(runFn func() error) error {
 	}
 
 	if mkdirErr := safeio.MkdirAll(filepath.Dir(path), 0o700); mkdirErr != nil {
-		return fmt.Errorf("create lock directory: %w", mkdirErr)
+		return repoerrors.Errorf("create lock directory: %w", mkdirErr)
 	}
 
 	acquired, lockErr := tryAcquire(path)
@@ -61,7 +62,7 @@ func tryAcquire(path string) (bool, error) {
 	}
 
 	if !errors.Is(err, os.ErrExist) {
-		return false, fmt.Errorf("create lock file: %w", err)
+		return false, repoerrors.Errorf("create lock file: %w", err)
 	}
 
 	stat, statErr := os.Stat(path)
@@ -70,7 +71,7 @@ func tryAcquire(path string) (bool, error) {
 			return tryAcquire(path)
 		}
 
-		return false, fmt.Errorf("stat lock file: %w", statErr)
+		return false, repoerrors.Errorf("stat lock file: %w", statErr)
 	}
 
 	if time.Since(stat.ModTime()) < lockStaleTTL {
@@ -78,7 +79,7 @@ func tryAcquire(path string) (bool, error) {
 	}
 
 	if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
-		return false, fmt.Errorf("remove stale lock: %w", removeErr)
+		return false, repoerrors.Errorf("remove stale lock: %w", removeErr)
 	}
 
 	return tryAcquire(path)

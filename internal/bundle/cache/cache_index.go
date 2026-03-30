@@ -2,12 +2,13 @@ package cache
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // CachedBundle describes a single bundle version present in the cache.
@@ -163,7 +164,7 @@ func buildCachedBundle(manifestsDir, hostID, namespace, slug, version string) Ca
 func safeReadDir(dir string) ([]os.DirEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("read directory %s: %w", dir, err)
+		return nil, repoerrors.Errorf("read directory %s: %w", dir, err)
 	}
 
 	return entries, nil

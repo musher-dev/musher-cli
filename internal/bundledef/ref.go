@@ -2,8 +2,9 @@ package bundledef
 
 import (
 	"errors"
-	"fmt"
 	"strings"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // Ref represents a parsed bundle reference in the form namespace/slug or
@@ -23,7 +24,7 @@ func ParseRef(raw string) (Ref, error) {
 	}
 
 	if ref.Version == "" {
-		return Ref{}, fmt.Errorf("ref %q requires a version (use namespace/slug:version)", raw)
+		return Ref{}, repoerrors.Errorf("ref %q requires a version (use namespace/slug:version)", raw)
 	}
 
 	return ref, nil
@@ -44,18 +45,18 @@ func ParseRefOptionalVersion(raw string) (Ref, error) {
 		version = raw[colonIdx+1:]
 
 		if version == "" {
-			return Ref{}, fmt.Errorf("empty version in ref %q (use namespace/slug or namespace/slug:version)", raw)
+			return Ref{}, repoerrors.Errorf("empty version in ref %q (use namespace/slug or namespace/slug:version)", raw)
 		}
 	}
 
 	namespace, slug, ok := strings.Cut(nsSlug, "/")
 	if !ok || namespace == "" || slug == "" {
-		return Ref{}, fmt.Errorf("ref %q must be in the format namespace/slug or namespace/slug:version", raw)
+		return Ref{}, repoerrors.Errorf("ref %q must be in the format namespace/slug or namespace/slug:version", raw)
 	}
 
 	// Reject slugs that contain additional slashes.
 	if strings.Contains(slug, "/") {
-		return Ref{}, fmt.Errorf("ref %q contains too many path segments (expected namespace/slug)", raw)
+		return Ref{}, repoerrors.Errorf("ref %q contains too many path segments (expected namespace/slug)", raw)
 	}
 
 	return Ref{
@@ -74,7 +75,7 @@ func ParseRefNoVersion(raw string) (Ref, error) {
 	}
 
 	if ref.Version != "" {
-		return Ref{}, fmt.Errorf("unexpected version in ref %q (use namespace/slug without a version)", raw)
+		return Ref{}, repoerrors.Errorf("unexpected version in ref %q (use namespace/slug without a version)", raw)
 	}
 
 	return ref, nil

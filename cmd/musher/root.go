@@ -23,6 +23,10 @@ func init() {
 	cobra.EnableCommandSorting = false
 }
 
+func defaultOutput() *output.Writer {
+	return output.Default()
+}
+
 // Command group IDs.
 const (
 	groupAuth        = "auth"
@@ -36,6 +40,10 @@ const (
 const cmdNameUpdate = "update"
 
 func newRootCmd() *cobra.Command {
+	return newRootCmdWithOutput(defaultOutput())
+}
+
+func newRootCmdWithOutput(out *output.Writer) *cobra.Command {
 	var (
 		jsonOutput bool
 		quiet      bool
@@ -49,8 +57,6 @@ func newRootCmd() *cobra.Command {
 		apiURL     string
 		apiKey     string
 	)
-
-	out := output.Default()
 
 	rootCmd := &cobra.Command{
 		Use:   "musher",
@@ -311,7 +317,7 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 
 	result, err := tui.RunHome(cmd.Context(), deps)
 	if err != nil {
-		return fmt.Errorf("home: %w", err)
+		return clierrors.Errorf("home: %w", err)
 	}
 
 	if result != nil && result.Action == "load" {

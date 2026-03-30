@@ -1,6 +1,7 @@
 package testutil_test
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,6 +90,13 @@ func TestTestContext(t *testing.T) {
 
 func TestNewTestServer(t *testing.T) {
 	t.Parallel()
+
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("local listeners unavailable in this environment: %v", err)
+	}
+
+	_ = listener.Close()
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -4,11 +4,11 @@ package prompt
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"golang.org/x/term"
 )
@@ -43,7 +43,7 @@ func (p *Prompter) Confirm(message string, defaultValue bool) (bool, error) {
 
 	input, err := p.reader.ReadString('\n')
 	if err != nil {
-		return defaultValue, fmt.Errorf("failed to read input: %w", err)
+		return defaultValue, repoerrors.Errorf("failed to read input: %w", err)
 	}
 
 	input = strings.TrimSpace(strings.ToLower(input))
@@ -62,7 +62,7 @@ func (p *Prompter) Password(prompt string) (string, error) {
 
 	oldState, err := term.MakeRaw(stdinFd)
 	if err != nil {
-		return "", fmt.Errorf("failed to set raw mode: %w", err)
+		return "", repoerrors.Errorf("failed to set raw mode: %w", err)
 	}
 
 	defer func() { _ = term.Restore(stdinFd, oldState) }() //nolint:errcheck // best-effort terminal restore
@@ -76,7 +76,7 @@ func (p *Prompter) Password(prompt string) (string, error) {
 		_, err := os.Stdin.Read(key[:])
 		if err != nil {
 			p.out.Println()
-			return "", fmt.Errorf("failed to read input: %w", err)
+			return "", repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		switch {
@@ -124,7 +124,7 @@ func (p *Prompter) Select(message string, options []string) (int, error) {
 
 		input, err := p.reader.ReadString('\n')
 		if err != nil {
-			return -1, fmt.Errorf("failed to read input: %w", err)
+			return -1, repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		input = strings.TrimSpace(input)
@@ -159,7 +159,7 @@ func (p *Prompter) SelectMultiple(message string, options []string) ([]int, erro
 
 		input, err := p.reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("failed to read input: %w", err)
+			return nil, repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		input = strings.TrimSpace(input)

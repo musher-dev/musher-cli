@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/skills"
 	"gopkg.in/yaml.v3"
 )
@@ -37,7 +38,7 @@ func Resolve(dir string) (string, error) {
 		return alt, nil
 	}
 
-	return "", fmt.Errorf("bundle definition file not found: %s or %s (run 'musher bundle init' to create one)", primary, alt)
+	return "", repoerrors.Errorf("bundle definition file not found: %s or %s (run 'musher bundle init' to create one)", primary, alt)
 }
 
 // Asset kind constants.
@@ -114,12 +115,12 @@ func Load(dir string) (*Def, error) {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return nil, fmt.Errorf("read bundle definition: %w", err)
+		return nil, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	var def Def
 	if err := yaml.Unmarshal(data, &def); err != nil {
-		return nil, fmt.Errorf("parse bundle definition: %w", err)
+		return nil, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
 	return &def, nil
@@ -131,11 +132,11 @@ func Save(dir string, d *Def) error {
 
 	data, err := yaml.Marshal(d)
 	if err != nil {
-		return fmt.Errorf("marshal bundle definition: %w", err)
+		return repoerrors.Errorf("marshal bundle definition: %w", err)
 	}
 
 	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return fmt.Errorf("write bundle definition: %w", err)
+		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return nil
@@ -151,19 +152,19 @@ func SetVersion(dir, version string) error {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return fmt.Errorf("read bundle definition: %w", err)
+		return repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	content := string(data)
 
 	if !versionLineRE.MatchString(content) {
-		return fmt.Errorf("version field not found in %s", path)
+		return repoerrors.Errorf("version field not found in %s", path)
 	}
 
 	content = versionLineRE.ReplaceAllString(content, "${1}"+version)
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return fmt.Errorf("write bundle definition: %w", err)
+		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return nil
@@ -180,7 +181,7 @@ func SetVisibility(dir, visibility string) error {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return fmt.Errorf("read bundle definition: %w", err)
+		return repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	content := string(data)
@@ -205,7 +206,7 @@ func SetVisibility(dir, visibility string) error {
 	}
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return fmt.Errorf("write bundle definition: %w", err)
+		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return nil
@@ -224,7 +225,7 @@ func (d *Def) Validate() error {
 	errs = append(errs, d.validateAssetFields()...)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("bundle definition validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+		return repoerrors.Errorf("bundle definition validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 
 	return nil
@@ -334,7 +335,7 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 	errs = append(errs, validateExtraFiles(bundleRoot, d.Readme, d.LicenseFile)...)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("path validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+		return repoerrors.Errorf("path validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 
 	return nil
@@ -463,7 +464,7 @@ func (d *Def) ValidateHubReadiness() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("bundle is not ready for Hub publishing — missing required fields:\n  - %s", strings.Join(missing, "\n  - "))
+		return repoerrors.Errorf("bundle is not ready for Hub publishing — missing required fields:\n  - %s", strings.Join(missing, "\n  - "))
 	}
 
 	return nil

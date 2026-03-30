@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -152,7 +151,7 @@ func printBundleLoadJSON(out *output.Writer, result *pullCacheResult, harnessNam
 	}
 
 	if jsonErr := out.PrintJSON(jsonResult); jsonErr != nil {
-		return fmt.Errorf("print JSON: %w", jsonErr)
+		return clierrors.Errorf("print JSON: %w", jsonErr)
 	}
 
 	return nil
@@ -200,7 +199,7 @@ func promptForAction(out *output.Writer, p *prompt.Prompter, result *pullCacheRe
 
 	choice, err := p.Select("What would you like to do?", options)
 	if err != nil {
-		return fmt.Errorf("prompt: %w", err)
+		return clierrors.Errorf("prompt: %w", err)
 	}
 
 	if choice == 0 {
@@ -223,7 +222,7 @@ func selectAndPrintHarness(out *output.Writer, p *prompt.Prompter, reg *harness.
 
 	choice, err := p.Select("Select a harness:", names)
 	if err != nil {
-		return fmt.Errorf("prompt: %w", err)
+		return clierrors.Errorf("prompt: %w", err)
 	}
 
 	return printHarnessCommand(out, result, available[choice].Spec.Name, versionRef)

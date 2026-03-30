@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/tui"
 )
@@ -51,7 +50,7 @@ falls back to batch output.`,
 
 			result, err := tui.RunSearch(cmd.Context(), apiClient, query)
 			if err != nil {
-				return fmt.Errorf("search: %w", err)
+				return repoerrors.Errorf("search: %w", err)
 			}
 
 			// If the user selected a bundle to load, print the reference.

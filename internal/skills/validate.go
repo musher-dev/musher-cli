@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,7 +31,7 @@ type frontmatter struct {
 func ParseFrontmatter(path string) (name, description string, err error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
-		return "", "", fmt.Errorf("read skill file: %w", err)
+		return "", "", repoerrors.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
@@ -45,7 +46,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 
 	var matter frontmatter
 	if err := yaml.Unmarshal([]byte(parts[0][4:]), &matter); err != nil {
-		return "", "", fmt.Errorf("parse frontmatter: %w", err)
+		return "", "", repoerrors.Errorf("parse frontmatter: %w", err)
 	}
 
 	if matter.Name == "" {
@@ -53,7 +54,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 	}
 
 	if !skillNamePattern.MatchString(matter.Name) {
-		return "", "", fmt.Errorf("name %q must contain only lowercase letters, numbers, and single hyphens", matter.Name)
+		return "", "", repoerrors.Errorf("name %q must contain only lowercase letters, numbers, and single hyphens", matter.Name)
 	}
 
 	return matter.Name, matter.Description, nil
@@ -63,7 +64,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 func ValidateFile(path string) error {
 	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
-		return fmt.Errorf("read skill file: %w", err)
+		return repoerrors.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
@@ -86,7 +87,7 @@ func ValidateFile(path string) error {
 	errs = append(errs, validateMetadata(rawFields)...)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%s", strings.Join(errs, "; "))
+		return repoerrors.Errorf("%s", strings.Join(errs, "; "))
 	}
 
 	return nil

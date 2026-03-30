@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
 
@@ -65,7 +66,7 @@ func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 	if logFilePath == "" && !stderrEnabled {
 		defaultLogFile, pathErr := paths.DefaultLogFile()
 		if pathErr != nil {
-			return nil, nil, fmt.Errorf("resolve default log file: %w", pathErr)
+			return nil, nil, repoerrors.Errorf("resolve default log file: %w", pathErr)
 		}
 
 		logFilePath = defaultLogFile
@@ -124,7 +125,7 @@ func buildWriters(stderrEnabled bool, logFilePath string, usingDefault bool) ([]
 	if logFilePath != "" {
 		if usingDefault {
 			if rotateErr := rotateLogFile(logFilePath, defaultLogMaxBytes, defaultLogBackups); rotateErr != nil {
-				return nil, nil, fmt.Errorf("rotate default log file: %w", rotateErr)
+				return nil, nil, repoerrors.Errorf("rotate default log file: %w", rotateErr)
 			}
 		}
 
@@ -152,7 +153,7 @@ func buildHandler(format string, w io.Writer, level slog.Leveler) (slog.Handler,
 	case "text":
 		return slog.NewTextHandler(w, handlerOpts), nil
 	default:
-		return nil, fmt.Errorf("invalid log format: %q (allowed: json, text)", format)
+		return nil, repoerrors.Errorf("invalid log format: %q (allowed: json, text)", format)
 	}
 }
 
@@ -169,12 +170,12 @@ func openLogFile(path string) (*os.File, error) {
 	}
 
 	if mkErr := os.MkdirAll(filepath.Dir(cleanPath), 0o700); mkErr != nil {
-		return nil, fmt.Errorf("create log file directory: %w", mkErr)
+		return nil, repoerrors.Errorf("create log file directory: %w", mkErr)
 	}
 
 	file, err := os.OpenFile(filepath.Clean(cleanPath), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("open log file: %w", err)
+		return nil, repoerrors.Errorf("open log file: %w", err)
 	}
 
 	return file, nil
@@ -191,7 +192,7 @@ func rotateLogFile(path string, maxBytes int64, maxBackups int) error {
 			return nil
 		}
 
-		return fmt.Errorf("stat log file: %w", err)
+		return repoerrors.Errorf("stat log file: %w", err)
 	}
 
 	if info.Size() < maxBytes {
@@ -200,7 +201,7 @@ func rotateLogFile(path string, maxBytes int64, maxBackups int) error {
 
 	lastBackup := fmt.Sprintf("%s.%d", path, maxBackups)
 	if removeErr := os.Remove(lastBackup); removeErr != nil && !os.IsNotExist(removeErr) {
-		return fmt.Errorf("remove oldest rotated log: %w", removeErr)
+		return repoerrors.Errorf("remove oldest rotated log: %w", removeErr)
 	}
 
 	for i := maxBackups - 1; i >= 1; i-- {
@@ -212,17 +213,17 @@ func rotateLogFile(path string, maxBytes int64, maxBackups int) error {
 				continue
 			}
 
-			return fmt.Errorf("stat rotated log %s: %w", src, statErr)
+			return repoerrors.Errorf("stat rotated log %s: %w", src, statErr)
 		}
 
 		if err := os.Rename(src, dst); err != nil {
-			return fmt.Errorf("rotate log %s -> %s: %w", src, dst, err)
+			return repoerrors.Errorf("rotate log %s -> %s: %w", src, dst, err)
 		}
 	}
 
 	firstBackup := path + ".1"
 	if err := os.Rename(path, firstBackup); err != nil {
-		return fmt.Errorf("rotate current log to backup: %w", err)
+		return repoerrors.Errorf("rotate current log to backup: %w", err)
 	}
 
 	return nil
@@ -237,7 +238,7 @@ func shouldEnableStderr(mode string, interactiveTTY bool) (bool, error) {
 	case "off", "false", "0":
 		return false, nil
 	default:
-		return false, fmt.Errorf("invalid --log-stderr value %q (allowed: auto, on, off)", mode)
+		return false, repoerrors.Errorf("invalid --log-stderr value %q (allowed: auto, on, off)", mode)
 	}
 }
 
@@ -252,7 +253,7 @@ func parseLevel(level string) (slog.Leveler, error) {
 	case "error":
 		return slog.LevelError, nil
 	default:
-		return nil, fmt.Errorf("invalid log level: %q (allowed: error, warn, info, debug)", level)
+		return nil, repoerrors.Errorf("invalid log level: %q (allowed: error, warn, info, debug)", level)
 	}
 }
 

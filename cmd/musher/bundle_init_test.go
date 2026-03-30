@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -443,15 +441,14 @@ func TestResolveNamespaceReturnsNamespaceWhenAuthenticated(t *testing.T) {
 			{Handle: "my-org"},
 		},
 	}
+	original := fetchPublisherIdentity
+	fetchPublisherIdentity = func(context.Context) (*client.PublisherIdentity, error) {
+		return identity, nil
+	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(identity)
-	}))
-	defer srv.Close()
-
-	t.Setenv("MUSHER_API_URL", srv.URL)
-	t.Setenv("MUSHER_API_KEY", "test-key")
+	t.Cleanup(func() {
+		fetchPublisherIdentity = original
+	})
 
 	out := testWriter()
 
@@ -470,14 +467,14 @@ func TestResolveNamespaceMultipleAuthenticated(t *testing.T) {
 		},
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(identity)
-	}))
-	defer srv.Close()
+	original := fetchPublisherIdentity
+	fetchPublisherIdentity = func(context.Context) (*client.PublisherIdentity, error) {
+		return identity, nil
+	}
 
-	t.Setenv("MUSHER_API_URL", srv.URL)
-	t.Setenv("MUSHER_API_KEY", "test-key")
+	t.Cleanup(func() {
+		fetchPublisherIdentity = original
+	})
 
 	out := testWriter()
 

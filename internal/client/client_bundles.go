@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // BundleLayer represents a single asset layer in a bundle manifest.
@@ -47,12 +49,12 @@ func (c *Client) ResolveBundle(ctx context.Context, namespace, slug, version str
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("resolve bundle: %w", err)
+		return nil, repoerrors.Errorf("resolve bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+		return nil, repoerrors.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -84,12 +86,12 @@ func (c *Client) PullBundle(ctx context.Context, namespace, slug, version string
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("pull bundle: %w", err)
+		return nil, repoerrors.Errorf("pull bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+		return nil, repoerrors.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -116,12 +118,12 @@ func (c *Client) FetchBundleAsset(ctx context.Context, assetID string) (io.ReadC
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("fetch bundle asset: %w", err)
+		return nil, repoerrors.Errorf("fetch bundle asset: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		resp.Body.Close()
-		return nil, fmt.Errorf("asset %s not found", assetID)
+		return nil, repoerrors.Errorf("asset %s not found", assetID)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -141,7 +143,7 @@ func (c *Client) FetchHubBundleAsset(ctx context.Context, namespace, slug, asset
 		neturl.PathEscape(assetPath),
 	))
 	if err != nil {
-		return nil, fmt.Errorf("parse hub asset endpoint: %w", err)
+		return nil, repoerrors.Errorf("parse hub asset endpoint: %w", err)
 	}
 
 	if version != "" {
@@ -157,12 +159,12 @@ func (c *Client) FetchHubBundleAsset(ctx context.Context, namespace, slug, asset
 
 	resp, err := c.do(req, "/v1/hub/bundles/{ns}/{slug}/assets/{path}")
 	if err != nil {
-		return nil, fmt.Errorf("fetch hub bundle asset: %w", err)
+		return nil, repoerrors.Errorf("fetch hub bundle asset: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		resp.Body.Close()
-		return nil, fmt.Errorf("hub asset %s/%s/%s not found", namespace, slug, assetPath)
+		return nil, repoerrors.Errorf("hub asset %s/%s/%s not found", namespace, slug, assetPath)
 	}
 
 	if resp.StatusCode != http.StatusOK {

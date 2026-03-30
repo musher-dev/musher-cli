@@ -9,8 +9,8 @@ package harness
 
 import (
 	"errors"
-	"fmt"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -78,7 +78,7 @@ type AuthCheck struct {
 func ParseSpec(data []byte) (*Spec, error) {
 	var spec Spec
 	if err := yaml.Unmarshal(data, &spec); err != nil {
-		return nil, fmt.Errorf("parse harness spec: %w", err)
+		return nil, repoerrors.Errorf("parse harness spec: %w", err)
 	}
 
 	if spec.Name == "" {
@@ -86,21 +86,21 @@ func ParseSpec(data []byte) (*Spec, error) {
 	}
 
 	if spec.Binary == "" {
-		return nil, fmt.Errorf("harness spec %q missing required field: binary", spec.Name)
+		return nil, repoerrors.Errorf("harness spec %q missing required field: binary", spec.Name)
 	}
 
 	switch spec.BundleDir.Mode {
 	case "add_dir", "cwd", "":
 		// valid
 	default:
-		return nil, fmt.Errorf("harness spec %q: invalid bundleDir.mode %q (must be \"add_dir\" or \"cwd\")", spec.Name, spec.BundleDir.Mode)
+		return nil, repoerrors.Errorf("harness spec %q: invalid bundleDir.mode %q (must be \"add_dir\" or \"cwd\")", spec.Name, spec.BundleDir.Mode)
 	}
 
 	switch spec.MCP.Format {
 	case "json", "toml", "":
 		// valid
 	default:
-		return nil, fmt.Errorf("harness spec %q: invalid mcp.format %q (must be \"json\" or \"toml\")", spec.Name, spec.MCP.Format)
+		return nil, repoerrors.Errorf("harness spec %q: invalid mcp.format %q (must be \"json\" or \"toml\")", spec.Name, spec.MCP.Format)
 	}
 
 	return &spec, nil

@@ -61,7 +61,7 @@ func runCacheInfo(out *output.Writer) error {
 			Entries:   len(entries),
 			BlobCount: blobCount,
 		}); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil

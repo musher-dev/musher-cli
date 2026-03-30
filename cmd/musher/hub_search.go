@@ -85,7 +85,7 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(result); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil

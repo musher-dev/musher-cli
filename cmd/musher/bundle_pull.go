@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -111,7 +110,7 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		}
 
 		if jsonErr := out.PrintJSON(jsonResult); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
@@ -48,8 +49,71 @@ type ProbeResult struct {
 // (e.g. from network.ca_cert_file config), ensuring probe TLS behavior
 // matches the main API client.
 func ProbeHealth(ctx context.Context, baseURL string, caCertFile ...string) *ProbeResult {
+	httpClient, parseResult := buildProbeHTTPClient(baseURL, caCertFile...)
+	if parseResult != nil {
+		return parseResult
+	}
+
+	return probeHealthWithClient(ctx, baseURL, httpClient)
+}
+
+func buildProbeHTTPClient(baseURL string, caCertFile ...string) (*http.Client, *ProbeResult) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
+		return nil, &ProbeResult{
+			Host:  baseURL,
+			Error: "invalid URL",
+		}
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return nil, &ProbeResult{
+			Host:  baseURL,
+			Error: "invalid URL",
+		}
+	}
+
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, &ProbeResult{
+			Host:  host,
+			Error: "unable to create HTTP transport",
+		}
+	}
+
+	cloned := transport.Clone()
+
+	if len(caCertFile) > 0 {
+		caPath := strings.TrimSpace(caCertFile[0])
+		if caPath != "" {
+			tlsCfg, tlsErr := buildProbeTLSConfig(caPath)
+			if tlsErr != nil {
+				return nil, &ProbeResult{
+					Host:  host,
+					Error: fmt.Sprintf("custom CA bundle error: %v", tlsErr),
+				}
+			}
+
+			cloned.TLSClientConfig = tlsCfg
+		}
+	}
+
+	return &http.Client{
+		Timeout:   probeTimeout,
+		Transport: cloned,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, nil
+}
+
+func probeHealthWithClient(ctx context.Context, baseURL string, httpClient *http.Client) *ProbeResult {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+
+	parsed, parseErr := url.Parse(baseURL)
+	if parseErr != nil {
 		return &ProbeResult{
 			Host:  baseURL,
 			Error: "invalid URL",
@@ -63,42 +127,6 @@ func ProbeHealth(ctx context.Context, baseURL string, caCertFile ...string) *Pro
 			Error: "invalid URL",
 		}
 	}
-
-	transport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		return &ProbeResult{
-			Host:  host,
-			Error: "unable to create HTTP transport",
-		}
-	}
-
-	cloned := transport.Clone()
-
-	if len(caCertFile) > 0 {
-		caPath := strings.TrimSpace(caCertFile[0])
-		if caPath != "" {
-			tlsCfg, tlsErr := buildProbeTLSConfig(caPath)
-			if tlsErr != nil {
-				return &ProbeResult{
-					Host:  host,
-					Error: fmt.Sprintf("custom CA bundle error: %v", tlsErr),
-				}
-			}
-
-			cloned.TLSClientConfig = tlsCfg
-		}
-	}
-
-	httpClient := &http.Client{
-		Timeout:   probeTimeout,
-		Transport: cloned,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, http.NoBody)
 	if err != nil {
@@ -198,7 +226,7 @@ func summarizeNetworkError(err error) string {
 func buildProbeTLSConfig(caPath string) (*tls.Config, error) {
 	pemData, err := safeio.ReadFile(caPath)
 	if err != nil {
-		return nil, fmt.Errorf("read probe CA cert: %w", err)
+		return nil, repoerrors.Errorf("read probe CA cert: %w", err)
 	}
 
 	pool, err := x509.SystemCertPool()
@@ -207,7 +235,7 @@ func buildProbeTLSConfig(caPath string) (*tls.Config, error) {
 	}
 
 	if ok := pool.AppendCertsFromPEM(pemData); !ok {
-		return nil, fmt.Errorf("parse probe CA cert %q: no certificates found", caPath)
+		return nil, repoerrors.Errorf("parse probe CA cert %q: no certificates found", caPath)
 	}
 
 	return &tls.Config{

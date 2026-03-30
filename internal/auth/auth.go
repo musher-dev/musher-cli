@@ -3,11 +3,11 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 	"github.com/zalando/go-keyring"
@@ -125,11 +125,11 @@ func writeCredentialsFile(apiURL, apiKey string) error {
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("failed to create credentials directory: %w", err)
+		return repoerrors.Errorf("failed to create credentials directory: %w", err)
 	}
 
 	if err := safeio.WriteFileAtomic(path, []byte(apiKey+"\n"), 0o600); err != nil {
-		return fmt.Errorf("failed to write credentials file: %w", err)
+		return repoerrors.Errorf("failed to write credentials file: %w", err)
 	}
 
 	return nil
@@ -147,7 +147,7 @@ func deleteCredentialsFile(apiURL string) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("remove credentials file: %w", err)
+		return repoerrors.Errorf("remove credentials file: %w", err)
 	}
 
 	return nil
