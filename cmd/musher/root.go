@@ -197,6 +197,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	loadCmd.GroupID = groupConsumer
 	rootCmd.AddCommand(loadCmd)
 
+	runCmd := newRunCmd()
+	runCmd.GroupID = groupConsumer
+	rootCmd.AddCommand(runCmd)
+
 	// Bundle group
 	bundleCmd := newBundleCmd()
 	bundleCmd.GroupID = groupBundle
