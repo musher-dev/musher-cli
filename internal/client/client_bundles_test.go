@@ -19,6 +19,7 @@ func TestResolveBundle(t *testing.T) {
 
 		c := testutil.NewMockClient("test-key", func(req *http.Request) (*http.Response, error) {
 			gotPath = req.URL.Path
+
 			return testutil.JSONResponse(http.StatusOK, `{
 				"namespace": "acme",
 				"slug": "tool",
@@ -70,6 +71,7 @@ func TestPullBundle(t *testing.T) {
 
 	c := testutil.NewMockClient("test-key", func(req *http.Request) (*http.Response, error) {
 		gotPath = req.URL.Path
+
 		return testutil.JSONResponse(http.StatusOK, `{
 			"namespace": "acme",
 			"slug": "tool",
@@ -132,6 +134,7 @@ func TestFetchHubBundleAsset(t *testing.T) {
 	c := testutil.NewMockClient("", func(req *http.Request) (*http.Response, error) {
 		gotPath = req.URL.Path
 		gotQuery = req.URL.RawQuery
+
 		return testutil.JSONResponse(http.StatusOK, `hub asset content`), nil
 	})
 

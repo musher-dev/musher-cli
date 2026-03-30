@@ -114,8 +114,8 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 
 	// Pre-check for version conflict.
 	p := prompt.New(out)
-	exists, checkErr := c.CheckBundleVersionExists(ctx, bundle.Namespace, bundle.Slug, bundle.Version)
 
+	exists, checkErr := c.CheckBundleVersionExists(ctx, bundle.Namespace, bundle.Slug, bundle.Version)
 	if checkErr != nil {
 		// Pre-check unavailable — log and fall through to push (will catch 409 reactively).
 		logger.Debug("version pre-check failed, skipping", slog.String("error", checkErr.Error()))
@@ -165,6 +165,7 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 
 	// Read README content if specified.
 	var readmeContent, readmeFormat string
+
 	if bundle.Readme != "" {
 		readmePath := filepath.Join(workDir, bundle.Readme)
 
@@ -305,6 +306,7 @@ func handleVersionConflictRecovery(
 	}
 
 	out.Println()
+
 	idx, selectErr := p.Select("Select a new version:", options)
 	if selectErr != nil {
 		return false, clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", selectErr)

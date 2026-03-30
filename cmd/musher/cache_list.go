@@ -60,8 +60,8 @@ func runCacheList(out *output.Writer, pattern string) error {
 
 		for _, entry := range entries {
 			bundleName := entry.Namespace + "/" + entry.Slug
-			matched, matchErr := doublestar.Match(pattern, bundleName)
 
+			matched, matchErr := doublestar.Match(pattern, bundleName)
 			if matchErr != nil {
 				return clierrors.Wrap(clierrors.ExitUsage, "Invalid pattern", matchErr)
 			}

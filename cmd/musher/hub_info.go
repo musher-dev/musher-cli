@@ -56,6 +56,7 @@ func runHubInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
 	}
 
 	out.Print("%s/%s\n", detail.Publisher.Handle, detail.Slug)
+
 	if detail.DisplayName != "" {
 		out.Print("  %s\n", detail.DisplayName)
 	}

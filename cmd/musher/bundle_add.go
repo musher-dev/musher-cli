@@ -168,6 +168,7 @@ func runAddAll(out *output.Writer, workDir string, def *bundledef.Def, opts addO
 
 	if !opts.yes && !opts.dryRun {
 		out.Info("Found %d asset(s) to add:", len(assets))
+
 		for _, asset := range assets {
 			out.Info("  %s (%s)", asset.Src, asset.Kind)
 		}

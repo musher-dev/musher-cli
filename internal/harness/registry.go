@@ -48,6 +48,7 @@ func (r *Registry) Get(name string) (*Provider, bool) {
 	defer r.mu.RUnlock()
 
 	prov, ok := r.providers[name]
+
 	return prov, ok
 }
 

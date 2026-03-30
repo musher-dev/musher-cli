@@ -88,6 +88,7 @@ func ValidateSchema(yamlData []byte) []ValidationError {
 func flattenErrors(valErr *jsonschema.ValidationError) []ValidationError {
 	if len(valErr.Causes) == 0 {
 		msg := valErr.Error()
+
 		path := "/" + strings.Join(valErr.InstanceLocation, "/")
 		if len(valErr.InstanceLocation) == 0 {
 			path = ""

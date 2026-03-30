@@ -82,6 +82,7 @@ func ValidateFile(path string) error {
 	}
 
 	var errs []string
+
 	allowed := map[string]struct{}{
 		"name":          {},
 		"description":   {},
@@ -98,8 +99,10 @@ func ValidateFile(path string) error {
 	}
 
 	var matter frontmatter
+
 	decoder := yaml.NewDecoder(bytes.NewReader([]byte(parts[0][4:])))
 	decoder.KnownFields(true)
+
 	if err := decoder.Decode(&matter); err != nil {
 		errs = append(errs, fmt.Sprintf("decode frontmatter: %v", err))
 	}

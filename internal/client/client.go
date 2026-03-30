@@ -105,6 +105,7 @@ type Identity struct {
 // UnmarshalJSON decodes the identity JSON payload.
 func (i *Identity) UnmarshalJSON(data []byte) error {
 	type identityAlias Identity
+
 	var aux identityAlias
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("unmarshal identity: %w", err)

@@ -200,6 +200,7 @@ func TestRunInitDoesNotOverwriteExistingSkill(t *testing.T) {
 	}
 
 	original := []byte("# My custom skill content\n")
+
 	skillPath := filepath.Join(skillDir, "SKILL.md")
 	if err := os.WriteFile(skillPath, original, 0o644); err != nil {
 		t.Fatal(err)
@@ -231,6 +232,7 @@ func TestRunInitDoesNotOverwriteExistingAgent(t *testing.T) {
 	}
 
 	original := []byte("# My custom agent\n")
+
 	agentPath := filepath.Join(agentDir, "reviewer.md")
 	if err := os.WriteFile(agentPath, original, 0o644); err != nil {
 		t.Fatal(err)

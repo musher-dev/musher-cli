@@ -57,6 +57,7 @@ func normalizeHubSearchSort(sort string) (string, bool) {
 
 func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sort string, limit int) error {
 	var warned bool
+
 	sort, warned = normalizeHubSearchSort(sort)
 	if warned {
 		out.Warning("--sort updated is deprecated; using recent")
@@ -96,9 +97,11 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 	for i := range result.Data {
 		bundle := &result.Data[i]
 		out.Print("%s/%s", bundle.Publisher.Handle, bundle.Slug)
+
 		if bundle.LatestVersion != "" {
 			out.Print(":%s", bundle.LatestVersion)
 		}
+
 		out.Print("\n")
 
 		if bundle.Summary != "" {

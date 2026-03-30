@@ -62,6 +62,7 @@ func TestRunAddExplicitPath(t *testing.T) {
 	}
 
 	found := false
+
 	for _, a := range def.Assets {
 		if a.Src == "skills/deploy/SKILL.md" {
 			found = true
@@ -110,6 +111,7 @@ func TestRunAddExplicitWithOverrides(t *testing.T) {
 	}
 
 	found := false
+
 	for _, a := range def.Assets {
 		if a.Src == "agents/reviewer.md" {
 			found = true

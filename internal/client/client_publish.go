@@ -151,8 +151,11 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 		neturl.PathEscape(version),
 	)
 
-	var body []byte
-	var err error
+	var (
+		body []byte
+		err  error
+	)
+
 	if reason != "" {
 		body, err = encodeJSON(&YankBundleVersionRequest{Reason: reason})
 		if err != nil {
@@ -166,6 +169,7 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 	} else {
 		req, err = c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
 	}
+
 	if err != nil {
 		return err
 	}

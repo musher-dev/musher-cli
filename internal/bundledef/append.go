@@ -31,6 +31,7 @@ func AppendAssets(dir string, assets []Asset) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
 		return 0, fmt.Errorf("write bundle definition: %w", err)
 	}
@@ -75,6 +76,7 @@ func renderAppend(dir string, assets []Asset) (resultContent string, appended in
 
 	// Filter out already-tracked assets.
 	var toAppend []Asset
+
 	for _, asset := range assets {
 		if !trackedSrc[filepath.ToSlash(asset.Src)] {
 			toAppend = append(toAppend, asset)

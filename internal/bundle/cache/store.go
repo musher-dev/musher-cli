@@ -493,7 +493,6 @@ func (s *Store) DiskUsage() (totalBytes int64, blobCount int, err error) {
 
 		return nil
 	})
-
 	if walkErr != nil {
 		return totalBytes, blobCount, fmt.Errorf("walk cache root: %w", walkErr)
 	}
@@ -577,7 +576,6 @@ func (s *Store) collectReferencedDigests() (map[string]bool, error) {
 
 		return nil
 	})
-
 	if walkErr != nil {
 		return referenced, fmt.Errorf("walk manifests: %w", walkErr)
 	}
@@ -624,7 +622,6 @@ func (s *Store) removeExpiredManifests(dir string) (int, error) {
 
 		return nil
 	})
-
 	if walkErr != nil {
 		return removed, fmt.Errorf("walk expired manifests: %w", walkErr)
 	}
@@ -665,7 +662,6 @@ func (s *Store) removeExpiredRefs(dir string) (int, error) {
 
 		return nil
 	})
-
 	if walkErr != nil {
 		return removed, fmt.Errorf("walk expired refs: %w", walkErr)
 	}

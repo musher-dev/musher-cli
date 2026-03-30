@@ -54,6 +54,7 @@ listings.`,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			if os.Geteuid() == 0 && cmd.Name() != "update" {
 				out.Warning("Running as root is not recommended. Files created will be owned by root.")
+
 				if os.Getenv("SUDO_USER") != "" {
 					out.Warning("Credentials from 'musher auth login' are stored per-user and won't be accessible under sudo.")
 				}
@@ -136,8 +137,7 @@ listings.`,
 func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
 		&cobra.Group{ID: groupAuth, Title: "Authentication:"},
-		// groupConsumer ("Bundles:") will be registered when the first
-		// consumer command (install, load, run, etc.) is added.
+		&cobra.Group{ID: groupConsumer, Title: "Bundles:"},
 		&cobra.Group{ID: groupBundle, Title: "Authoring:"},
 		&cobra.Group{ID: groupHub, Title: "Hub:"},
 		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},
@@ -147,6 +147,15 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	authCmd := newAuthCmd()
 	authCmd.GroupID = groupAuth
 	rootCmd.AddCommand(authCmd)
+
+	// Consumer group
+	searchCmd := newSearchCmd()
+	searchCmd.GroupID = groupConsumer
+	rootCmd.AddCommand(searchCmd)
+
+	loadCmd := newLoadCmd()
+	loadCmd.GroupID = groupConsumer
+	rootCmd.AddCommand(loadCmd)
 
 	// Bundle group
 	bundleCmd := newBundleCmd()

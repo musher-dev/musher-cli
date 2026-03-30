@@ -43,6 +43,7 @@ func runValidate(out *output.Writer) error {
 	if err == nil {
 		if schemaErrs := bundledef.ValidateSchema(yamlData); len(schemaErrs) > 0 {
 			parts := make([]string, 0, len(schemaErrs)+1)
+
 			parts = append(parts, "schema validation failed:")
 			for _, e := range schemaErrs {
 				parts = append(parts, "  - "+e.String())

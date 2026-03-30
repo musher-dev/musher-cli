@@ -56,6 +56,7 @@ func runHubCategories(cmd *cobra.Command, out *output.Writer) error {
 
 	for _, cat := range categories {
 		out.Print("%s  (%d bundles)\n", cat.DisplayName, cat.BundleCount)
+
 		if cat.Description != "" {
 			out.Muted("  %s", cat.Description)
 		}

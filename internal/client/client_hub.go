@@ -110,6 +110,7 @@ func (c *Client) SearchHubBundles(ctx context.Context, query, bundleType, sort s
 		if sort == "updated" {
 			sort = "recent"
 		}
+
 		params.Set("sort", sort)
 	}
 
@@ -317,8 +318,11 @@ func (c *Client) DeprecateHubBundle(ctx context.Context, publisherHandle, bundle
 		Message string `json:"message,omitempty"`
 	}
 
-	var body []byte
-	var err error
+	var (
+		body []byte
+		err  error
+	)
+
 	if message != "" {
 		body, err = encodeJSON(&deprecateRequest{Message: message})
 		if err != nil {
@@ -332,6 +336,7 @@ func (c *Client) DeprecateHubBundle(ctx context.Context, publisherHandle, bundle
 	} else {
 		req, err = c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
 	}
+
 	if err != nil {
 		return err
 	}

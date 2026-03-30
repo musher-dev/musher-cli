@@ -28,6 +28,7 @@ validate bundles, and push or pull versions from the registry.`,
 		newBundleValidateCmd(),
 		newBundlePushCmd(),
 		newBundlePullCmd(),
+		newBundleLoadCmd(),
 		newBundleYankCmd(),
 		newBundleUnyankCmd(),
 	)

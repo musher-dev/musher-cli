@@ -65,6 +65,7 @@ func runCacheClean(out *output.Writer, dryRun, force bool) error {
 	if dryRun {
 		out.Info("Would remove %d bundle(s), %d blob(s) (%s)",
 			len(entries), blobCount, formatBytes(totalBytes))
+
 		return nil
 	}
 
