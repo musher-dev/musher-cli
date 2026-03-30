@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/client"
+	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/paths"
@@ -27,8 +29,9 @@ func newBundlePullCmd() *cobra.Command {
 		Short: "Download a bundle from the registry",
 		Long: `Download a bundle version from the Musher registry.
 
-By default, bundles are cached in ~/.cache/musher/bundles/<namespace>/<slug>/<version>/.
-Use --output-dir to extract to a specific directory instead (flat layout, no symlinks).
+By default, bundles are cached in a content-addressable store under
+~/.cache/musher/ (blobs, manifests, and refs).
+Use --output-dir to extract flat files to a specific directory.
 
 If no version is specified, the latest version is downloaded.
 
@@ -57,7 +60,8 @@ type pullResult struct {
 	Namespace  string `json:"namespace"`
 	Slug       string `json:"slug"`
 	Version    string `json:"version"`
-	Dir        string `json:"dir"`
+	Dir        string `json:"dir,omitempty"`
+	CacheRoot  string `json:"cacheRoot"`
 	Cached     bool   `json:"cached"`
 	AssetCount int    `json:"assetCount,omitempty"`
 }
@@ -70,38 +74,61 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		return err
 	}
 
+	// Initialize the content-addressable cache store.
+	cacheRoot, err := paths.CacheRoot()
+	if err != nil {
+		return clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
+	}
+
+	store, err := cache.NewStore(cacheRoot)
+	if err != nil {
+		return clierrors.Wrap(clierrors.ExitConfig, "Failed to initialize cache store", err)
+	}
+
+	// Derive host identifier for cache partitioning.
+	cfg := config.Load()
+
+	hostID, err := paths.HostIDFromURL(cfg.APIURL())
+	if err != nil {
+		return clierrors.Wrap(clierrors.ExitConfig, "Failed to derive host ID from API URL", err)
+	}
+
+	resolvedFromLatest := false
+
 	// Resolve version if not specified.
 	if bundleVersion == "" {
-		resolved, resolveErr := resolveLatestVersion(cmd, out, namespace, slug)
-		if resolveErr != nil {
-			return resolveErr
+		// Check cached ref first.
+		if !force && store.IsRefFresh(hostID, namespace, slug) {
+			if refData, refErr := store.ReadRef(hostID, namespace, slug); refErr == nil {
+				bundleVersion = refData.Version
+			}
 		}
 
-		bundleVersion = resolved
+		if bundleVersion == "" {
+			resolved, resolveErr := resolveLatestVersion(cmd, out, namespace, slug)
+			if resolveErr != nil {
+				return resolveErr
+			}
+
+			bundleVersion = resolved
+			resolvedFromLatest = true
+		}
 	}
 
 	versionRef := namespace + "/" + slug + ":" + bundleVersion
 
-	// Determine target directory.
-	targetDir := outputDir
-	if targetDir == "" {
-		cacheDir, cacheErr := paths.BundleCacheDir(namespace, slug, bundleVersion)
-		if cacheErr != nil {
-			return clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", cacheErr)
-		}
-
-		targetDir = cacheDir
-
-		// Check if already cached (skip when --force or --output-dir is set).
-		if !force {
-			if isCached(targetDir) {
+	// Check cache freshness (skip when --force or --output-dir is set).
+	if !force && outputDir == "" {
+		if manifest, loadErr := store.LoadManifest(hostID, namespace, slug, bundleVersion); loadErr == nil {
+			if store.IsManifestFresh(hostID, namespace, slug, bundleVersion) && store.HasAllBlobs(manifest) {
 				if out.JSON {
 					if jsonErr := out.PrintJSON(pullResult{
-						Namespace: namespace,
-						Slug:      slug,
-						Version:   bundleVersion,
-						Dir:       targetDir,
-						Cached:    true,
+						Namespace:  namespace,
+						Slug:       slug,
+						Version:    bundleVersion,
+						CacheRoot:  cacheRoot,
+						Cached:     true,
+						AssetCount: len(manifest.Layers),
 					}); jsonErr != nil {
 						return fmt.Errorf("print JSON: %w", jsonErr)
 					}
@@ -110,7 +137,7 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 				}
 
 				out.Success("Already cached: %s", versionRef)
-				out.Muted("  %s", targetDir)
+				out.Muted("  %s", cacheRoot)
 
 				return nil
 			}
@@ -122,8 +149,8 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 	usePublic := authErr != nil
 
 	if usePublic {
-		cfg := configForPublicClient()
-		apiClient = newPublicAPIClient(cfg)
+		apiURL := configForPublicClient()
+		apiClient = newPublicAPIClient(apiURL)
 	}
 
 	// Pull the bundle.
@@ -141,8 +168,8 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		if err != nil {
 			var httpErr *client.HTTPStatusError
 			if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden {
-				cfg := configForPublicClient()
-				pubClient := newPublicAPIClient(cfg)
+				apiURL := configForPublicClient()
+				pubClient := newPublicAPIClient(apiURL)
 				bundle, err = pubClient.PullPublicBundleVersion(ctx, namespace, slug, bundleVersion)
 			}
 		}
@@ -155,13 +182,101 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 
 	spin.StopWithSuccess("Pulled " + versionRef)
 
-	// Write assets to target directory.
-	if mkdirErr := safeio.MkdirAll(targetDir, 0o755); mkdirErr != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create output directory", mkdirErr)
+	// Store assets in the content-addressable cache.
+	manifest := &cache.BundleManifest{
+		Namespace:   bundle.Namespace,
+		Slug:        bundle.Slug,
+		Version:     bundle.Version,
+		Name:        bundle.Name,
+		Description: bundle.Description,
 	}
 
 	for _, asset := range bundle.Assets {
-		assetPath := filepath.Join(targetDir, asset.LogicalPath)
+		data := []byte(asset.ContentText)
+
+		digest, storeErr := store.StoreBlob(data)
+		if storeErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral,
+				"Failed to cache asset "+asset.LogicalPath, storeErr)
+		}
+
+		manifest.Layers = append(manifest.Layers, cache.ManifestLayer{
+			LogicalPath:   asset.LogicalPath,
+			AssetType:     asset.AssetType,
+			ContentSHA256: digest,
+			Size:          int64(len(data)),
+			MediaType:     asset.MediaType,
+		})
+	}
+
+	if storeErr := store.StoreManifest(hostID, namespace, slug, bundleVersion, manifest); storeErr != nil {
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest", storeErr)
+	}
+
+	now := time.Now()
+
+	if storeErr := store.StoreManifestMeta(hostID, namespace, slug, bundleVersion, &cache.ManifestMeta{
+		FetchedAt: now,
+		TTL:       cache.DefaultManifestTTL,
+	}); storeErr != nil {
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest metadata", storeErr)
+	}
+
+	// Update the "latest" ref pointer when the version was resolved dynamically.
+	if resolvedFromLatest {
+		if refErr := store.UpdateRef(hostID, namespace, slug, &cache.RefData{
+			Version:   bundleVersion,
+			CachedAt:  now,
+			ExpiresAt: now.Add(time.Duration(cache.DefaultRefTTL) * time.Second),
+		}); refErr != nil {
+			// Best-effort — ref cache is optional, do not fail the pull.
+			_ = refErr
+		}
+	}
+
+	// When --output-dir is set, also extract flat files for the caller.
+	if outputDir != "" {
+		if extractErr := extractAssetsToDir(outputDir, bundle.Assets); extractErr != nil {
+			return extractErr
+		}
+	}
+
+	if out.JSON {
+		result := pullResult{
+			Namespace:  namespace,
+			Slug:       slug,
+			Version:    bundleVersion,
+			CacheRoot:  cacheRoot,
+			AssetCount: len(bundle.Assets),
+		}
+		if outputDir != "" {
+			result.Dir = outputDir
+		}
+
+		if jsonErr := out.PrintJSON(result); jsonErr != nil {
+			return fmt.Errorf("print JSON: %w", jsonErr)
+		}
+
+		return nil
+	}
+
+	if outputDir != "" {
+		out.Success("Wrote %d asset(s) to %s", len(bundle.Assets), outputDir)
+	} else {
+		out.Success("Cached %d asset(s) for %s", len(bundle.Assets), versionRef)
+	}
+
+	return nil
+}
+
+// extractAssetsToDir writes bundle assets as flat files to a directory.
+func extractAssetsToDir(dir string, assets []client.PullBundleAsset) error {
+	if mkdirErr := safeio.MkdirAll(dir, 0o755); mkdirErr != nil {
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create output directory", mkdirErr)
+	}
+
+	for _, asset := range assets {
+		assetPath := filepath.Join(dir, asset.LogicalPath)
 		assetDir := filepath.Dir(assetPath)
 
 		if mkErr := safeio.MkdirAll(assetDir, 0o755); mkErr != nil {
@@ -175,43 +290,15 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		}
 	}
 
-	if out.JSON {
-		if jsonErr := out.PrintJSON(pullResult{
-			Namespace:  namespace,
-			Slug:       slug,
-			Version:    bundleVersion,
-			Dir:        targetDir,
-			AssetCount: len(bundle.Assets),
-		}); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
-		}
-
-		return nil
-	}
-
-	out.Success("Wrote %d asset(s) to %s", len(bundle.Assets), targetDir)
-
 	return nil
-}
-
-// isCached returns true if the directory exists and contains at least one entry.
-func isCached(dir string) bool {
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-
-	entries, err := os.ReadDir(dir)
-
-	return err == nil && len(entries) > 0
 }
 
 // resolveLatestVersion fetches bundle detail to determine the latest version.
 func resolveLatestVersion(cmd *cobra.Command, out *output.Writer, namespace, slug string) (string, error) {
 	_, apiClient, authErr := newAPIClient()
 	if authErr != nil {
-		cfg := configForPublicClient()
-		apiClient = newPublicAPIClient(cfg)
+		apiURL := configForPublicClient()
+		apiClient = newPublicAPIClient(apiURL)
 	}
 
 	spin := out.Spinner("Resolving latest version of " + namespace + "/" + slug)
