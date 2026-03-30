@@ -1,0 +1,672 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/musher-dev/musher-cli/internal/client"
+)
+
+// Cursor indicators for menu items.
+const (
+	cursorActive = "\u276F " // ❯ + space (2 visual chars)
+	cursorBlank  = "  "      // same width for alignment
+)
+
+// menuItem is a single entry in the home screen menu.
+type menuItem struct {
+	label       string
+	description string
+	hotkey      rune
+	section     string // section header; rendered when it changes between items
+	stub        bool   // stub items ignore enter
+}
+
+// harnessStatus is a cached snapshot of a harness provider's availability.
+type harnessStatus struct {
+	displayName string
+	available   bool
+}
+
+// contextInfo holds async-loaded identity context.
+type contextInfo struct {
+	loading  bool
+	identity *client.PublisherIdentity
+	err      error
+	greeting string
+}
+
+// homeScreen is the TUI landing page shown when running `musher` in a TTY.
+type homeScreen struct {
+	ctx  context.Context
+	deps *HomeDeps
+
+	styles *styles
+	keys   *keyMap
+
+	width  int
+	height int
+
+	items     []menuItem
+	cursor    int
+	focusArea int // 0=menu, 1=context (two-panel only)
+
+	ctxInfo   contextInfo
+	harnesses []harnessStatus
+}
+
+// nowFunc is overridden in tests for deterministic greeting.
+var nowFunc = time.Now
+
+func newHomeScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMap) *homeScreen {
+	items := buildMenuItems()
+	harnesses := loadHarnessStatuses(deps)
+
+	return &homeScreen{
+		ctx:    ctx,
+		deps:   deps,
+		styles: sty,
+		keys:   keys,
+		items:  items,
+		ctxInfo: contextInfo{
+			loading:  deps.Auth != nil,
+			greeting: greetingForHour(nowFunc().Hour()),
+		},
+		harnesses: harnesses,
+	}
+}
+
+func buildMenuItems() []menuItem {
+	return []menuItem{
+		{label: "Load bundle", description: "Load a bundle to run with a harness", hotkey: 'r', section: "DEVELOP"},
+		{label: "Find a bundle", description: "Search the Hub for agent bundles", hotkey: 'f', section: "DEVELOP"},
+		{label: "Init new bundle", description: "Create a new bundle definition", hotkey: 'i', section: "PUBLISH", stub: true},
+		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "PUBLISH", stub: true},
+		{label: "Hub management", description: "Manage Hub listings", hotkey: 'h', section: "PUBLISH", stub: true},
+	}
+}
+
+func loadHarnessStatuses(deps *HomeDeps) []harnessStatus {
+	if deps.Harnesses == nil {
+		return nil
+	}
+
+	providers := deps.Harnesses.List()
+	statuses := make([]harnessStatus, len(providers))
+
+	for i, prov := range providers {
+		statuses[i] = harnessStatus{
+			displayName: prov.Spec.DisplayName,
+			available:   prov.Available(),
+		}
+	}
+
+	return statuses
+}
+
+func greetingForHour(hour int) string {
+	switch {
+	case hour >= 5 && hour < 12:
+		return "Good morning"
+	case hour >= 12 && hour < 18:
+		return "Good afternoon"
+	default:
+		return "Good evening"
+	}
+}
+
+// Init implements Screen.
+func (h *homeScreen) Init() tea.Cmd {
+	if h.deps.Auth != nil {
+		return cmdLoadAuth(h.ctx, h.deps.Auth)
+	}
+
+	return nil
+}
+
+// Update implements Screen.
+func (h *homeScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		h.width = msg.Width
+		h.height = msg.Height
+
+		return h, nil
+
+	case tea.BackgroundColorMsg:
+		isDark := msg.IsDark()
+		sty := newStyles(isDark)
+		h.styles = &sty
+
+		return h, nil
+
+	case tea.KeyPressMsg:
+		return h.handleKey(msg)
+
+	case authResultMsg:
+		h.ctxInfo.loading = false
+		h.ctxInfo.identity = msg.identity
+
+		return h, nil
+
+	case authErrorMsg:
+		h.ctxInfo.loading = false
+		h.ctxInfo.err = msg.err
+
+		return h, nil
+	}
+
+	return h, nil
+}
+
+func (h *homeScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+	switch {
+	case key.Matches(msg, h.keys.Quit):
+		return h, tea.Quit
+
+	case key.Matches(msg, h.keys.Up):
+		if h.cursor > 0 {
+			h.cursor--
+		}
+
+		return h, nil
+
+	case key.Matches(msg, h.keys.Down):
+		if h.cursor < len(h.items)-1 {
+			h.cursor++
+		}
+
+		return h, nil
+
+	case key.Matches(msg, h.keys.Enter):
+		return h.executeCurrentItem()
+
+	case key.Matches(msg, h.keys.Tab):
+		if classifyLayout(h.width) == layoutTwoPanel {
+			h.focusArea = (h.focusArea + 1) % 2
+		}
+
+		return h, nil
+	}
+
+	// Check hotkey runes (only on home screen, no text input conflict).
+	if r := msg.String(); len(r) == 1 {
+		for i, item := range h.items {
+			if rune(r[0]) == item.hotkey {
+				h.cursor = i
+
+				return h.executeItem(item)
+			}
+		}
+	}
+
+	return h, nil
+}
+
+func (h *homeScreen) executeCurrentItem() (Screen, tea.Cmd) {
+	if h.cursor < 0 || h.cursor >= len(h.items) {
+		return h, nil
+	}
+
+	return h.executeItem(h.items[h.cursor])
+}
+
+func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
+	if item.stub {
+		return h, nil
+	}
+
+	switch item.hotkey {
+	case 'r', 'f':
+		cmd := h.pushSearchScreen()
+
+		return h, cmd
+	}
+
+	return h, nil
+}
+
+func (h *homeScreen) pushSearchScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newSearchScreen(h.ctx, h.deps.Searcher, "", h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+// View implements Screen.
+func (h *homeScreen) View() string {
+	layout := classifyLayout(h.width)
+
+	switch layout {
+	case layoutTwoPanel:
+		return h.renderHomeTwoPanel()
+	case layoutSingle:
+		return h.renderHomeSinglePanel()
+	case layoutCompact:
+		return h.renderHomeCompact()
+	default:
+		return h.renderHomeMinimal()
+	}
+}
+
+// --- Two-panel layout (≥100 cols) ---
+
+func (h *homeScreen) renderHomeTwoPanel() string {
+	menuW := clampMenuWidth(h.width)
+
+	leftContent := h.renderMenuContent(menuW)
+	leftTitle := "musher " + formatVersion(h.deps.Version)
+	leftPanel := h.renderPanel(leftTitle, leftContent, menuW, h.focusArea == 0)
+
+	contextW := menuW
+	rightContent := h.renderContextContent()
+	rightPanel := h.renderPanel("Context", rightContent, contextW, h.focusArea == 1)
+
+	gap := strings.Repeat(" ", twoPanelGap)
+	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
+
+	desc := h.renderDescription(menuW)
+	footer := h.renderFooter(true)
+
+	topBlock := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc, "", footer)
+
+	return lipgloss.Place(
+		h.width, h.height,
+		lipgloss.Center, lipgloss.Center,
+		topBlock,
+	)
+}
+
+// --- Single-panel layout (60–99 cols) ---
+
+func (h *homeScreen) renderHomeSinglePanel() string {
+	menuW := clampMenuWidth(h.width)
+
+	header := h.renderBrand()
+	status := h.renderStatusLine()
+	menu := h.renderMenuBox(menuW)
+	desc := h.renderDescription(menuW)
+	footer := h.renderFooter(false)
+
+	content := lipgloss.JoinVertical(lipgloss.Center,
+		header, "", status, menu, desc, "", footer,
+	)
+
+	return lipgloss.Place(
+		h.width, h.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+// --- Compact layout (40–59 cols) ---
+
+func (h *homeScreen) renderHomeCompact() string {
+	menuW := clampMenuWidth(h.width)
+
+	header := h.renderBrand()
+	menu := h.renderMenuBox(menuW)
+	footer := h.renderFooter(false)
+
+	content := lipgloss.JoinVertical(lipgloss.Center,
+		header, "", menu, "", footer,
+	)
+
+	return lipgloss.Place(
+		h.width, h.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+// --- Minimal layout (< 40 cols) ---
+
+func (h *homeScreen) renderHomeMinimal() string {
+	header := h.styles.brand.Render("musher")
+	menu := h.renderMenuContent(h.width - 4)
+	footer := h.renderFooter(false)
+
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		header, "", menu, "", footer,
+	)
+
+	return lipgloss.Place(
+		h.width, h.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+// --- Rendering helpers ---
+
+func (h *homeScreen) renderBrand() string {
+	ver := formatVersion(h.deps.Version)
+	brand := h.styles.brand.Render("musher") + " " + h.styles.muted.Render(ver)
+	tagline := h.styles.tagline.Render("Portable agent bundles")
+
+	return lipgloss.JoinVertical(lipgloss.Center, brand, tagline)
+}
+
+func formatVersion(ver string) string {
+	if ver == "" || ver == "dev" {
+		return "dev"
+	}
+
+	return "v" + ver
+}
+
+func (h *homeScreen) renderStatusLine() string {
+	if h.ctxInfo.loading {
+		return h.styles.placeholder.Render("Loading...")
+	}
+
+	if h.ctxInfo.identity == nil {
+		return renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("not authenticated")
+	}
+
+	parts := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
+
+	if org := h.identityOrg(); org != "" {
+		parts = append(parts, h.styles.subtitle.Render(org))
+	}
+
+	sep := h.styles.hintSep.Render(" \u00B7 ")
+
+	return strings.Join(parts, sep)
+}
+
+func renderStatusDot(sty *styles, ok bool) string {
+	dot := "\u25CF" // ●
+
+	if ok {
+		return sty.success.Render(dot)
+	}
+
+	return sty.warning.Render(dot)
+}
+
+func (h *homeScreen) identityName() string {
+	if h.ctxInfo.identity == nil {
+		return ""
+	}
+
+	if u := h.ctxInfo.identity.User; u != nil && u.FullName != "" {
+		return ", " + u.FullName
+	}
+
+	if h.ctxInfo.identity.CredentialName != "" {
+		return ", " + h.ctxInfo.identity.CredentialName
+	}
+
+	return ""
+}
+
+func (h *homeScreen) identityOrg() string {
+	if h.ctxInfo.identity == nil {
+		return ""
+	}
+
+	if o := h.ctxInfo.identity.Organization; o != nil && o.Name != "" {
+		return o.Name
+	}
+
+	return ""
+}
+
+// renderMenuBox renders the menu items inside a rounded border (single-panel).
+func (h *homeScreen) renderMenuBox(menuW int) string {
+	inner := h.renderMenuContent(menuW)
+	box := h.styles.menuBox.Width(menuW)
+
+	return box.Render(inner)
+}
+
+// renderMenuContent renders the raw menu items without a box (for two-panel embedding).
+func (h *homeScreen) renderMenuContent(menuW int) string {
+	var rows []string
+
+	labelWidth := max(menuW-menuLabelOffset, 8)
+
+	prevSection := ""
+
+	for idx, item := range h.items {
+		if item.section != prevSection {
+			header := h.styles.sectionHeader.Render(item.section)
+
+			if idx > 0 {
+				rows = append(rows, "") // blank line before section
+			}
+
+			rows = append(rows, header)
+			prevSection = item.section
+		}
+
+		rows = append(rows, h.renderMenuItem(idx, item, labelWidth))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (h *homeScreen) renderMenuItem(idx int, item menuItem, labelWidth int) string {
+	active := idx == h.cursor
+
+	prefix := cursorBlank
+	if active {
+		prefix = h.styles.accent.Render(cursorActive)
+	}
+
+	hotkeyStyle := h.styles.hotkey
+	if active {
+		hotkeyStyle = h.styles.hotkeyActive
+	}
+
+	badge := hotkeyStyle.Render(fmt.Sprintf("[%c]", item.hotkey))
+
+	paddedLabel := item.label
+	visualLen := lipgloss.Width(paddedLabel)
+
+	if visualLen < labelWidth {
+		paddedLabel += strings.Repeat(" ", labelWidth-visualLen)
+	}
+
+	content := prefix + paddedLabel + " " + badge
+
+	if active {
+		return h.styles.menuItemActive.Render(content)
+	}
+
+	return h.styles.menuItem.Render(content)
+}
+
+func (h *homeScreen) renderDescription(menuW int) string {
+	if h.cursor < 0 || h.cursor >= len(h.items) {
+		return ""
+	}
+
+	return h.styles.description.Width(menuW).Render(h.items[h.cursor].description)
+}
+
+// renderContextContent renders the right panel content (auth + harnesses + links).
+func (h *homeScreen) renderContextContent() string {
+	var sections []string
+
+	// Auth section.
+	sections = append(sections, h.renderContextAuth())
+
+	// Harnesses section.
+	if len(h.harnesses) > 0 {
+		sections = append(sections, h.renderContextHarnesses())
+	}
+
+	// Social links.
+	sections = append(sections, h.renderSocialLinks())
+
+	return strings.Join(sections, "\n\n")
+}
+
+func (h *homeScreen) renderContextAuth() string {
+	title := h.styles.contextLabel.Render("Auth")
+
+	var body string
+
+	switch {
+	case h.ctxInfo.loading:
+		body = h.styles.placeholder.Render("Loading...")
+	case h.ctxInfo.identity != nil:
+		lines := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
+
+		if org := h.identityOrg(); org != "" {
+			lines = append(lines, h.styles.subtitle.Render("Organization: "+org))
+		}
+
+		body = strings.Join(lines, "\n")
+	default:
+		body = renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("Not authenticated")
+	}
+
+	return title + "\n" + body
+}
+
+func (h *homeScreen) renderContextHarnesses() string {
+	title := h.styles.contextLabel.Render("Harnesses")
+
+	var lines []string
+
+	for _, hs := range h.harnesses {
+		if hs.available {
+			lines = append(lines, h.styles.success.Render("\u2713")+" "+hs.displayName)
+		} else {
+			lines = append(lines, h.styles.muted.Render("\u2717")+" "+h.styles.muted.Render(hs.displayName))
+		}
+	}
+
+	return title + "\n" + strings.Join(lines, "\n")
+}
+
+func (h *homeScreen) renderSocialLinks() string {
+	sep := h.styles.hintSep.Render(" \u00B7 ")
+	linkStyle := h.styles.accent
+
+	links := hyperlink("https://discord.gg/SaVMzMgX2c", linkStyle.Render("Discord")) + sep +
+		hyperlink("https://github.com/musher-dev", linkStyle.Render("GitHub")) + sep +
+		hyperlink("https://x.com/musherdev", linkStyle.Render("X"))
+
+	return links
+}
+
+// hyperlink wraps text with OSC 8 terminal hyperlink escape sequences.
+func hyperlink(url, text string) string {
+	return ansi.SetHyperlink(url) + text + ansi.ResetHyperlink()
+}
+
+// renderPanel draws a rounded-border box with an embedded title in the top border.
+func (h *homeScreen) renderPanel(title, content string, width int, active bool) string {
+	if title == "" {
+		style := h.styles.panelBorder
+		if active {
+			style = h.styles.panelBorderActive
+		}
+
+		return style.Width(width).Render(content)
+	}
+
+	// Determine border color.
+	borderFg := lipgloss.Color("#3B4252") // fallback dark border
+	if active {
+		borderFg = lipgloss.Color("#9D7CD8") // fallback accent
+	}
+
+	// Body with border on 3 sides (no top — we build our own).
+	bodyStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderTop(false).
+		BorderForeground(borderFg).
+		Padding(1, 2).
+		Width(width)
+
+	body := bodyStyle.Render(content)
+	outerWidth := lipgloss.Width(body)
+
+	borderColor := lipgloss.NewStyle().Foreground(borderFg)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(borderFg)
+	if active {
+		titleStyle = titleStyle.Foreground(borderFg)
+	}
+
+	topLine := renderBorderTitle(title, outerWidth, &borderColor, &titleStyle)
+
+	return topLine + "\n" + body
+}
+
+// renderBorderTitle builds a top border line with embedded title (e.g. ╭── title ────╮).
+func renderBorderTitle(title string, outerWidth int, borderColor, titleStyle *lipgloss.Style) string {
+	border := lipgloss.RoundedBorder()
+
+	titleText := " " + title + " "
+	titleRendered := titleStyle.Render(titleText)
+	titleWidth := ansi.StringWidth(titleText)
+
+	fillTotal := max(outerWidth-2, 0) // subtract corners
+	leftDashes := min(2, fillTotal)
+	rightDashes := max(fillTotal-leftDashes-titleWidth, 0)
+
+	var builder strings.Builder
+
+	builder.WriteString(borderColor.Render(border.TopLeft + strings.Repeat(border.Top, leftDashes)))
+	builder.WriteString(titleRendered)
+	builder.WriteString(borderColor.Render(strings.Repeat(border.Top, rightDashes) + border.TopRight))
+
+	return builder.String()
+}
+
+// renderFooter returns the context-sensitive key hint bar.
+func (h *homeScreen) renderFooter(twoPanel bool) string {
+	sep := h.styles.hintSep.Render(" \u2022 ")
+
+	hints := []string{
+		h.styles.hintKey.Render("\u2191/\u2193") + " " + h.styles.hintDesc.Render("navigate"),
+		h.styles.hintKey.Render("enter") + " " + h.styles.hintDesc.Render("select"),
+	}
+
+	if twoPanel {
+		hints = append(hints,
+			h.styles.hintKey.Render("tab")+" "+h.styles.hintDesc.Render("switch"),
+		)
+	}
+
+	hints = append(hints,
+		h.styles.hintKey.Render("q")+" "+h.styles.hintDesc.Render("quit"),
+	)
+
+	return strings.Join(hints, sep)
+}
+
+// --- Async auth loading ---
+
+type authResultMsg struct {
+	identity *client.PublisherIdentity
+}
+
+type authErrorMsg struct {
+	err error
+}
+
+func cmdLoadAuth(ctx context.Context, auth AuthChecker) tea.Cmd {
+	return func() tea.Msg {
+		identity, err := auth.GetPublisherIdentity(ctx)
+		if err != nil {
+			return authErrorMsg{err: err}
+		}
+
+		return authResultMsg{identity: identity}
+	}
+}

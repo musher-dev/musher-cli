@@ -246,14 +246,14 @@ func (s *searchScreen) View() string {
 
 	// Help bar.
 	view.WriteString("\n")
-	view.WriteString(s.styles.helpKey.Render("↑↓"))
-	view.WriteString(s.styles.helpDesc.Render(" navigate  "))
-	view.WriteString(s.styles.helpKey.Render("enter"))
-	view.WriteString(s.styles.helpDesc.Render(" select  "))
-	view.WriteString(s.styles.helpKey.Render("esc"))
-	view.WriteString(s.styles.helpDesc.Render(" back  "))
-	view.WriteString(s.styles.helpKey.Render("q"))
-	view.WriteString(s.styles.helpDesc.Render(" quit"))
+	view.WriteString(s.styles.hintKey.Render("↑↓"))
+	view.WriteString(s.styles.hintDesc.Render(" navigate  "))
+	view.WriteString(s.styles.hintKey.Render("enter"))
+	view.WriteString(s.styles.hintDesc.Render(" select  "))
+	view.WriteString(s.styles.hintKey.Render("esc"))
+	view.WriteString(s.styles.hintDesc.Render(" back  "))
+	view.WriteString(s.styles.hintKey.Render("q"))
+	view.WriteString(s.styles.hintDesc.Render(" quit"))
 
 	return view.String()
 }

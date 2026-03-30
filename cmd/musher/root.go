@@ -8,7 +8,10 @@ import (
 	"github.com/spf13/cobra"
 
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/harness"
+	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
 	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/tui"
 	"github.com/musher-dev/musher-cli/internal/validate"
 )
 
@@ -44,15 +47,16 @@ func newRootCmd() *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "musher",
-		Short: "Publish agent bundles to the Musher registry",
-		Long: `Create, validate, and publish agent bundles to the Musher
-registry. Use the Hub commands to manage public catalog
-listings.`,
+		Short: "Portable agent bundles",
+		Long: `Discover, load, publish, and manage agent bundles
+on the Musher registry.
+
+Run without arguments in a terminal for an interactive experience.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
+			return runRootTUI(cmd, out, noTUI)
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			warnIfRoot(cmd, out)
@@ -236,6 +240,52 @@ func noArgs(cmd *cobra.Command, args []string) error {
 			Hint:    fmt.Sprintf("Run '%s --help' for usage", cmd.CommandPath()),
 			Code:    clierrors.ExitUsage,
 		}
+	}
+
+	return nil
+}
+
+// runRootTUI launches the interactive home screen when invoked in a TTY,
+// or falls back to help text when TUI is disabled.
+func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
+	term := out.Terminal()
+	mode := tui.ShouldEnable(term.IsTTY, noTUI, out.Quiet, out.JSON)
+
+	if mode == tui.ModeDisabled {
+		return cmd.Help() //nolint:wrapcheck // cobra's Help() returns nil or a well-defined error
+	}
+
+	apiClient := newPublicAPIClient(configForPublicClient())
+
+	var authChecker tui.AuthChecker
+	if _, c, err := newAPIClient(); err == nil {
+		authChecker = c
+	}
+
+	reg := harness.NewRegistry()
+	harness.RegisterBuiltins(reg, claude.Module)
+
+	deps := &tui.HomeDeps{
+		Searcher:  apiClient,
+		Puller:    apiClient,
+		Harnesses: reg,
+		Auth:      authChecker,
+		Version:   version,
+	}
+
+	result, err := tui.RunHome(cmd.Context(), deps)
+	if err != nil {
+		return fmt.Errorf("home: %w", err)
+	}
+
+	if result != nil && result.Action == "load" {
+		ref := result.Namespace + "/" + result.Slug
+		if result.Version != "" {
+			ref += ":" + result.Version
+		}
+
+		out.Success("Selected: %s", ref)
+		out.Info("Run: musher load %s", ref)
 	}
 
 	return nil

@@ -37,6 +37,33 @@ func ShouldEnable(isTerminal, noTUIFlag, quietFlag, jsonFlag bool) Mode {
 	return ModeInteractive
 }
 
+// RunHome launches the TUI at the home screen and returns the user's selection.
+// Returns nil result if the user quit without selecting an action.
+func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newHomeScreen(ctx, deps, &sty, &keys)
+	app := NewApp(screen)
+
+	p := tea.NewProgram(app)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, fmt.Errorf("TUI error: %w", err)
+	}
+
+	finalApp, ok := finalModel.(*App)
+	if !ok {
+		return nil, errUnexpectedModel
+	}
+
+	if finalApp.Err() != nil {
+		return nil, finalApp.Err()
+	}
+
+	return finalApp.Result(), nil
+}
+
 // RunSearch launches the TUI in search mode and returns the user's selection.
 // Returns nil result if the user quit without selecting a bundle.
 func RunSearch(ctx context.Context, searcher BundleSearcher, initialQuery string) (*Result, error) {

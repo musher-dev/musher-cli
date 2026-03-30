@@ -118,10 +118,10 @@ func (d *detailScreen) View() string {
 	if d.err != nil {
 		view.WriteString(d.styles.errStyle.Render("Error: " + d.err.Error()))
 		view.WriteString("\n\n")
-		view.WriteString(d.styles.helpKey.Render("esc"))
-		view.WriteString(d.styles.helpDesc.Render(" back  "))
-		view.WriteString(d.styles.helpKey.Render("q"))
-		view.WriteString(d.styles.helpDesc.Render(" quit"))
+		view.WriteString(d.styles.hintKey.Render("esc"))
+		view.WriteString(d.styles.hintDesc.Render(" back  "))
+		view.WriteString(d.styles.hintKey.Render("q"))
+		view.WriteString(d.styles.hintDesc.Render(" quit"))
 
 		return view.String()
 	}
@@ -183,12 +183,12 @@ func (d *detailScreen) View() string {
 	view.WriteString("\n\n")
 
 	// Help bar.
-	view.WriteString(d.styles.helpKey.Render("enter"))
-	view.WriteString(d.styles.helpDesc.Render(" load  "))
-	view.WriteString(d.styles.helpKey.Render("esc"))
-	view.WriteString(d.styles.helpDesc.Render(" back  "))
-	view.WriteString(d.styles.helpKey.Render("q"))
-	view.WriteString(d.styles.helpDesc.Render(" quit"))
+	view.WriteString(d.styles.hintKey.Render("enter"))
+	view.WriteString(d.styles.hintDesc.Render(" load  "))
+	view.WriteString(d.styles.hintKey.Render("esc"))
+	view.WriteString(d.styles.hintDesc.Render(" back  "))
+	view.WriteString(d.styles.hintKey.Render("q"))
+	view.WriteString(d.styles.hintDesc.Render(" quit"))
 
 	return view.String()
 }

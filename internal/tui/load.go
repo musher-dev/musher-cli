@@ -323,8 +323,8 @@ func (l *loadScreen) writeHelp(view *strings.Builder, pairs ...string) {
 			view.WriteString("  ")
 		}
 
-		view.WriteString(l.styles.helpKey.Render(pairs[i]))
-		view.WriteString(l.styles.helpDesc.Render(" " + pairs[i+1]))
+		view.WriteString(l.styles.hintKey.Render(pairs[i]))
+		view.WriteString(l.styles.hintDesc.Render(" " + pairs[i+1]))
 	}
 }
 

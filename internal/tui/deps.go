@@ -24,3 +24,18 @@ type HarnessLister interface {
 	Available() []*harness.Provider
 	Get(name string) (*harness.Provider, bool)
 }
+
+// AuthChecker checks authentication status.
+// *client.Client satisfies this interface via GetPublisherIdentity.
+type AuthChecker interface {
+	GetPublisherIdentity(ctx context.Context) (*client.PublisherIdentity, error)
+}
+
+// HomeDeps bundles dependencies for the home screen.
+type HomeDeps struct {
+	Searcher  BundleSearcher
+	Puller    BundlePuller
+	Harnesses HarnessLister
+	Auth      AuthChecker // nil when unauthenticated — home screen handles gracefully.
+	Version   string
+}

@@ -30,8 +30,16 @@ func TestNewStyles(t *testing.T) {
 				t.Error("expected resultLabel to be bold")
 			}
 
-			if sty.helpKey.GetBold() != true {
-				t.Error("expected helpKey to be bold")
+			if sty.sectionHeader.GetBold() != true {
+				t.Error("expected sectionHeader to be bold")
+			}
+
+			if sty.brand.GetBold() != true {
+				t.Error("expected brand to be bold")
+			}
+
+			if sty.contextLabel.GetBold() != true {
+				t.Error("expected contextLabel to be bold")
 			}
 
 			if sty.selected.GetBold() != true {
