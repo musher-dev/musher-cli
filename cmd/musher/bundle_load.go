@@ -9,7 +9,7 @@ import (
 
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
-	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
+	"github.com/musher-dev/musher-cli/internal/harness/provider"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
@@ -231,8 +231,5 @@ func selectAndPrintHarness(out *output.Writer, p *prompt.Prompter, reg *harness.
 
 // newHarnessRegistry creates the default harness registry with built-in providers.
 func newHarnessRegistry() *harness.Registry {
-	reg := harness.NewRegistry()
-	harness.RegisterBuiltins(reg, claude.Module)
-
-	return reg
+	return provider.NewBuiltinRegistry()
 }

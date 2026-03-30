@@ -20,10 +20,13 @@ mcp:
   format: json
   configPath: ".mcp.json"
 
+cli:
+  mcpConfigFlag: "--mcp-config"
+
 status:
   versionArgs: ["--version"]
-  installHint: "Install Claude Code: npm install -g @anthropic-ai/claude-code"
-  installCommand: ["npm", "install", "-g", "@anthropic-ai/claude-code"]
+  installHint: "Install Claude Code: curl -fsSL https://claude.ai/install.sh | bash"
+  installCommand: ["bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"]
   authCheck:
     path: "~/.claude/.credentials.json"
     description: Claude Code credentials

@@ -71,6 +71,71 @@ func TestParseSpecMissingBinary(t *testing.T) {
 	}
 }
 
+func TestParseSpecInvalidBundleDirMode(t *testing.T) {
+	t.Parallel()
+
+	_, err := harness.ParseSpec([]byte(`
+name: test
+binary: test
+bundleDir:
+  mode: symlink
+`))
+	if err == nil {
+		t.Fatal("expected error for invalid bundleDir.mode")
+	}
+}
+
+func TestParseSpecInvalidMCPFormat(t *testing.T) {
+	t.Parallel()
+
+	_, err := harness.ParseSpec([]byte(`
+name: test
+binary: test
+mcp:
+  format: xml
+`))
+	if err == nil {
+		t.Fatal("expected error for invalid mcp.format")
+	}
+}
+
+func TestParseSpecValidTOMLFormat(t *testing.T) {
+	t.Parallel()
+
+	spec, err := harness.ParseSpec([]byte(`
+name: test
+binary: test
+mcp:
+  format: toml
+  configPath: config.toml
+`))
+	if err != nil {
+		t.Fatalf("ParseSpec: %v", err)
+	}
+
+	if spec.MCP.Format != "toml" {
+		t.Errorf("MCP.Format = %q, want %q", spec.MCP.Format, "toml")
+	}
+}
+
+func TestParseSpecCLIField(t *testing.T) {
+	t.Parallel()
+
+	spec, err := harness.ParseSpec([]byte(`
+name: test
+binary: test
+cli:
+  mcpConfigFlag: "--mcp-config"
+`))
+	if err != nil {
+		t.Fatalf("ParseSpec: %v", err)
+	}
+
+	if spec.CLI.MCPConfigFlag != "--mcp-config" {
+		t.Errorf("CLI.MCPConfigFlag = %q, want %q", spec.CLI.MCPConfigFlag, "--mcp-config")
+	}
+}
+
 func TestMustParseSpecPanics(t *testing.T) {
 	t.Parallel()
 

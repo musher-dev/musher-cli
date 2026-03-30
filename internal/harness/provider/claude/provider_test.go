@@ -64,6 +64,10 @@ func TestModuleSpecFields(t *testing.T) {
 	if spec.MCP.ConfigPath != ".mcp.json" {
 		t.Errorf("spec.MCP.ConfigPath = %q, want %q", spec.MCP.ConfigPath, ".mcp.json")
 	}
+
+	if spec.CLI.MCPConfigFlag != "--mcp-config" {
+		t.Errorf("spec.CLI.MCPConfigFlag = %q, want %q", spec.CLI.MCPConfigFlag, "--mcp-config")
+	}
 }
 
 func TestModuleRegistration(t *testing.T) {

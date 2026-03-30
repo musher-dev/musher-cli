@@ -25,6 +25,7 @@ type Spec struct {
 	BundleDir   BundleDirSpec `yaml:"bundleDir"`
 	Assets      AssetPaths    `yaml:"assets"`
 	MCP         MCPConfig     `yaml:"mcp"`
+	CLI         CLISpec       `yaml:"cli,omitempty"`
 	Status      StatusSpec    `yaml:"status"`
 }
 
@@ -51,6 +52,11 @@ type AssetPaths struct {
 type MCPConfig struct {
 	Format     string `yaml:"format"`     // "json" or "toml"
 	ConfigPath string `yaml:"configPath"` // e.g. ".mcp.json"
+}
+
+// CLISpec describes CLI flags the harness accepts for integration.
+type CLISpec struct {
+	MCPConfigFlag string `yaml:"mcpConfigFlag,omitempty"` // e.g. "--mcp-config"
 }
 
 // StatusSpec describes how to check harness health and availability.
@@ -81,6 +87,20 @@ func ParseSpec(data []byte) (*Spec, error) {
 
 	if spec.Binary == "" {
 		return nil, fmt.Errorf("harness spec %q missing required field: binary", spec.Name)
+	}
+
+	switch spec.BundleDir.Mode {
+	case "add_dir", "cwd", "":
+		// valid
+	default:
+		return nil, fmt.Errorf("harness spec %q: invalid bundleDir.mode %q (must be \"add_dir\" or \"cwd\")", spec.Name, spec.BundleDir.Mode)
+	}
+
+	switch spec.MCP.Format {
+	case "json", "toml", "":
+		// valid
+	default:
+		return nil, fmt.Errorf("harness spec %q: invalid mcp.format %q (must be \"json\" or \"toml\")", spec.Name, spec.MCP.Format)
 	}
 
 	return &spec, nil
