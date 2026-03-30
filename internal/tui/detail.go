@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/client"
 )
@@ -115,11 +116,15 @@ func (d *detailScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 // View implements Screen.
 func (d *detailScreen) View() string {
 	layout := classifyLayout(d.width)
+
+	var content string
 	if layout == layoutMinimal {
-		return d.renderMinimal()
+		content = d.renderMinimal()
+	} else {
+		content = d.renderWithPanel()
 	}
 
-	return d.renderWithPanel()
+	return lipgloss.Place(d.width, d.height, lipgloss.Center, lipgloss.Center, content)
 }
 
 func (d *detailScreen) panelWidth() int {

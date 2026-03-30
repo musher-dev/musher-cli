@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/musher-dev/musher-cli/internal/client"
@@ -43,8 +44,15 @@ type searchScreen struct {
 
 	focusArea int // searchFocusInput or searchFocusList
 
-	// lastQuery tracks the last query to detect stale results.
+	// lastQuery tracks the last committed query for display purposes.
 	lastQuery string
+
+	// Debounce and search ID tracking to prevent stale results.
+	debounceID uint64 // incremented on each input change
+	searchID   uint64 // incremented on each search dispatch
+
+	// Sliding window state.
+	scrollOffset int
 
 	// Pagination state.
 	hasMore    bool
@@ -121,7 +129,7 @@ func (s *searchScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 
 	case debounceTickMsg:
-		if msg.query == s.lastQuery {
+		if msg.id == s.debounceID {
 			cmd := s.doSearch(msg.query)
 
 			return s, cmd
@@ -193,8 +201,9 @@ func (s *searchScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	newQuery := s.input.Value()
 	if newQuery != s.lastQuery {
 		s.lastQuery = newQuery
+		s.debounceID++
 
-		return s, tea.Batch(cmd, s.scheduleDebounce(newQuery))
+		return s, tea.Batch(cmd, s.scheduleDebounce(s.debounceID, newQuery))
 	}
 
 	return s, cmd
@@ -238,6 +247,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	case key.Matches(msg, s.keys.Up):
 		if s.cursor > 0 {
 			s.cursor--
+			s.adjustScroll()
 		}
 
 		return s, nil
@@ -250,6 +260,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 
 		if s.cursor < maxCursor {
 			s.cursor++
+			s.adjustScroll()
 		}
 
 		return s, nil
@@ -258,11 +269,24 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
+// adjustScroll ensures the cursor is within the visible sliding window.
+func (s *searchScreen) adjustScroll() {
+	maxVisible := adaptiveMaxVisible(s.height)
+
+	if s.cursor < s.scrollOffset {
+		s.scrollOffset = s.cursor
+	}
+
+	if s.cursor >= s.scrollOffset+maxVisible {
+		s.scrollOffset = s.cursor - maxVisible + 1
+	}
+}
+
 func (s *searchScreen) handleSearchResult(msg searchResultMsg) (Screen, tea.Cmd) {
 	s.loading = false
 
 	// Discard stale results.
-	if msg.query != s.lastQuery {
+	if msg.id != s.searchID {
 		return s, nil
 	}
 
@@ -270,6 +294,7 @@ func (s *searchScreen) handleSearchResult(msg searchResultMsg) (Screen, tea.Cmd)
 	s.hasMore = msg.hasMore
 	s.nextCursor = msg.cursor
 	s.cursor = 0
+	s.scrollOffset = 0
 
 	return s, nil
 }
@@ -277,7 +302,7 @@ func (s *searchScreen) handleSearchResult(msg searchResultMsg) (Screen, tea.Cmd)
 func (s *searchScreen) handleLoadMoreResult(msg loadMoreResultMsg) (Screen, tea.Cmd) {
 	s.loading = false
 
-	if msg.query != s.lastQuery {
+	if msg.id != s.searchID {
 		return s, nil
 	}
 
@@ -291,11 +316,15 @@ func (s *searchScreen) handleLoadMoreResult(msg loadMoreResultMsg) (Screen, tea.
 // View implements Screen.
 func (s *searchScreen) View() string {
 	layout := classifyLayout(s.width)
+
+	var content string
 	if layout == layoutMinimal {
-		return s.renderMinimal()
+		content = s.renderMinimal()
+	} else {
+		content = s.renderWithPanels()
 	}
 
-	return s.renderWithPanels()
+	return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, content)
 }
 
 func (s *searchScreen) panelWidth() int {
@@ -303,9 +332,9 @@ func (s *searchScreen) panelWidth() int {
 
 	switch layout {
 	case layoutTwoPanel, layoutSingle:
-		return clampMenuWidth(s.width)
+		return min(clampMenuWidth(s.width), searchPanelMax)
 	case layoutCompact:
-		return max(s.width-4, 30)
+		return min(max(s.width-4, 30), searchPanelMax)
 	default:
 		return max(s.width-2, 20)
 	}
@@ -385,43 +414,37 @@ func (s *searchScreen) renderResults(innerWidth int) string {
 		return content.String()
 	}
 
-	// Calculate how many results fit in available height.
-	// Each card is 3 lines + 1 blank separator.
-	maxVisible := max(s.height-12, 4) // account for breadcrumb, input panel, footer, borders
+	// Sliding window: show a focused subset of results.
+	maxVisible := adaptiveMaxVisible(s.height)
+	startIdx := s.scrollOffset
+	endIdx := min(startIdx+maxVisible, len(s.results))
 
-	linesUsed := 0
+	// Scroll-up indicator.
+	if startIdx > 0 {
+		content.WriteString(s.styles.muted.Render(fmt.Sprintf("  \u2191 %d more above", startIdx)))
+		content.WriteString("\n")
+	}
 
-	for idx := range s.results {
+	// Visible result cards.
+	for idx := startIdx; idx < endIdx; idx++ {
 		bundle := &s.results[idx]
 
-		cardLines := 3
-		if bundle.Summary == "" {
-			cardLines = 2
-		}
-
-		if idx > 0 {
-			cardLines++ // blank separator
-		}
-
-		if linesUsed+cardLines > maxVisible && idx > 0 {
-			remaining := len(s.results) - idx
-			content.WriteString(s.styles.muted.Render(fmt.Sprintf("  ... and %d more", remaining)))
-			content.WriteString("\n")
-
-			break
-		}
-
-		if idx > 0 {
+		if idx > startIdx {
 			content.WriteString("\n")
 		}
 
 		s.renderResultCard(&content, bundle, idx, innerWidth)
-
-		linesUsed += cardLines
 	}
 
-	// "Load more" item.
-	if s.hasMore {
+	// Scroll-down indicator.
+	remaining := len(s.results) - endIdx
+	if remaining > 0 {
+		content.WriteString("\n")
+		content.WriteString(s.styles.muted.Render(fmt.Sprintf("  \u2193 %d more below", remaining)))
+	}
+
+	// "Load more" pagination item (only when window includes end of results).
+	if s.hasMore && endIdx == len(s.results) {
 		content.WriteString("\n")
 
 		switch {
@@ -507,6 +530,9 @@ func (s *searchScreen) renderFooter() string {
 func (s *searchScreen) doSearch(query string) tea.Cmd {
 	s.loading = true
 	s.err = nil
+	s.searchID++
+
+	id := s.searchID
 
 	return func() tea.Msg {
 		result, err := s.searcher.SearchHubBundles(s.ctx, query, "", "", searchLimit, "")
@@ -515,6 +541,7 @@ func (s *searchScreen) doSearch(query string) tea.Cmd {
 		}
 
 		return searchResultMsg{
+			id:      id,
 			query:   query,
 			results: result.Data,
 			hasMore: result.Meta.HasMore,
@@ -526,6 +553,9 @@ func (s *searchScreen) doSearch(query string) tea.Cmd {
 // doLoadMore fetches the next page of results.
 func (s *searchScreen) doLoadMore() tea.Cmd {
 	s.loading = true
+	s.searchID++
+
+	id := s.searchID
 
 	return func() tea.Msg {
 		result, err := s.searcher.SearchHubBundles(s.ctx, s.lastQuery, "", "", searchLimit, s.nextCursor)
@@ -534,6 +564,7 @@ func (s *searchScreen) doLoadMore() tea.Cmd {
 		}
 
 		return loadMoreResultMsg{
+			id:      id,
 			query:   s.lastQuery,
 			results: result.Data,
 			hasMore: result.Meta.HasMore,
@@ -542,15 +573,16 @@ func (s *searchScreen) doLoadMore() tea.Cmd {
 	}
 }
 
-// scheduleDebounce schedules a debounced search.
-func (s *searchScreen) scheduleDebounce(query string) tea.Cmd {
+// scheduleDebounce schedules a debounced search with the given ID.
+func (s *searchScreen) scheduleDebounce(id uint64, query string) tea.Cmd {
 	return tea.Tick(searchDebounce, func(_ time.Time) tea.Msg {
-		return debounceTickMsg{query: query}
+		return debounceTickMsg{id: id, query: query}
 	})
 }
 
 // searchResultMsg carries search results back to the screen.
 type searchResultMsg struct {
+	id      uint64
 	query   string
 	results []client.HubBundleSummary
 	hasMore bool
@@ -559,6 +591,7 @@ type searchResultMsg struct {
 
 // loadMoreResultMsg carries paginated results to append.
 type loadMoreResultMsg struct {
+	id      uint64
 	query   string
 	results []client.HubBundleSummary
 	hasMore bool
@@ -572,5 +605,6 @@ type searchErrorMsg struct {
 
 // debounceTickMsg fires after the debounce interval.
 type debounceTickMsg struct {
+	id    uint64
 	query string
 }

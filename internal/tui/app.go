@@ -75,7 +75,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pushScreenMsg:
 		a.screens = append(a.screens, msg.screen)
 
-		return a, msg.screen.Init()
+		cmds := []tea.Cmd{msg.screen.Init()}
+
+		// Forward the current window size so the new screen renders at the
+		// correct layout from the first frame (it missed the original
+		// WindowSizeMsg that arrived before it was pushed).
+		if a.width > 0 || a.height > 0 {
+			updated, cmd := msg.screen.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
+			a.screens[len(a.screens)-1] = updated
+
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+
+		return a, tea.Batch(cmds...)
 
 	case popScreenMsg:
 		if len(a.screens) > 1 {

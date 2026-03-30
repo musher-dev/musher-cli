@@ -286,8 +286,13 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 	}
 
 	switch item.hotkey {
-	case 'r', 'f':
+	case 'f':
 		cmd := h.pushSearchScreen()
+
+		return h, cmd
+	case 'r':
+		// "Load bundle" opens a direct ref input, distinct from "Find bundles" search.
+		cmd := h.pushRefInputScreen()
 
 		return h, cmd
 	}
@@ -298,6 +303,14 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 func (h *homeScreen) pushSearchScreen() tea.Cmd {
 	return func() tea.Msg {
 		screen := newSearchScreen(h.ctx, h.deps.Searcher, "", h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushRefInputScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newRefInputScreen(h.ctx, h.deps, h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}

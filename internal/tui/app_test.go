@@ -142,6 +142,46 @@ func TestAppErrMsg(t *testing.T) {
 	}
 }
 
+// sizeTrackingScreen records the last WindowSizeMsg it received.
+type sizeTrackingScreen struct {
+	stubScreen
+	width  int
+	height int
+}
+
+func (s *sizeTrackingScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	if wsm, ok := msg.(tea.WindowSizeMsg); ok {
+		s.width = wsm.Width
+		s.height = wsm.Height
+	}
+
+	s.updateCalled = true
+
+	return s, nil
+}
+
+func TestAppPushScreenForwardsWindowSize(t *testing.T) {
+	t.Parallel()
+
+	first := &stubScreen{viewContent: "first"}
+	app := NewApp(first)
+
+	// Simulate bubbletea sending the initial WindowSizeMsg.
+	_, _ = app.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+
+	// Push a new screen — it should immediately receive the current size.
+	pushed := &sizeTrackingScreen{stubScreen: stubScreen{viewContent: "pushed"}}
+	_, _ = app.Update(pushScreenMsg{screen: pushed})
+
+	if pushed.width != 100 {
+		t.Errorf("pushed screen width = %d, want 100", pushed.width)
+	}
+
+	if pushed.height != 40 {
+		t.Errorf("pushed screen height = %d, want 40", pushed.height)
+	}
+}
+
 func TestAppWindowSizeBroadcast(t *testing.T) {
 	t.Parallel()
 

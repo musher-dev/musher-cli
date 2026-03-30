@@ -74,7 +74,9 @@ func TestSearchScreenSearchResult(t *testing.T) {
 		},
 	}
 
-	updated, _ := screen.Update(searchResultMsg{query: "test", results: results})
+	screen.searchID = 1
+
+	updated, _ := screen.Update(searchResultMsg{id: 1, query: "test", results: results})
 	searchScr := updated.(*searchScreen)
 
 	if searchScr.loading {
@@ -96,13 +98,14 @@ func TestSearchScreenStaleResultDiscarded(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
-	screen.lastQuery = "new-query"
+	screen.searchID = 2 // Current search ID is 2.
 
 	oldResults := []client.HubBundleSummary{
 		{Slug: "old-result"},
 	}
 
-	updated, _ := screen.Update(searchResultMsg{query: "old-query", results: oldResults})
+	// Result with stale ID (1) should be discarded.
+	updated, _ := screen.Update(searchResultMsg{id: 1, query: "old-query", results: oldResults})
 	searchScr := updated.(*searchScreen)
 
 	if len(searchScr.results) != 0 {
@@ -637,7 +640,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 func TestSearchScreenDebounceTick(t *testing.T) {
 	t.Parallel()
 
-	t.Run("matching query triggers search", func(t *testing.T) {
+	t.Run("matching ID triggers search", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
@@ -645,9 +648,9 @@ func TestSearchScreenDebounceTick(t *testing.T) {
 		screen := newSearchScreen(context.Background(), &mockSearcher{
 			searchResult: &client.HubSearchResponse{},
 		}, "", &sty, &keys)
-		screen.lastQuery = "test"
+		screen.debounceID = 5
 
-		updated, cmd := screen.Update(debounceTickMsg{query: "test"})
+		updated, cmd := screen.Update(debounceTickMsg{id: 5, query: "test"})
 		searchScr := updated.(*searchScreen)
 
 		if !searchScr.loading {
@@ -659,15 +662,15 @@ func TestSearchScreenDebounceTick(t *testing.T) {
 		}
 	})
 
-	t.Run("stale query is ignored", func(t *testing.T) {
+	t.Run("stale ID is ignored", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
-		screen.lastQuery = "current"
+		screen.debounceID = 3
 
-		_, cmd := screen.Update(debounceTickMsg{query: "old"})
+		_, cmd := screen.Update(debounceTickMsg{id: 1, query: "old"})
 		if cmd != nil {
 			t.Error("expected nil cmd for stale debounce tick")
 		}
@@ -683,9 +686,10 @@ func TestSearchScreenPagination(t *testing.T) {
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "test", &sty, &keys)
-		screen.lastQuery = "test"
+		screen.searchID = 1
 
 		updated, _ := screen.Update(searchResultMsg{
+			id:      1,
 			query:   "test",
 			results: []client.HubBundleSummary{{Slug: "a"}},
 			hasMore: true,
@@ -727,10 +731,11 @@ func TestSearchScreenPagination(t *testing.T) {
 		sty := newStyles(true)
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
-		screen.lastQuery = "test"
+		screen.searchID = 1
 		screen.results = []client.HubBundleSummary{{Slug: "a"}}
 
 		updated, _ := screen.Update(loadMoreResultMsg{
+			id:      1,
 			query:   "test",
 			results: []client.HubBundleSummary{{Slug: "b"}, {Slug: "c"}},
 			hasMore: false,
@@ -785,6 +790,121 @@ func TestSearchScreenFooter(t *testing.T) {
 			t.Error("list footer should mention quit")
 		}
 	})
+}
+
+func TestSearchScreenSlidingWindow(t *testing.T) {
+	t.Parallel()
+
+	t.Run("only maxVisible items rendered", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30 // adaptiveMaxVisible(30) = max(min((30-12)/4, 8), 5) = max(min(4,8),5) = 5
+
+		for range 10 {
+			screen.results = append(screen.results, client.HubBundleSummary{
+				Publisher: client.HubPublisher{Handle: "pub"},
+				Slug:      "bundle",
+				Summary:   "A test bundle",
+			})
+		}
+
+		view := screen.View()
+		// Should show "more below" indicator since only 5 of 10 are visible.
+		if !strings.Contains(view, "more below") {
+			t.Error("view should contain 'more below' indicator")
+		}
+	})
+
+	t.Run("scroll down shows more above indicator", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30
+		screen.focusArea = searchFocusList
+
+		for range 10 {
+			screen.results = append(screen.results, client.HubBundleSummary{
+				Publisher: client.HubPublisher{Handle: "pub"},
+				Slug:      "bundle",
+			})
+		}
+
+		// Move cursor past the visible window.
+		screen.cursor = 6
+		screen.adjustScroll()
+
+		view := screen.View()
+		if !strings.Contains(view, "more above") {
+			t.Error("view should contain 'more above' indicator after scrolling down")
+		}
+	})
+
+	t.Run("scrollOffset resets on new search results", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen.scrollOffset = 5
+		screen.searchID = 1
+
+		screen.Update(searchResultMsg{
+			id:      1,
+			results: []client.HubBundleSummary{{Slug: "a"}},
+		})
+
+		if screen.scrollOffset != 0 {
+			t.Errorf("scrollOffset = %d, want 0 after new results", screen.scrollOffset)
+		}
+	})
+}
+
+func TestSearchScreenPanelWidthCapped(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+
+	// Very wide terminal.
+	screen.width = 200
+	screen.height = 30
+
+	pw := screen.panelWidth()
+	if pw > searchPanelMax {
+		t.Errorf("panelWidth() = %d, want <= %d", pw, searchPanelMax)
+	}
+}
+
+func TestSearchScreenCentered(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+	screen.loading = false
+	screen.width = 100
+	screen.height = 40
+	screen.results = []client.HubBundleSummary{
+		{Publisher: client.HubPublisher{Handle: "acme"}, Slug: "test"},
+	}
+
+	view := screen.View()
+	lines := strings.Split(view, "\n")
+
+	// With lipgloss.Place, the output should span the full height.
+	if len(lines) < screen.height {
+		t.Errorf("view has %d lines, expected at least %d (centered)", len(lines), screen.height)
+	}
 }
 
 func TestFormatCount(t *testing.T) {

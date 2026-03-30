@@ -20,6 +20,10 @@ const (
 	panelContentOffset = 6  // border(2) + padding(4)
 	menuLabelOffset    = 12 // cursor(2) + badge(3) + padding + border
 	twoPanelGap        = 3  // gap between panels in two-panel mode
+
+	searchMaxVisibleMin = 5  // minimum visible results in sliding window
+	searchMaxVisibleMax = 8  // maximum visible results on tall terminals
+	searchPanelMax      = 80 // max width for search/detail panels
 )
 
 // layoutMode classifies the current terminal width for responsive rendering.
@@ -56,6 +60,14 @@ func clampMenuWidth(termWidth int) int {
 	default:
 		return max(termWidth-4, 20)
 	}
+}
+
+// adaptiveMaxVisible returns the number of result items to show based on terminal height.
+// Each result card is ~4 lines (name, summary, stats, separator). Chrome (breadcrumb,
+// input panel, footer, borders) uses ~12 lines.
+func adaptiveMaxVisible(termHeight int) int {
+	available := (termHeight - 12) / 4
+	return max(searchMaxVisibleMin, min(available, searchMaxVisibleMax))
 }
 
 // styles holds the TUI color and layout styles, adapting to light/dark terminals.
