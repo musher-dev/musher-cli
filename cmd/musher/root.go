@@ -12,7 +12,10 @@ import (
 	"github.com/musher-dev/musher-cli/internal/validate"
 )
 
-// Command group IDs.
+func init() {
+	cobra.EnableCommandSorting = false
+}
+
 // Command group IDs.
 const (
 	groupAuth        = "auth"
@@ -52,51 +55,17 @@ listings.`,
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if os.Geteuid() == 0 && cmd.Name() != "update" {
-				out.Warning("Running as root is not recommended. Files created will be owned by root.")
+			warnIfRoot(cmd, out)
 
-				if os.Getenv("SUDO_USER") != "" {
-					out.Warning("Credentials from 'musher auth login' are stored per-user and won't be accessible under sudo.")
-				}
-			}
-
-			if strings.TrimSpace(apiURL) != "" {
-				validatedURL, err := validateAPIURL(apiURL)
-				if err != nil {
-					return &clierrors.CLIError{
-						Message: fmt.Sprintf("Invalid API URL: %v", err),
-						Hint:    "Use --api-url with a valid absolute URL, e.g. https://api.musher.dev",
-						Code:    clierrors.ExitUsage,
-					}
-				}
-
-				if setErr := os.Setenv("MUSHER_API_URL", validatedURL); setErr != nil {
-					return &clierrors.CLIError{
-						Message: fmt.Sprintf("Failed to apply API URL override: %v", setErr),
-						Hint:    "Check your shell environment and try again",
-						Code:    clierrors.ExitUsage,
-					}
-				}
-			}
-
-			if strings.TrimSpace(apiKey) != "" {
-				if setErr := os.Setenv("MUSHER_API_KEY", apiKey); setErr != nil {
-					return &clierrors.CLIError{
-						Message: fmt.Sprintf("Failed to apply API key override: %v", setErr),
-						Hint:    "Check your shell environment and try again",
-						Code:    clierrors.ExitUsage,
-					}
-				}
+			if err := applyOverrides(apiURL, apiKey); err != nil {
+				return err
 			}
 
 			_, err := configureRootRuntime(
 				cmd, out, jsonOutput, quiet, noInput, noColor, noTUI, logLevel, logFormat, logFile, logStderr,
 			)
-			if err != nil {
-				return err
-			}
 
-			return nil
+			return err
 		},
 	}
 
@@ -119,7 +88,6 @@ listings.`,
 	_ = rootCmd.PersistentFlags().MarkHidden("log-file")   //nolint:errcheck // MarkHidden cannot fail for registered flags
 	_ = rootCmd.PersistentFlags().MarkHidden("log-stderr") //nolint:errcheck // MarkHidden cannot fail for registered flags
 
-	cobra.EnableCommandSorting = false
 	rootCmd.SuggestionsMinimumDistance = 2
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		return &clierrors.CLIError{
@@ -132,6 +100,49 @@ listings.`,
 	registerRootCommands(rootCmd)
 
 	return rootCmd
+}
+
+func warnIfRoot(cmd *cobra.Command, out *output.Writer) {
+	if os.Geteuid() == 0 && cmd.Name() != "update" {
+		out.Warning("Running as root is not recommended. Files created will be owned by root.")
+
+		if os.Getenv("SUDO_USER") != "" {
+			out.Warning("Credentials from 'musher auth login' are stored per-user and won't be accessible under sudo.")
+		}
+	}
+}
+
+func applyOverrides(apiURL, apiKey string) error {
+	if strings.TrimSpace(apiURL) != "" {
+		validatedURL, err := validateAPIURL(apiURL)
+		if err != nil {
+			return &clierrors.CLIError{
+				Message: fmt.Sprintf("Invalid API URL: %v", err),
+				Hint:    "Use --api-url with a valid absolute URL, e.g. https://api.musher.dev",
+				Code:    clierrors.ExitUsage,
+			}
+		}
+
+		if setErr := os.Setenv("MUSHER_API_URL", validatedURL); setErr != nil {
+			return &clierrors.CLIError{
+				Message: fmt.Sprintf("Failed to apply API URL override: %v", setErr),
+				Hint:    "Check your shell environment and try again",
+				Code:    clierrors.ExitUsage,
+			}
+		}
+	}
+
+	if strings.TrimSpace(apiKey) != "" {
+		if setErr := os.Setenv("MUSHER_API_KEY", apiKey); setErr != nil {
+			return &clierrors.CLIError{
+				Message: fmt.Sprintf("Failed to apply API key override: %v", setErr),
+				Hint:    "Check your shell environment and try again",
+				Code:    clierrors.ExitUsage,
+			}
+		}
+	}
+
+	return nil
 }
 
 func registerRootCommands(rootCmd *cobra.Command) {

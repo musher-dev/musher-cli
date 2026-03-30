@@ -13,6 +13,8 @@ import (
 	"github.com/musher-dev/musher-cli/internal/update"
 )
 
+const versionDev = "dev"
+
 func newUpdateCmd() *cobra.Command {
 	var (
 		targetVersion string
@@ -54,22 +56,16 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 
 	currentVersion := buildinfo.Version
 
-	if currentVersion == "dev" && targetVersion == "" {
+	if currentVersion == versionDev && targetVersion == "" {
 		out.Warning("Development build — cannot determine current version")
 		out.Info("Install a release build: https://github.com/musher-dev/musher-cli/releases")
 
 		return nil
 	}
 
-	updater, err := update.NewUpdater()
+	updater, err := initUpdater()
 	if err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to initialize updater", err)
-	}
-
-	install := update.CurrentInstallContext()
-	if install.Source == update.InstallSourceHomebrew {
-		return clierrors.New(clierrors.ExitGeneral, "Self-update is disabled for Homebrew installs").
-			WithHint("Run 'brew upgrade musher' instead")
+		return err
 	}
 
 	// Specific version mode
@@ -78,7 +74,25 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 		return updateToVersion(ctx, out, updater, targetVersion)
 	}
 
-	// Check for latest
+	return updateToLatest(ctx, out, updater, currentVersion, force)
+}
+
+func initUpdater() (*update.Updater, error) {
+	install := update.CurrentInstallContext()
+	if install.Source == update.InstallSourceHomebrew {
+		return nil, clierrors.New(clierrors.ExitGeneral, "Self-update is disabled for Homebrew installs").
+			WithHint("Run 'brew upgrade musher' instead")
+	}
+
+	updater, err := update.NewUpdater()
+	if err != nil {
+		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to initialize updater", err)
+	}
+
+	return updater, nil
+}
+
+func updateToLatest(ctx context.Context, out *output.Writer, updater *update.Updater, currentVersion string, force bool) error {
 	var spin *output.Spinner
 	if !out.JSON {
 		spin = out.Spinner("Checking for updates")
@@ -91,12 +105,7 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 			spin.Stop()
 		}
 
-		cliErr := clierrors.Wrap(clierrors.ExitNetwork, "Failed to check for updates", err)
-		if strings.Contains(err.Error(), "403") {
-			cliErr = cliErr.WithHint("Set GITHUB_TOKEN to avoid rate limits")
-		}
-
-		return cliErr
+		return wrapCheckLatestError(err)
 	}
 
 	if out.JSON {
@@ -127,7 +136,20 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 		spin.StopWithSuccess("Reinstalling v" + info.LatestVersion)
 	}
 
-	reexeced, err := ensureUpdateWritable(install)
+	return applyUpdate(ctx, out, updater, info, currentVersion)
+}
+
+func wrapCheckLatestError(err error) error {
+	cliErr := clierrors.Wrap(clierrors.ExitNetwork, "Failed to check for updates", err)
+	if strings.Contains(err.Error(), "403") {
+		cliErr = cliErr.WithHint("Set GITHUB_TOKEN to avoid rate limits")
+	}
+
+	return cliErr
+}
+
+func applyUpdate(ctx context.Context, out *output.Writer, updater *update.Updater, info *update.Info, currentVersion string) error {
+	reexeced, err := ensureUpdateWritable(update.CurrentInstallContext())
 	if err != nil {
 		return err
 	}
@@ -136,7 +158,7 @@ func runUpdate(cmd *cobra.Command, out *output.Writer, targetVersion string, for
 		return nil
 	}
 
-	spin = out.Spinner("Downloading v" + info.LatestVersion)
+	spin := out.Spinner("Downloading v" + info.LatestVersion)
 	spin.Start()
 
 	if err := updater.Apply(ctx, info.Release); err != nil {

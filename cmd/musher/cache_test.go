@@ -5,8 +5,6 @@ import (
 )
 
 func TestCacheCommandRegistered(t *testing.T) {
-	t.Parallel()
-
 	root := newRootCmd()
 
 	var found bool
@@ -25,8 +23,6 @@ func TestCacheCommandRegistered(t *testing.T) {
 }
 
 func TestCacheSubcommands(t *testing.T) {
-	t.Parallel()
-
 	cmd := newCacheCmd()
 	want := map[string]bool{
 		"info":  false,
@@ -49,8 +45,6 @@ func TestCacheSubcommands(t *testing.T) {
 }
 
 func TestCacheCleanFlags(t *testing.T) {
-	t.Parallel()
-
 	cmd := newCacheCleanCmd()
 
 	if cmd.Flags().Lookup("dry-run") == nil {
@@ -63,8 +57,6 @@ func TestCacheCleanFlags(t *testing.T) {
 }
 
 func TestCachePruneFlags(t *testing.T) {
-	t.Parallel()
-
 	cmd := newCachePruneCmd()
 
 	if cmd.Flags().Lookup("older-than") == nil {
@@ -81,8 +73,6 @@ func TestCachePruneFlags(t *testing.T) {
 }
 
 func TestCacheListFlags(t *testing.T) {
-	t.Parallel()
-
 	cmd := newCacheListCmd()
 
 	if cmd.Flags().Lookup("pattern") == nil {

@@ -168,53 +168,53 @@ func (p *Prompter) SelectMultiple(message string, options []string) ([]int, erro
 		}
 
 		if strings.EqualFold(input, "all") {
-			indices := make([]int, len(options))
-			for i := range options {
-				indices[i] = i
-			}
-
-			return indices, nil
+			return allIndices(len(options)), nil
 		}
 
-		parts := strings.Split(input, ",")
-		seen := make(map[int]bool)
-
-		var indices []int
-
-		valid := true
-
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-
-			num, err := strconv.Atoi(part)
-			if err != nil || num < 1 || num > len(options) {
-				p.out.Warning("Invalid selection %q. Please enter numbers between 1 and %d", part, len(options))
-
-				valid = false
-
-				break
-			}
-
-			idx := num - 1
-			if !seen[idx] {
-				seen[idx] = true
-				indices = append(indices, idx)
-			}
-		}
-
-		if !valid {
-			continue
-		}
-
-		if len(indices) == 0 {
+		indices, valid := parseSelections(input, len(options), p.out)
+		if !valid || len(indices) == 0 {
 			continue
 		}
 
 		return indices, nil
 	}
+}
+
+func allIndices(n int) []int {
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+
+	return indices
+}
+
+func parseSelections(input string, optionCount int, out *output.Writer) ([]int, bool) {
+	parts := strings.Split(input, ",")
+	seen := make(map[int]bool)
+
+	var indices []int
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		num, err := strconv.Atoi(part)
+		if err != nil || num < 1 || num > optionCount {
+			out.Warning("Invalid selection %q. Please enter numbers between 1 and %d", part, optionCount)
+			return nil, false
+		}
+
+		idx := num - 1
+		if !seen[idx] {
+			seen[idx] = true
+			indices = append(indices, idx)
+		}
+	}
+
+	return indices, true
 }
 
 // APIKey prompts for an API key with masked input (asterisks).

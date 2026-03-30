@@ -3,6 +3,7 @@ package paths
 import (
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -270,5 +271,232 @@ func TestCredentialFilePath(t *testing.T) {
 	want := "/data/musher/credentials/api.musher.dev/api-key"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestXDGFallback(t *testing.T) {
+	tests := []struct {
+		name   string
+		xdgEnv string
+		xdgVal string
+		fn     func() (string, error)
+		want   string
+	}{
+		{"config", "XDG_CONFIG_HOME", "/xdg/config", ConfigRoot, "/xdg/config/musher"},
+		{"data", "XDG_DATA_HOME", "/xdg/data", DataRoot, "/xdg/data/musher"},
+		{"state", "XDG_STATE_HOME", "/xdg/state", StateRoot, "/xdg/state/musher"},
+		{"cache", "XDG_CACHE_HOME", "/xdg/cache", CacheRoot, "/xdg/cache/musher"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearPathEnvVars(t)
+			t.Setenv(tt.xdgEnv, tt.xdgVal)
+
+			got, err := tt.fn()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestXDGRelativeIgnored(t *testing.T) {
+	// XDG vars that are relative paths should be ignored (fall through).
+	clearPathEnvVars(t)
+	t.Setenv("XDG_CONFIG_HOME", "relative/path")
+
+	got, err := ConfigRoot()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should not contain the relative XDG path.
+	if strings.Contains(got, "relative") {
+		t.Errorf("relative XDG path should be ignored, got %q", got)
+	}
+}
+
+func TestLogsDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	got, err := LogsDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/state/musher/logs"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestDefaultLogFile(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	got, err := DefaultLogFile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/state/musher/logs/musher.log"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestUpdateStateFile(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	got, err := UpdateStateFile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/state/musher/update-check.json"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBundleCacheDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	got, err := BundleCacheDir("ns", "slug", "v1.0.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/cache/musher/bundles/ns/slug/v1.0.0"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestOCIStoreDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_DATA_HOME", "/data/musher")
+
+	got, err := OCIStoreDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/data/musher/oci"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBlobCacheDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	got, err := BlobCacheDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/cache/musher/blobs"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestManifestCacheDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	got, err := ManifestCacheDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/cache/musher/manifests"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestTranscriptDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	got, err := TranscriptDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/state/musher/transcripts"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestInstalledBundlesDir(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_DATA_HOME", "/data/musher")
+
+	got, err := InstalledBundlesDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/data/musher/installed"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRuntimeDirError(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_RUNTIME_DIR", "relative/bad")
+
+	_, err := RuntimeDir("sub")
+	if err == nil {
+		t.Fatal("expected error for relative MUSHER_RUNTIME_DIR")
+	}
+}
+
+func TestRuntimeRootRelativeError(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_RUNTIME_DIR", "not-absolute")
+
+	_, err := RuntimeRoot()
+	if err == nil {
+		t.Fatal("expected error for relative MUSHER_RUNTIME_DIR")
+	}
+}
+
+func TestRuntimeRootMusherHomeRelativeError(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_HOME", "relative")
+
+	_, err := RuntimeRoot()
+	if err == nil {
+		t.Fatal("expected error for relative MUSHER_HOME in RuntimeRoot")
+	}
+}
+
+func TestBrandedEnvPathCleaned(t *testing.T) {
+	clearPathEnvVars(t)
+	t.Setenv("MUSHER_CONFIG_HOME", "/branded//config/./path")
+
+	got, err := ConfigRoot()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "/branded/config/path"
+	if got != want {
+		t.Errorf("got %q, want %q (path should be cleaned)", got, want)
 	}
 }

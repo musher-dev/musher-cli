@@ -10,8 +10,6 @@ import (
 )
 
 func TestNewAddCmdFlags(t *testing.T) {
-	t.Parallel()
-
 	cmd := newBundleAddCmd()
 
 	flags := []string{"all", "interactive", "dry-run", "yes", "kind", "id"}

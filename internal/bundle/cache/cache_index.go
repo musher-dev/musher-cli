@@ -28,7 +28,6 @@ func (s *Store) ListCached() ([]CachedBundle, error) {
 
 	var entries []CachedBundle
 
-	// Level 1: hostID.
 	hostDirs, err := safeReadDir(manifestsDir)
 	if err != nil {
 		return entries, nil //nolint:nilerr // empty or inaccessible manifests dir
@@ -39,54 +38,66 @@ func (s *Store) ListCached() ([]CachedBundle, error) {
 			continue
 		}
 
-		hostID := hostDir.Name()
-
-		// Level 2: namespace.
-		nsDirs, nsErr := safeReadDir(filepath.Join(manifestsDir, hostID))
-		if nsErr != nil {
-			continue
-		}
-
-		for _, nsDir := range nsDirs {
-			if !nsDir.IsDir() {
-				continue
-			}
-
-			namespace := nsDir.Name()
-
-			// Level 3: slug.
-			slugDirs, slugErr := safeReadDir(filepath.Join(manifestsDir, hostID, namespace))
-			if slugErr != nil {
-				continue
-			}
-
-			for _, slugDir := range slugDirs {
-				if !slugDir.IsDir() {
-					continue
-				}
-
-				slug := slugDir.Name()
-
-				// Level 4: version files.
-				files, filesErr := safeReadDir(filepath.Join(manifestsDir, hostID, namespace, slug))
-				if filesErr != nil {
-					continue
-				}
-
-				for _, file := range files {
-					if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") || strings.HasSuffix(file.Name(), ".meta.json") {
-						continue
-					}
-
-					version := strings.TrimSuffix(file.Name(), ".json")
-					entry := buildCachedBundle(manifestsDir, hostID, namespace, slug, version)
-					entries = append(entries, entry)
-				}
-			}
-		}
+		entries = collectHostEntries(manifestsDir, hostDir.Name(), entries)
 	}
 
 	return entries, nil
+}
+
+func collectHostEntries(manifestsDir, hostID string, entries []CachedBundle) []CachedBundle {
+	nsDirs, nsErr := safeReadDir(filepath.Join(manifestsDir, hostID))
+	if nsErr != nil {
+		return entries
+	}
+
+	for _, nsDir := range nsDirs {
+		if !nsDir.IsDir() {
+			continue
+		}
+
+		entries = collectNamespaceEntries(manifestsDir, hostID, nsDir.Name(), entries)
+	}
+
+	return entries
+}
+
+func collectNamespaceEntries(manifestsDir, hostID, namespace string, entries []CachedBundle) []CachedBundle {
+	slugDirs, slugErr := safeReadDir(filepath.Join(manifestsDir, hostID, namespace))
+	if slugErr != nil {
+		return entries
+	}
+
+	for _, slugDir := range slugDirs {
+		if !slugDir.IsDir() {
+			continue
+		}
+
+		entries = collectSlugEntries(manifestsDir, hostID, namespace, slugDir.Name(), entries)
+	}
+
+	return entries
+}
+
+func collectSlugEntries(manifestsDir, hostID, namespace, slug string, entries []CachedBundle) []CachedBundle {
+	files, filesErr := safeReadDir(filepath.Join(manifestsDir, hostID, namespace, slug))
+	if filesErr != nil {
+		return entries
+	}
+
+	for _, file := range files {
+		if !isVersionFile(file) {
+			continue
+		}
+
+		version := strings.TrimSuffix(file.Name(), ".json")
+		entries = append(entries, buildCachedBundle(manifestsDir, hostID, namespace, slug, version))
+	}
+
+	return entries
+}
+
+func isVersionFile(file os.DirEntry) bool {
+	return !file.IsDir() && strings.HasSuffix(file.Name(), ".json") && !strings.HasSuffix(file.Name(), ".meta.json")
 }
 
 // ListCachedByRecency returns all cached bundle entries sorted by FetchedAt

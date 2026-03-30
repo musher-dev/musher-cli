@@ -61,62 +61,26 @@ func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 		return nil, nil, err
 	}
 
-	logFilePath := strings.TrimSpace(cfg.LogFile)
-	usingDefaultLogFile := false
-
-	if !stderrEnabled && logFilePath == "" {
+	logFilePath, usingDefault := resolveLogFilePath(cfg.LogFile, stderrEnabled)
+	if logFilePath == "" && !stderrEnabled {
 		defaultLogFile, pathErr := paths.DefaultLogFile()
 		if pathErr != nil {
 			return nil, nil, fmt.Errorf("resolve default log file: %w", pathErr)
 		}
 
 		logFilePath = defaultLogFile
-		usingDefaultLogFile = true
+		usingDefault = true
 	}
 
-	writers := make([]io.Writer, 0, 2)
-	closers := make([]io.Closer, 0, 1)
-
-	if stderrEnabled {
-		writers = append(writers, os.Stderr)
+	writers, closers, err := buildWriters(stderrEnabled, logFilePath, usingDefault)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if logFilePath != "" {
-		if usingDefaultLogFile {
-			if rotateErr := rotateLogFile(logFilePath, defaultLogMaxBytes, defaultLogBackups); rotateErr != nil {
-				return nil, nil, fmt.Errorf("rotate default log file: %w", rotateErr)
-			}
-		}
-
-		logFile, openErr := openLogFile(logFilePath)
-		if openErr != nil {
-			return nil, nil, openErr
-		}
-
-		writers = append(writers, logFile)
-		closers = append(closers, logFile)
-	}
-
-	handlerOpts := &slog.HandlerOptions{
-		Level:       level,
-		ReplaceAttr: redactAttr,
-	}
-
-	multiWriter := io.MultiWriter(writers...)
-
-	var handler slog.Handler
-
-	switch strings.ToLower(strings.TrimSpace(cfg.Format)) {
-	case "", "json":
-		handler = slog.NewJSONHandler(multiWriter, handlerOpts)
-	case "text":
-		handler = slog.NewTextHandler(multiWriter, handlerOpts)
-	default:
-		for _, closer := range closers {
-			_ = closer.Close()
-		}
-
-		return nil, nil, fmt.Errorf("invalid log format: %q (allowed: json, text)", cfg.Format)
+	handler, err := buildHandler(cfg.Format, io.MultiWriter(writers...), level)
+	if err != nil {
+		closeAll(closers)
+		return nil, nil, err
 	}
 
 	logger := slog.New(handler).With(
@@ -138,6 +102,64 @@ func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 	}
 
 	return logger, cleanup, nil
+}
+
+func resolveLogFilePath(logFile string, stderrEnabled bool) (string, bool) {
+	path := strings.TrimSpace(logFile)
+	if path != "" || stderrEnabled {
+		return path, false
+	}
+
+	return "", false
+}
+
+func buildWriters(stderrEnabled bool, logFilePath string, usingDefault bool) ([]io.Writer, []io.Closer, error) {
+	writers := make([]io.Writer, 0, 2)
+	closers := make([]io.Closer, 0, 1)
+
+	if stderrEnabled {
+		writers = append(writers, os.Stderr)
+	}
+
+	if logFilePath != "" {
+		if usingDefault {
+			if rotateErr := rotateLogFile(logFilePath, defaultLogMaxBytes, defaultLogBackups); rotateErr != nil {
+				return nil, nil, fmt.Errorf("rotate default log file: %w", rotateErr)
+			}
+		}
+
+		logFile, openErr := openLogFile(logFilePath)
+		if openErr != nil {
+			return nil, nil, openErr
+		}
+
+		writers = append(writers, logFile)
+		closers = append(closers, logFile)
+	}
+
+	return writers, closers, nil
+}
+
+func buildHandler(format string, w io.Writer, level slog.Leveler) (slog.Handler, error) {
+	handlerOpts := &slog.HandlerOptions{
+		Level:       level,
+		ReplaceAttr: redactAttr,
+	}
+
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "json":
+		return slog.NewJSONHandler(w, handlerOpts), nil
+	case "text":
+		return slog.NewTextHandler(w, handlerOpts), nil
+	default:
+		return nil, fmt.Errorf("invalid log format: %q (allowed: json, text)", format)
+	}
+}
+
+func closeAll(closers []io.Closer) {
+	for _, closer := range closers {
+		_ = closer.Close()
+	}
 }
 
 func openLogFile(path string) (*os.File, error) {

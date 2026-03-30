@@ -337,18 +337,23 @@ func (c *Client) do(req *http.Request, route string) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	durationMS := time.Since(start).Milliseconds()
 
-	if err != nil {
+	if err != nil || resp == nil {
+		errVal := err
+		if errVal == nil {
+			errVal = errors.New("server returned nil response")
+		}
+
 		logger.Error(
 			"request failed",
 			slog.String("event.type", "http.request.error"),
 			slog.Int64("duration_ms", durationMS),
-			slog.String("error", err.Error()),
+			slog.String("error", errVal.Error()),
 		)
 
 		return nil, &RequestError{
 			Operation: "http request",
 			RequestID: requestID,
-			Cause:     err,
+			Cause:     errVal,
 		}
 	}
 

@@ -131,35 +131,33 @@ func discoverByExtension(dirPath, prefix string, exts []string) []string {
 	var results []string
 
 	for _, entry := range entries {
-		if isHidden(entry.Name()) {
-			continue
-		}
-
-		// Skip symlinks.
-		if entry.Type()&os.ModeSymlink != 0 {
+		if isHidden(entry.Name()) || entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 
 		if entry.IsDir() {
-			// Walk one level into subdirectory.
-			subPath := filepath.Join(dirPath, entry.Name())
-
-			subEntries, readErr := os.ReadDir(subPath)
-			if readErr != nil {
-				continue
-			}
-
-			for _, subEntry := range subEntries {
-				if subEntry.IsDir() || isHidden(subEntry.Name()) || subEntry.Type()&os.ModeSymlink != 0 {
-					continue
-				}
-
-				if matchesExt(subEntry.Name(), exts) {
-					results = append(results, filepath.Join(prefix, entry.Name(), subEntry.Name()))
-				}
-			}
+			results = discoverSubdirFiles(filepath.Join(dirPath, entry.Name()), filepath.Join(prefix, entry.Name()), exts, results)
 		} else if matchesExt(entry.Name(), exts) {
 			results = append(results, filepath.Join(prefix, entry.Name()))
+		}
+	}
+
+	return results
+}
+
+func discoverSubdirFiles(subPath, prefix string, exts, results []string) []string {
+	subEntries, readErr := os.ReadDir(subPath)
+	if readErr != nil {
+		return results
+	}
+
+	for _, subEntry := range subEntries {
+		if subEntry.IsDir() || isHidden(subEntry.Name()) || subEntry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		if matchesExt(subEntry.Name(), exts) {
+			results = append(results, filepath.Join(prefix, subEntry.Name()))
 		}
 	}
 

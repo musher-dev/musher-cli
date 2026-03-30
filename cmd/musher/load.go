@@ -11,6 +11,8 @@ import (
 	"github.com/musher-dev/musher-cli/internal/tui"
 )
 
+const actionLoad = "load"
+
 func newLoadCmd() *cobra.Command {
 	var force bool
 
@@ -69,7 +71,7 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 		return fmt.Errorf("load: %w", err)
 	}
 
-	if result == nil || result.Action != "load" {
+	if result == nil || result.Action != actionLoad {
 		return nil
 	}
 

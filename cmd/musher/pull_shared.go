@@ -49,46 +49,91 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		return nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to derive host ID from API URL", err)
 	}
 
-	resolvedFromLatest := false
-
-	// Resolve version if not specified.
-	if version == "" {
-		if !force && store.IsRefFresh(hostID, namespace, slug) {
-			if refData, refErr := store.ReadRef(hostID, namespace, slug); refErr == nil {
-				version = refData.Version
-			}
-		}
-
-		if version == "" {
-			resolved, resolveErr := resolveLatestVersionCtx(ctx, out, namespace, slug)
-			if resolveErr != nil {
-				return nil, resolveErr
-			}
-
-			version = resolved
-			resolvedFromLatest = true
-		}
+	version, resolvedFromLatest, err := resolveVersion(ctx, out, store, hostID, namespace, slug, version, force)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check cache freshness.
 	if !force {
-		if manifest, loadErr := store.LoadManifest(hostID, namespace, slug, version); loadErr == nil {
-			if store.IsManifestFresh(hostID, namespace, slug, version) && store.HasAllBlobs(manifest) {
-				return &pullCacheResult{
-					Namespace:   namespace,
-					Slug:        slug,
-					Version:     version,
-					Name:        manifest.Name,
-					Description: manifest.Description,
-					CacheRoot:   cacheRoot,
-					Cached:      true,
-					Layers:      manifest.Layers,
-				}, nil
-			}
+		if result := checkCacheFreshness(store, hostID, namespace, slug, version, cacheRoot); result != nil {
+			return result, nil
 		}
 	}
 
-	// Try authenticated client first, fall back to public.
+	bundle, err := pullFromAPI(ctx, out, namespace, slug, version)
+	if err != nil {
+		return nil, err
+	}
+
+	manifest, err := cacheBundle(store, bundle)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := storeManifestAndMeta(store, hostID, namespace, slug, version, manifest, resolvedFromLatest); err != nil {
+		return nil, err
+	}
+
+	return &pullCacheResult{
+		Namespace:   namespace,
+		Slug:        slug,
+		Version:     version,
+		Name:        bundle.Name,
+		Description: bundle.Description,
+		CacheRoot:   cacheRoot,
+		Cached:      false,
+		Layers:      manifest.Layers,
+	}, nil
+}
+
+func resolveVersion(
+	ctx context.Context,
+	out *output.Writer,
+	store *cache.Store,
+	hostID, namespace, slug, version string,
+	force bool,
+) (resolved string, fromLatest bool, err error) {
+	if version != "" {
+		return version, false, nil
+	}
+
+	if !force && store.IsRefFresh(hostID, namespace, slug) {
+		if refData, refErr := store.ReadRef(hostID, namespace, slug); refErr == nil {
+			return refData.Version, false, nil
+		}
+	}
+
+	resolved, resolveErr := resolveLatestVersionCtx(ctx, out, namespace, slug)
+	if resolveErr != nil {
+		return "", false, resolveErr
+	}
+
+	return resolved, true, nil
+}
+
+func checkCacheFreshness(store *cache.Store, hostID, namespace, slug, version, cacheRoot string) *pullCacheResult {
+	manifest, loadErr := store.LoadManifest(hostID, namespace, slug, version)
+	if loadErr != nil {
+		return nil
+	}
+
+	if !store.IsManifestFresh(hostID, namespace, slug, version) || !store.HasAllBlobs(manifest) {
+		return nil
+	}
+
+	return &pullCacheResult{
+		Namespace:   namespace,
+		Slug:        slug,
+		Version:     version,
+		Name:        manifest.Name,
+		Description: manifest.Description,
+		CacheRoot:   cacheRoot,
+		Cached:      true,
+		Layers:      manifest.Layers,
+	}
+}
+
+func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, version string) (*client.PullBundleResponse, error) {
 	_, apiClient, authErr := newAPIClient()
 	usePublic := authErr != nil
 
@@ -102,24 +147,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 	spin := out.Spinner("Pulling " + versionRef)
 	spin.Start()
 
-	var bundle *client.PullBundleResponse
-
-	if usePublic {
-		bundle, err = apiClient.PullPublicBundleVersion(ctx, namespace, slug, version)
-	} else {
-		bundle, err = apiClient.PullBundleVersion(ctx, namespace, slug, version)
-		// Fall back to the public hub endpoint when the namespace endpoint
-		// returns 403 (e.g. authenticated user pulling another user's public bundle).
-		if err != nil {
-			var httpErr *client.HTTPStatusError
-			if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden {
-				apiURL := configForPublicClient()
-				pubClient := newPublicAPIClient(apiURL)
-				bundle, err = pubClient.PullPublicBundleVersion(ctx, namespace, slug, version)
-			}
-		}
-	}
-
+	bundle, err := pullBundleWithFallback(ctx, apiClient, namespace, slug, version, usePublic)
 	if err != nil {
 		spin.StopWithFailure("Pull failed")
 		return nil, clierrors.PullFailed(err)
@@ -127,7 +155,46 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 
 	spin.StopWithSuccess("Pulled " + versionRef)
 
-	// Store assets in the content-addressable cache.
+	return bundle, nil
+}
+
+func pullBundleWithFallback(
+	ctx context.Context,
+	apiClient *client.Client,
+	namespace, slug, version string,
+	usePublic bool,
+) (*client.PullBundleResponse, error) {
+	if usePublic {
+		bundle, pullErr := apiClient.PullPublicBundleVersion(ctx, namespace, slug, version)
+		if pullErr != nil {
+			return nil, fmt.Errorf("pull public bundle: %w", pullErr)
+		}
+
+		return bundle, nil
+	}
+
+	bundle, err := apiClient.PullBundleVersion(ctx, namespace, slug, version)
+	if err == nil {
+		return bundle, nil
+	}
+
+	var httpErr *client.HTTPStatusError
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden {
+		apiURL := configForPublicClient()
+		pubClient := newPublicAPIClient(apiURL)
+
+		fallbackBundle, fallbackErr := pubClient.PullPublicBundleVersion(ctx, namespace, slug, version)
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("pull public bundle (fallback): %w", fallbackErr)
+		}
+
+		return fallbackBundle, nil
+	}
+
+	return nil, fmt.Errorf("pull bundle: %w", err)
+}
+
+func cacheBundle(store *cache.Store, bundle *client.PullBundleResponse) (*cache.BundleManifest, error) {
 	manifest := &cache.BundleManifest{
 		Namespace:   bundle.Namespace,
 		Slug:        bundle.Slug,
@@ -154,8 +221,17 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		})
 	}
 
+	return manifest, nil
+}
+
+func storeManifestAndMeta(
+	store *cache.Store,
+	hostID, namespace, slug, version string,
+	manifest *cache.BundleManifest,
+	resolvedFromLatest bool,
+) error {
 	if storeErr := store.StoreManifest(hostID, namespace, slug, version, manifest); storeErr != nil {
-		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest", storeErr)
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest", storeErr)
 	}
 
 	now := time.Now()
@@ -164,10 +240,9 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		FetchedAt: now,
 		TTL:       cache.DefaultManifestTTL,
 	}); storeErr != nil {
-		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest metadata", storeErr)
+		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest metadata", storeErr)
 	}
 
-	// Update the "latest" ref pointer when the version was resolved dynamically.
 	if resolvedFromLatest {
 		_ = store.UpdateRef(hostID, namespace, slug, &cache.RefData{ //nolint:errcheck // best-effort ref cache
 			Version:   version,
@@ -176,16 +251,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		})
 	}
 
-	return &pullCacheResult{
-		Namespace:   namespace,
-		Slug:        slug,
-		Version:     version,
-		Name:        bundle.Name,
-		Description: bundle.Description,
-		CacheRoot:   cacheRoot,
-		Cached:      false,
-		Layers:      manifest.Layers,
-	}, nil
+	return nil
 }
 
 // resolveLatestVersionCtx fetches bundle detail to determine the latest version.

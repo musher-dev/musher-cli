@@ -5,8 +5,6 @@ import (
 )
 
 func TestNewConfigCmd(t *testing.T) {
-	t.Parallel()
-
 	cmd := newConfigCmd()
 
 	if cmd.Use != "config" {
@@ -30,8 +28,6 @@ func TestNewConfigCmd(t *testing.T) {
 }
 
 func TestConfigGetRequiresArg(t *testing.T) {
-	t.Parallel()
-
 	cmd := newConfigGetCmd()
 	cmd.SetArgs([]string{})
 
@@ -42,8 +38,6 @@ func TestConfigGetRequiresArg(t *testing.T) {
 }
 
 func TestConfigSetRequiresTwoArgs(t *testing.T) {
-	t.Parallel()
-
 	cmd := newConfigSetCmd()
 	cmd.SetArgs([]string{"only-one"})
 

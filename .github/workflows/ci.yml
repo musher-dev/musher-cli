@@ -35,9 +35,6 @@ jobs:
       - name: Run canonical quality gate
         run: task check:ci
 
-      - name: Run tests with coverage
-        run: task check:test-cover
-
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
@@ -48,3 +45,39 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 14
+
+      - name: Upload to Codecov
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  smoke:
+    name: Smoke (${{ matrix.os }})
+    needs: check
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -o musher${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./cmd/musher
+
+      - name: Version smoke test
+        run: go run ./cmd/musher version
+
+      - name: Help smoke test
+        run: go run ./cmd/musher --help
+
+      - name: Run tests
+        run: go test -race ./...

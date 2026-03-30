@@ -47,9 +47,11 @@ performs a full-text search across bundle names, descriptions, and tags.`,
 	return cmd
 }
 
+const sortRecent = "recent"
+
 func normalizeHubSearchSort(sort string) (string, bool) {
 	if sort == "updated" {
-		return "recent", true
+		return sortRecent, true
 	}
 
 	return sort, false

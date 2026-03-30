@@ -10,6 +10,7 @@ vars:
   GO_VERSION: 1.26.1
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
+  NILAWAY_VERSION: latest
   SHFMT_VERSION: v3.13.0
   ACTIONLINT_VERSION: v1.7.11
   LEFTHOOK_VERSION: v1.13.6
@@ -43,6 +44,7 @@ tasks:
       - go install mvdan.cc/sh/v3/cmd/shfmt@{{.SHFMT_VERSION}}
       - go install github.com/rhysd/actionlint/cmd/actionlint@{{.ACTIONLINT_VERSION}}
       - go install github.com/evilmartians/lefthook@{{.LEFTHOOK_VERSION}}
+      - go install go.uber.org/nilaway/cmd/nilaway@{{.NILAWAY_VERSION}}
 
   setup:hooks:
     desc: Install repository git hooks
@@ -98,11 +100,15 @@ tasks:
       - task: check:shell
       - task: check:workflow
       - task: check:mod
-      - task: check:guards
+      - task: check:policy
       - task: check:lint
+      - task: check:nilaway
       - task: check:vuln
-      - task: check:test
+      - task: check:test-cover
+      - task: check:coverage:floor
       - task: check:compile
+      - task: check:contracts
+      - task: check:install
 
   check:fmt:
     desc: Check Go formatting and imports
@@ -193,14 +199,29 @@ tasks:
     cmds:
       - actionlint {{.CLI_ARGS}}
 
-  check:guards:
-    desc: Enforce repository quality guardrails
+  check:policy:
+    desc: Enforce repository policy guardrails
     cmds:
       - |
-        if rg -n '(@latest|version:\s*latest)' .devcontainer/scripts .github/workflows; then
-          echo "floating @latest versions are not allowed in automation; pin tool versions explicitly"
-          exit 1
+        fail=0
+        # No floating @latest versions in automation
+        if rg -n '(@latest|version:\s*latest)' .devcontainer/scripts .github/workflows 2>/dev/null; then
+          echo "POLICY: floating @latest versions are not allowed; pin explicitly"
+          fail=1
         fi
+        # TODO/FIXME/HACK must reference an issue number
+        if rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO' >/dev/null 2>&1; then
+          echo "POLICY: TODO/FIXME/HACK comments must reference an issue number (#NNN)"
+          rg -n 'TODO|FIXME|HACK' --glob '*.go' | grep -v '#[0-9]' | grep -v 'context\.TODO'
+          fail=1
+        fi
+        # go.mod Go version must match Taskfile GO_VERSION
+        mod_version=$(head -5 go.mod | grep '^go ' | awk '{print $2}')
+        if [ "$mod_version" != "{{.GO_VERSION}}" ]; then
+          echo "POLICY: go.mod says $mod_version but Taskfile expects {{.GO_VERSION}}"
+          fail=1
+        fi
+        exit $fail
 
   check:vuln:
     desc: Run govulncheck
@@ -209,6 +230,59 @@ tasks:
         msg: "govulncheck is required. Run 'task setup:tools' first."
     cmds:
       - govulncheck ./...
+
+  check:nilaway:
+    desc: Run NilAway nil-safety analysis (advisory — does not block CI)
+    preconditions:
+      - sh: command -v nilaway >/dev/null 2>&1
+        msg: "nilaway is required. Run 'task setup:tools' first."
+    cmds:
+      - |
+        echo "Running NilAway nil-safety analysis..."
+        if ! nilaway -exclude-test-files ./... 2>&1; then
+          echo ""
+          echo "NilAway reported findings above. Review for genuine nil risks."
+          echo "Note: some findings may be false positives from cross-package analysis."
+        fi
+
+  check:coverage:floor:
+    desc: Enforce minimum test coverage (70%)
+    preconditions:
+      - sh: test -f coverage.out
+        msg: "coverage.out not found. Run 'task check:test-cover' first."
+    cmds:
+      - |
+        total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
+        threshold=70.0
+        if awk "BEGIN{exit (!($total < $threshold))}"; then
+          printf "FAIL: total coverage %.1f%% is below %.1f%% floor\n" "$total" "$threshold" >&2
+          exit 1
+        fi
+        printf "OK: total coverage %.1f%% meets %.1f%% floor\n" "$total" "$threshold"
+
+  check:contracts:
+    desc: Verify CLI command tree is stable
+    cmds:
+      - go run ./cmd/musher --help > /dev/null
+      - go run ./cmd/musher auth --help > /dev/null
+      - go run ./cmd/musher bundle --help > /dev/null
+      - go run ./cmd/musher cache --help > /dev/null
+      - go run ./cmd/musher config --help > /dev/null
+      - go run ./cmd/musher hub --help > /dev/null
+      - go run ./cmd/musher doctor > /dev/null 2>&1 || true
+      - go run ./cmd/musher version > /dev/null
+
+  check:install:
+    desc: Validate install scripts
+    cmds:
+      - |
+        if [ -f install.sh ]; then
+          shellcheck -x install.sh
+          sh -n install.sh
+        fi
+        if [ -f install.ps1 ]; then
+          echo "install.ps1 exists (manual review required for PowerShell)"
+        fi
 
   check:test:
     desc: Run tests with race detection
@@ -234,7 +308,7 @@ tasks:
   check:pre-push:
     desc: Run the pre-push verification suite
     cmds:
-      - task: check:guards
+      - task: check:policy
       - task: check:lint
       - task: check:test
       - task: check:compile

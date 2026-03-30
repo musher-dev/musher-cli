@@ -53,27 +53,14 @@ func runCachePrune(out *output.Writer, olderThanStr, namespace string, dryRun bo
 			WithHint("Use --older-than and/or --namespace to specify what to prune, or use 'musher cache clean' to remove everything")
 	}
 
-	var olderThan time.Duration
-
-	if olderThanStr != "" {
-		duration, parseErr := cache.ParseCacheDuration(olderThanStr)
-		if parseErr != nil {
-			return clierrors.Wrap(clierrors.ExitUsage,
-				"Invalid --older-than value", parseErr).
-				WithHint("Use a duration like 7d, 24h, or 2w")
-		}
-
-		olderThan = duration
+	olderThan, err := parsePruneDuration(olderThanStr)
+	if err != nil {
+		return err
 	}
 
-	cacheRoot, err := paths.CacheRoot()
+	store, err := openCacheStore()
 	if err != nil {
-		return clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
-	}
-
-	store, err := cache.NewStore(cacheRoot)
-	if err != nil {
-		return clierrors.Wrap(clierrors.ExitConfig, "Failed to initialize cache store", err)
+		return err
 	}
 
 	entries, err := store.ListCached()
@@ -81,59 +68,22 @@ func runCachePrune(out *output.Writer, olderThanStr, namespace string, dryRun bo
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to list cached bundles", err)
 	}
 
-	// Filter entries matching criteria.
-	var matching []cache.CachedBundle
-
-	cutoff := time.Now().Add(-olderThan)
-
-	for _, entry := range entries {
-		if namespace != "" && entry.Namespace != namespace {
-			continue
-		}
-
-		if olderThan > 0 && !entry.FetchedAt.IsZero() && entry.FetchedAt.After(cutoff) {
-			continue
-		}
-
-		matching = append(matching, entry)
-	}
+	matching := filterPruneCandidates(entries, namespace, olderThan)
 
 	if len(matching) == 0 {
 		out.Info("No cached bundles match the given criteria")
 		return nil
 	}
 
-	// Calculate total size to be freed.
-	var totalSize int64
-	for _, entry := range matching {
-		totalSize += entry.TotalSize
-	}
+	totalSize := sumBundleSize(matching)
 
 	if dryRun {
-		out.Info("Would remove %d bundle version(s) (%s):", len(matching), formatBytes(totalSize))
-
-		for _, entry := range matching {
-			out.Print("  %s/%s:%s  %s  %s",
-				entry.Namespace, entry.Slug, entry.Version,
-				formatBytes(entry.TotalSize), timeAgo(entry.FetchedAt))
-		}
-
+		printPruneDryRun(out, matching, totalSize)
 		return nil
 	}
 
-	// Remove matching manifests.
-	removed := 0
+	removed := purgeMatchingManifests(out, store, matching)
 
-	for _, entry := range matching {
-		if purgeErr := store.PurgeManifest(entry.HostID, entry.Namespace, entry.Slug, entry.Version); purgeErr != nil {
-			out.Warning("Failed to remove %s/%s:%s: %v", entry.Namespace, entry.Slug, entry.Version, purgeErr)
-			continue
-		}
-
-		removed++
-	}
-
-	// Garbage-collect orphaned blobs.
 	blobsPruned, pruneErr := store.PruneBlobs()
 	if pruneErr != nil {
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to prune orphaned blobs", pruneErr)
@@ -161,4 +111,87 @@ func runCachePrune(out *output.Writer, olderThanStr, namespace string, dryRun bo
 		removed, blobsPruned, formatBytes(totalSize))
 
 	return nil
+}
+
+func parsePruneDuration(olderThanStr string) (time.Duration, error) {
+	if olderThanStr == "" {
+		return 0, nil
+	}
+
+	duration, parseErr := cache.ParseCacheDuration(olderThanStr)
+	if parseErr != nil {
+		return 0, clierrors.Wrap(clierrors.ExitUsage,
+			"Invalid --older-than value", parseErr).
+			WithHint("Use a duration like 7d, 24h, or 2w")
+	}
+
+	return duration, nil
+}
+
+func openCacheStore() (*cache.Store, error) {
+	cacheRoot, err := paths.CacheRoot()
+	if err != nil {
+		return nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
+	}
+
+	store, err := cache.NewStore(cacheRoot)
+	if err != nil {
+		return nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to initialize cache store", err)
+	}
+
+	return store, nil
+}
+
+func filterPruneCandidates(entries []cache.CachedBundle, namespace string, olderThan time.Duration) []cache.CachedBundle {
+	var matching []cache.CachedBundle
+
+	cutoff := time.Now().Add(-olderThan)
+
+	for _, entry := range entries {
+		if namespace != "" && entry.Namespace != namespace {
+			continue
+		}
+
+		if olderThan > 0 && !entry.FetchedAt.IsZero() && entry.FetchedAt.After(cutoff) {
+			continue
+		}
+
+		matching = append(matching, entry)
+	}
+
+	return matching
+}
+
+func sumBundleSize(bundles []cache.CachedBundle) int64 {
+	var total int64
+	for _, b := range bundles {
+		total += b.TotalSize
+	}
+
+	return total
+}
+
+func printPruneDryRun(out *output.Writer, matching []cache.CachedBundle, totalSize int64) {
+	out.Info("Would remove %d bundle version(s) (%s):", len(matching), formatBytes(totalSize))
+
+	for _, entry := range matching {
+		out.Print("  %s/%s:%s  %s  %s",
+			entry.Namespace, entry.Slug, entry.Version,
+			formatBytes(entry.TotalSize), timeAgo(entry.FetchedAt))
+	}
+}
+
+func purgeMatchingManifests(out *output.Writer, store *cache.Store, matching []cache.CachedBundle) int {
+	removed := 0
+
+	for _, entry := range matching {
+		if purgeErr := store.PurgeManifest(entry.HostID, entry.Namespace, entry.Slug, entry.Version); purgeErr != nil {
+			out.Warning("Failed to remove %s/%s:%s: %v", entry.Namespace, entry.Slug, entry.Version, purgeErr)
+			continue
+		}
+
+		removed++
+	}
+
+	return removed
 }

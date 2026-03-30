@@ -215,6 +215,24 @@ func SetVisibility(dir, visibility string) error {
 func (d *Def) Validate() error {
 	var errs []string
 
+	errs = append(errs, d.validateRequiredFields()...)
+
+	if d.Visibility == "" {
+		d.Visibility = "private"
+	}
+
+	errs = append(errs, d.validateAssetFields()...)
+
+	if len(errs) > 0 {
+		return fmt.Errorf("bundle definition validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
+	return nil
+}
+
+func (d *Def) validateRequiredFields() []string {
+	var errs []string
+
 	if strings.TrimSpace(d.Namespace) == "" {
 		errs = append(errs, "namespace is required")
 	}
@@ -235,36 +253,18 @@ func (d *Def) Validate() error {
 		errs = append(errs, "at least one asset is required")
 	}
 
-	// Default visibility to private.
-	if d.Visibility == "" {
-		d.Visibility = "private"
-	}
+	return errs
+}
+
+func (d *Def) validateAssetFields() []string {
+	var errs []string
 
 	seenIDs := make(map[string]bool)
 
 	for i, asset := range d.Assets {
-		switch {
-		case strings.TrimSpace(asset.ID) == "":
-			errs = append(errs, fmt.Sprintf("assets[%d].id is required", i))
-		case seenIDs[asset.ID]:
-			errs = append(errs, fmt.Sprintf("assets[%d].id %q is duplicated", i, asset.ID))
-		default:
-			seenIDs[asset.ID] = true
-		}
+		errs = append(errs, validateAssetID(i, asset.ID, seenIDs)...)
+		errs = append(errs, validateAssetSrc(i, asset.Src)...)
 
-		if strings.TrimSpace(asset.Src) == "" {
-			errs = append(errs, fmt.Sprintf("assets[%d].src is required", i))
-		} else {
-			if filepath.IsAbs(asset.Src) {
-				errs = append(errs, fmt.Sprintf("assets[%d].src must be a relative path", i))
-			}
-
-			if strings.Contains(filepath.ToSlash(asset.Src), "..") {
-				errs = append(errs, fmt.Sprintf("assets[%d].src must not contain '..'", i))
-			}
-		}
-
-		// Infer kind from src prefix if not explicitly set.
 		if strings.TrimSpace(asset.Kind) == "" {
 			inferred := InferKind(asset.Src)
 			if inferred == "" {
@@ -277,11 +277,37 @@ func (d *Def) Validate() error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("bundle definition validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	return errs
+}
+
+func validateAssetID(index int, id string, seenIDs map[string]bool) []string {
+	switch {
+	case strings.TrimSpace(id) == "":
+		return []string{fmt.Sprintf("assets[%d].id is required", index)}
+	case seenIDs[id]:
+		return []string{fmt.Sprintf("assets[%d].id %q is duplicated", index, id)}
+	default:
+		seenIDs[id] = true
+		return nil
+	}
+}
+
+func validateAssetSrc(index int, src string) []string {
+	if strings.TrimSpace(src) == "" {
+		return []string{fmt.Sprintf("assets[%d].src is required", index)}
 	}
 
-	return nil
+	var errs []string
+
+	if filepath.IsAbs(src) {
+		errs = append(errs, fmt.Sprintf("assets[%d].src must be a relative path", index))
+	}
+
+	if strings.Contains(filepath.ToSlash(src), "..") {
+		errs = append(errs, fmt.Sprintf("assets[%d].src must not contain '..'", index))
+	}
+
+	return errs
 }
 
 // InferKind returns the asset kind based on the src path prefix, or "" if none matches.
@@ -302,66 +328,95 @@ func (d *Def) ValidateAssets(bundleRoot string) error {
 	var errs []string
 
 	for _, asset := range d.Assets {
-		assetPath := filepath.Join(bundleRoot, asset.Src)
-
-		info, err := os.Lstat(assetPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				errs = append(errs, fmt.Sprintf("asset %q: file not found: %s", asset.ID, asset.Src))
-			} else {
-				errs = append(errs, fmt.Sprintf("asset %q: cannot access: %s: %v", asset.ID, asset.Src, err))
-			}
-
-			continue
-		}
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, resolveErr := filepath.EvalSymlinks(assetPath)
-			if resolveErr != nil {
-				errs = append(errs, fmt.Sprintf("asset %q: cannot resolve symlink: %s", asset.ID, asset.Src))
-
-				continue
-			}
-
-			absRoot, _ := filepath.Abs(bundleRoot) //nolint:errcheck // best-effort path resolution
-			absTarget, _ := filepath.Abs(target)   //nolint:errcheck // best-effort path resolution
-
-			if !strings.HasPrefix(absTarget, absRoot+string(filepath.Separator)) {
-				errs = append(errs, fmt.Sprintf("asset %q: symlink escapes bundle root: %s", asset.ID, asset.Src))
-			}
-		}
-
-		if strings.EqualFold(strings.TrimSpace(asset.Kind), kindSkill) {
-			if filepath.Base(asset.Src) != "SKILL.md" {
-				errs = append(errs, fmt.Sprintf("asset %q: skill assets must point to SKILL.md: %s", asset.ID, asset.Src))
-				continue
-			}
-
-			if err := skills.ValidateFile(assetPath); err != nil {
-				errs = append(errs, fmt.Sprintf("asset %q: invalid skill %s: %v", asset.ID, asset.Src, err))
-			}
-		}
+		errs = append(errs, validateAssetPath(bundleRoot, asset)...)
 	}
 
-	if d.Readme != "" {
-		readmePath := filepath.Join(bundleRoot, d.Readme)
-		if _, err := os.Stat(readmePath); err != nil {
-			errs = append(errs, "readme file not found: "+d.Readme)
-		}
-	}
-
-	if d.LicenseFile != "" {
-		licensePath := filepath.Join(bundleRoot, d.LicenseFile)
-		if _, err := os.Stat(licensePath); err != nil {
-			errs = append(errs, "license file not found: "+d.LicenseFile)
-		}
-	}
+	errs = append(errs, validateExtraFiles(bundleRoot, d.Readme, d.LicenseFile)...)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("path validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 
 	return nil
+}
+
+func validateAssetPath(bundleRoot string, asset Asset) []string {
+	assetPath := filepath.Join(bundleRoot, asset.Src)
+
+	info, err := os.Lstat(assetPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{fmt.Sprintf("asset %q: file not found: %s", asset.ID, asset.Src)}
+		}
+
+		return []string{fmt.Sprintf("asset %q: cannot access: %s: %v", asset.ID, asset.Src, err)}
+	}
+
+	var errs []string
+
+	if symErrs := validateSymlink(info, assetPath, bundleRoot, asset); symErrs != nil {
+		return symErrs
+	}
+
+	errs = append(errs, validateSkillAsset(assetPath, asset)...)
+
+	return errs
+}
+
+func validateSymlink(info os.FileInfo, assetPath, bundleRoot string, asset Asset) []string {
+	if info.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+
+	target, resolveErr := filepath.EvalSymlinks(assetPath)
+	if resolveErr != nil {
+		return []string{fmt.Sprintf("asset %q: cannot resolve symlink: %s", asset.ID, asset.Src)}
+	}
+
+	absRoot, _ := filepath.Abs(bundleRoot) //nolint:errcheck // best-effort path resolution
+	absTarget, _ := filepath.Abs(target)   //nolint:errcheck // best-effort path resolution
+
+	if !strings.HasPrefix(absTarget, absRoot+string(filepath.Separator)) {
+		return []string{fmt.Sprintf("asset %q: symlink escapes bundle root: %s", asset.ID, asset.Src)}
+	}
+
+	return nil
+}
+
+func validateSkillAsset(assetPath string, asset Asset) []string {
+	if !strings.EqualFold(strings.TrimSpace(asset.Kind), kindSkill) {
+		return nil
+	}
+
+	if filepath.Base(asset.Src) != "SKILL.md" {
+		return []string{fmt.Sprintf("asset %q: skill assets must point to SKILL.md: %s", asset.ID, asset.Src)}
+	}
+
+	if err := skills.ValidateFile(assetPath); err != nil {
+		return []string{fmt.Sprintf("asset %q: invalid skill %s: %v", asset.ID, asset.Src, err)}
+	}
+
+	return nil
+}
+
+func validateExtraFiles(bundleRoot, readme, licenseFile string) []string {
+	var errs []string
+
+	if readme != "" {
+		readmePath := filepath.Join(bundleRoot, readme)
+		if _, err := os.Stat(readmePath); err != nil {
+			errs = append(errs, "readme file not found: "+readme)
+		}
+	}
+
+	if licenseFile != "" {
+		licensePath := filepath.Join(bundleRoot, licenseFile)
+		if _, err := os.Stat(licensePath); err != nil {
+			errs = append(errs, "license file not found: "+licenseFile)
+		}
+	}
+
+	return errs
 }
 
 // MapAssetType maps a bundle definition asset kind (as written in musher.yaml)

@@ -7,8 +7,6 @@ import (
 )
 
 func TestCountAssetsByType(t *testing.T) {
-	t.Parallel()
-
 	layers := []cache.ManifestLayer{
 		{AssetType: "skill", LogicalPath: "skills/a.md"},
 		{AssetType: "skill", LogicalPath: "skills/b.md"},
@@ -32,8 +30,6 @@ func TestCountAssetsByType(t *testing.T) {
 }
 
 func TestCountAssetsByTypeEmpty(t *testing.T) {
-	t.Parallel()
-
 	counts := countAssetsByType(nil)
 	if len(counts) != 0 {
 		t.Errorf("expected empty map, got %v", counts)
@@ -41,8 +37,6 @@ func TestCountAssetsByTypeEmpty(t *testing.T) {
 }
 
 func TestFormatAssetSummaryEmpty(t *testing.T) {
-	t.Parallel()
-
 	result := formatAssetSummary(nil)
 
 	// Empty layers should produce a fallback summary.
@@ -56,8 +50,6 @@ func TestFormatAssetSummaryEmpty(t *testing.T) {
 }
 
 func TestFormatAssetSummaryNonEmpty(t *testing.T) {
-	t.Parallel()
-
 	layers := []cache.ManifestLayer{
 		{AssetType: "skill", LogicalPath: "skills/a.md"},
 		{AssetType: "skill", LogicalPath: "skills/b.md"},

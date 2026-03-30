@@ -55,7 +55,7 @@ falls back to batch output.`,
 			}
 
 			// If the user selected a bundle to load, print the reference.
-			if result != nil && result.Action == "load" {
+			if result != nil && result.Action == actionLoad {
 				ref := result.Namespace + "/" + result.Slug
 				if result.Version != "" {
 					ref += ":" + result.Version

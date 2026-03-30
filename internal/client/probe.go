@@ -111,7 +111,7 @@ func ProbeHealth(ctx context.Context, baseURL string, caCertFile ...string) *Pro
 	start := time.Now()
 
 	resp, err := httpClient.Do(req)
-	if err != nil {
+	if err != nil || resp == nil {
 		return &ProbeResult{
 			Host:  host,
 			Error: summarizeNetworkError(err),
