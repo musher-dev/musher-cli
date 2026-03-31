@@ -3,6 +3,7 @@ package update
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -198,6 +199,10 @@ func TestNeedsElevationWritableDir(t *testing.T) {
 }
 
 func TestNeedsElevationNonExistentDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("NeedsElevation always returns false on Windows")
+	}
+
 	// Path in non-existent directory should need elevation
 	result := NeedsElevation("/nonexistent/path/musher")
 	if !result {
