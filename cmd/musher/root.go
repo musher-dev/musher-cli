@@ -7,9 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/bundle/install"
+	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
@@ -274,6 +276,29 @@ func noArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// authAdapter wraps the auth package functions to satisfy tui.AuthManager.
+type authAdapter struct{}
+
+func (authAdapter) GetCredentials(apiURL string) (source auth.CredentialSource, apiKey string) {
+	return auth.GetCredentials(apiURL)
+}
+
+func (authAdapter) StoreAPIKey(apiURL, apiKey string) error {
+	if err := auth.StoreAPIKey(apiURL, apiKey); err != nil {
+		return clierrors.Errorf("store API key: %w", err)
+	}
+
+	return nil
+}
+
+func (authAdapter) DeleteAPIKey(apiURL string) error {
+	if err := auth.DeleteAPIKey(apiURL); err != nil {
+		return clierrors.Errorf("delete API key: %w", err)
+	}
+
+	return nil
+}
+
 // runRootTUI launches the interactive home screen when invoked in a TTY,
 // or falls back to help text when TUI is disabled.
 func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
@@ -284,11 +309,17 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		return cmd.Help() //nolint:wrapcheck // cobra's Help() returns nil or a well-defined error
 	}
 
-	apiClient := newPublicAPIClient(configForPublicClient())
+	cfg := config.Load()
+	apiURL := cfg.APIURL()
+	apiClient := newPublicAPIClient(apiURL)
 
 	var authChecker tui.AuthChecker
+
+	var pusher tui.BundlePusher
+
 	if _, c, err := newAPIClient(); err == nil {
 		authChecker = c
+		pusher = c
 	}
 
 	reg := harness.NewRegistry()
@@ -309,14 +340,28 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		installLister = installReg
 	}
 
+	workDir, err := os.Getwd()
+	if err != nil {
+		workDir = "."
+	}
+
 	deps := &tui.HomeDeps{
-		Searcher:  apiClient,
-		Puller:    apiClient,
-		Harnesses: reg,
-		Auth:      authChecker,
-		Cache:     cacheSummarizer,
-		Install:   installLister,
-		Version:   version,
+		Searcher:         apiClient,
+		Puller:           apiClient,
+		Harnesses:        reg,
+		Auth:             authChecker,
+		AuthMgr:          authAdapter{},
+		Cache:            cacheSummarizer,
+		Install:          installLister,
+		Config:           cfg,
+		Validator:        tui.NewBundleValidator(),
+		Pusher:           pusher,
+		DefWriter:        tui.NewBundleDefWriter(),
+		PublisherBundles: apiClient,
+		APIURL:           apiURL,
+		CACertFile:       cfg.CACertFile(),
+		Version:          version,
+		WorkDir:          workDir,
 	}
 
 	result, err := tui.RunHome(cmd.Context(), deps)

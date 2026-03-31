@@ -102,21 +102,17 @@ func newHomeScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMa
 func buildMenuItems() []menuItem {
 	return []menuItem{
 		// USE — consumer lifecycle.
-		{label: "Find bundles", description: "Search the Hub for agent bundles", hotkey: 'f', section: "USE"},
 		{label: "Load bundle", description: "Load a bundle to run with a harness", hotkey: 'r', section: "USE"},
-		{label: "Installed bundles", description: "View bundles installed in this project", hotkey: 'l', section: "USE", stub: true},
-		{label: "Bundle info", description: "Inspect a cached or Hub bundle", hotkey: 'b', section: "USE", stub: true},
+		{label: "Find bundles", description: "Search the Hub for agent bundles", hotkey: 'f', section: "USE"},
 
 		// CREATE — authoring lifecycle.
-		{label: "Init new bundle", description: "Create a new bundle definition", hotkey: 'i', section: "CREATE", stub: true},
-		{label: "Validate bundle", description: "Check bundle definition and assets", hotkey: 'v', section: "CREATE", stub: true},
-		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "CREATE", stub: true},
-		{label: "Hub management", description: "Manage Hub listings", hotkey: 'h', section: "CREATE", stub: true},
+		{label: "New bundle", description: "Create a new bundle definition", hotkey: 'i', section: "CREATE"},
+		{label: "Validate bundle", description: "Check bundle definition and assets", hotkey: 'v', section: "CREATE"},
+		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "CREATE"},
 
 		// MANAGE — system maintenance.
-		{label: "Cache", description: "View and manage cached bundles", hotkey: 'c', section: "MANAGE", stub: true},
-		{label: "Configuration", description: "View and edit settings", hotkey: 'g', section: "MANAGE", stub: true},
-		{label: "Doctor", description: "Run diagnostic checks", hotkey: 'd', section: "MANAGE", stub: true},
+		{label: "Auth", description: "Manage authentication and credentials", hotkey: 'a', section: "MANAGE"},
+		{label: "Configuration", description: "View and edit settings", hotkey: 'g', section: "MANAGE"},
 	}
 }
 
@@ -295,6 +291,26 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 		cmd := h.pushRefInputScreen()
 
 		return h, cmd
+	case 'a':
+		cmd := h.pushAuthScreen()
+
+		return h, cmd
+	case 'g':
+		cmd := h.pushConfigScreen()
+
+		return h, cmd
+	case 'i':
+		cmd := h.pushNewBundleScreen()
+
+		return h, cmd
+	case 'v':
+		cmd := h.pushValidateScreen()
+
+		return h, cmd
+	case 'p':
+		cmd := h.pushPushScreen()
+
+		return h, cmd
 	}
 
 	return h, nil
@@ -311,6 +327,46 @@ func (h *homeScreen) pushSearchScreen() tea.Cmd {
 func (h *homeScreen) pushRefInputScreen() tea.Cmd {
 	return func() tea.Msg {
 		screen := newRefInputScreen(h.ctx, h.deps, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushAuthScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newAuthScreen(h.ctx, h.deps, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushConfigScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newConfigScreen(h.deps.Config, h.deps.APIURL, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushNewBundleScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newNewBundleScreen(h.ctx, h.deps, h.deps.WorkDir, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushValidateScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newValidateScreen(h.ctx, h.deps, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushPushScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newPushScreen(h.ctx, h.deps, nil, h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}

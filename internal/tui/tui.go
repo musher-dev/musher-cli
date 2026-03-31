@@ -91,6 +91,33 @@ func RunSearch(ctx context.Context, searcher BundleSearcher, initialQuery string
 	return finalApp.Result(), nil
 }
 
+// RunNewBundle launches the TUI in new bundle creation mode.
+// Returns a result with Action "init" on success, or nil if canceled.
+func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newNewBundleScreen(ctx, deps, workDir, &sty, &keys)
+	app := NewApp(screen)
+
+	p := tea.NewProgram(app)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, repoerrors.Errorf("TUI error: %w", err)
+	}
+
+	finalApp, ok := finalModel.(*App)
+	if !ok {
+		return nil, errUnexpectedModel
+	}
+
+	if finalApp.Err() != nil {
+		return nil, finalApp.Err()
+	}
+
+	return finalApp.Result(), nil
+}
+
 // RunLoad launches the TUI in load mode for a specific bundle.
 // Returns the user's action (harness selection) or nil if canceled.
 func RunLoad(

@@ -32,6 +32,7 @@ var (
 		moduleRoot + "/internal/config":        true,
 		moduleRoot + "/internal/errors":        true,
 		moduleRoot + "/internal/harness":       true,
+		moduleRoot + "/internal/oci":           true,
 		moduleRoot + "/internal/observability": true,
 		moduleRoot + "/internal/paths":         true,
 		moduleRoot + "/internal/safeio":        true,

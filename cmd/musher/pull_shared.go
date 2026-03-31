@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/oci"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
@@ -134,6 +137,84 @@ func checkCacheFreshness(store *cache.Store, hostID, namespace, slug, version, c
 }
 
 func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, version string) (*client.PullBundleResponse, error) {
+	versionRef := namespace + "/" + slug + ":" + version
+
+	spin := out.Spinner("Pulling " + versionRef)
+	spin.Start()
+
+	// Try OCI pull first.
+	bundle, ociErr := pullFromOCI(ctx, namespace, slug, version)
+	if ociErr == nil {
+		spin.StopWithSuccess("Pulled " + versionRef)
+
+		return bundle, nil
+	}
+
+	slog.Debug("OCI pull failed, falling back to JSON API",
+		"namespace", namespace, "slug", slug, "version", version,
+		"error", ociErr)
+
+	// Fall back to JSON API.
+	bundle, err := pullFromJSONAPI(ctx, namespace, slug, version)
+	if err != nil {
+		spin.StopWithFailure("Pull failed")
+
+		return nil, clierrors.PullFailed(err)
+	}
+
+	spin.StopWithSuccess("Pulled " + versionRef)
+
+	return bundle, nil
+}
+
+// pullFromOCI attempts to pull a bundle via the OCI registry using the resolve
+// endpoint to obtain the OCI reference and layer metadata.
+func pullFromOCI(ctx context.Context, namespace, slug, version string) (*client.PullBundleResponse, error) {
+	cfg := config.Load()
+
+	// Resolve the bundle to get OCI reference metadata.
+	_, apiClient, authErr := newAPIClient()
+	if authErr != nil {
+		apiURL := configForPublicClient()
+		apiClient = newPublicAPIClient(apiURL)
+	}
+
+	resolved, resolveErr := apiClient.ResolveBundleVersion(ctx, namespace, slug, version)
+	if resolveErr != nil {
+		return nil, clierrors.Errorf("resolve for OCI pull: %w", resolveErr)
+	}
+
+	if resolved.OCIRef == "" {
+		return nil, clierrors.Errorf("bundle has no OCI reference")
+	}
+
+	// Extract API key for OCI token exchange (empty for public pulls).
+	var apiKey string
+	if authErr == nil {
+		_, apiKey = auth.GetCredentials(cfg.APIURL())
+	}
+
+	httpClient, httpErr := client.NewInstrumentedHTTPClient(cfg.CACertFile())
+	if httpErr != nil {
+		return nil, clierrors.Errorf("create HTTP client for OCI: %w", httpErr)
+	}
+
+	ociCfg := oci.RegistryConfig{
+		RegistryURL: cfg.OCIRegistryURL(),
+		APIKey:      apiKey,
+		HTTPClient:  httpClient,
+	}
+
+	bundle, pullErr := oci.PullBundle(ctx, ociCfg, resolved)
+	if pullErr != nil {
+		return nil, clierrors.Errorf("OCI pull: %w", pullErr)
+	}
+
+	return bundle, nil
+}
+
+// pullFromJSONAPI pulls a bundle using the existing JSON REST API endpoints.
+func pullFromJSONAPI(ctx context.Context, namespace, slug, version string) (*client.PullBundleResponse, error) {
 	_, apiClient, authErr := newAPIClient()
 	usePublic := authErr != nil
 
@@ -142,20 +223,7 @@ func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, versi
 		apiClient = newPublicAPIClient(apiURL)
 	}
 
-	versionRef := namespace + "/" + slug + ":" + version
-
-	spin := out.Spinner("Pulling " + versionRef)
-	spin.Start()
-
-	bundle, err := pullBundleWithFallback(ctx, apiClient, namespace, slug, version, usePublic)
-	if err != nil {
-		spin.StopWithFailure("Pull failed")
-		return nil, clierrors.PullFailed(err)
-	}
-
-	spin.StopWithSuccess("Pulled " + versionRef)
-
-	return bundle, nil
+	return pullBundleWithFallback(ctx, apiClient, namespace, slug, version, usePublic)
 }
 
 func pullBundleWithFallback(

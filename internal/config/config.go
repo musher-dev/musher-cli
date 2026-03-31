@@ -20,6 +20,8 @@ const (
 	DefaultAPIURL = "https://api.musher.dev"
 	// DefaultUpdateCheckInterval is the default background update check interval.
 	DefaultUpdateCheckInterval = "24h"
+	// DefaultOCIRegistryURL is the default OCI registry for bundle artifacts.
+	DefaultOCIRegistryURL = "bundles.musher.dev"
 )
 
 const minIntervalDuration = 1 * time.Second
@@ -38,6 +40,7 @@ func Load() *Config {
 	v.SetDefault("update.auto_apply", true)
 	v.SetDefault("update.check_interval", DefaultUpdateCheckInterval)
 	v.SetDefault("experimental", false)
+	v.SetDefault("oci.registry_url", DefaultOCIRegistryURL)
 
 	configDir, err := paths.ConfigRoot()
 	if err == nil {
@@ -110,6 +113,11 @@ func (c *Config) APIURL() string {
 // CACertFile returns the optional custom CA certificate bundle path.
 func (c *Config) CACertFile() string {
 	return strings.TrimSpace(c.GetString("network.ca_cert_file"))
+}
+
+// OCIRegistryURL returns the configured OCI registry URL for bundle artifacts.
+func (c *Config) OCIRegistryURL() string {
+	return c.GetString("oci.registry_url")
 }
 
 // Experimental returns whether experimental features are enabled.

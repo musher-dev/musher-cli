@@ -126,6 +126,11 @@ type styles struct {
 
 	// Loading / empty states.
 	placeholder lipgloss.Style
+
+	// Form fields.
+	fieldLabel lipgloss.Style
+	fieldError lipgloss.Style
+	checkbox   lipgloss.Style
 }
 
 // formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
@@ -281,5 +286,14 @@ func newStyles(isDark bool) styles {
 		placeholder: lipgloss.NewStyle().
 			Foreground(colorDim).
 			Italic(true),
+
+		// Form fields.
+		fieldLabel: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorTextSec),
+		fieldError: lipgloss.NewStyle().
+			Foreground(colorError),
+		checkbox: lipgloss.NewStyle().
+			Foreground(colorSuccess),
 	}
 }

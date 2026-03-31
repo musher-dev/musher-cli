@@ -145,6 +145,10 @@ func TestHomeScreenNavigation_Hotkeys(t *testing.T) {
 	}{
 		{"find bundle", 'f'},
 		{"load bundle", 'r'},
+		{"auth", 'a'},
+		{"config", 'g'},
+		{"validate", 'v'},
+		{"push", 'p'},
 	}
 
 	for _, tt := range tests {
@@ -166,21 +170,15 @@ func TestHomeScreenNavigation_Hotkeys(t *testing.T) {
 	}
 }
 
-func TestHomeScreenNavigation_StubEnter(t *testing.T) {
+func TestHomeScreenNavigation_NoStubs(t *testing.T) {
 	t.Parallel()
 
-	screen, _, _ := newTestHomeScreen(nil)
+	items := buildMenuItems()
 
-	// Navigate to stub item ("Init new bundle" at index 2).
-	screen.cursor = 2
-
-	if !screen.items[2].stub {
-		t.Fatal("expected item at index 2 to be a stub")
-	}
-
-	_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd != nil {
-		t.Error("expected nil cmd for enter on stub item")
+	for _, item := range items {
+		if item.stub {
+			t.Errorf("unexpected stub item: %q", item.label)
+		}
 	}
 }
 
@@ -437,18 +435,18 @@ func TestHomeScreenDescription(t *testing.T) {
 	screen.width = 80
 	screen.height = 30
 
-	// Default cursor at 0 ("Find bundles").
+	// Default cursor at 0 ("Load bundle").
 	view := screen.View()
-	if !strings.Contains(view, "Search the Hub for agent bundles") {
-		t.Error("expected description for 'Find bundles'")
+	if !strings.Contains(view, "Load a bundle to run with a harness") {
+		t.Error("expected description for 'Load bundle'")
 	}
 
-	// Move cursor to "Load bundle" (index 1).
+	// Move cursor to "Find bundles" (index 1).
 	screen.cursor = 1
 	view = screen.View()
 
-	if !strings.Contains(view, "Load a bundle to run with a harness") {
-		t.Error("expected description for 'Load bundle'")
+	if !strings.Contains(view, "Search the Hub for agent bundles") {
+		t.Error("expected description for 'Find bundles'")
 	}
 }
 
@@ -580,8 +578,8 @@ func TestHomeScreenMenuItemCount(t *testing.T) {
 	t.Parallel()
 
 	items := buildMenuItems()
-	if len(items) != 11 {
-		t.Errorf("expected 11 menu items, got %d", len(items))
+	if len(items) != 7 {
+		t.Errorf("expected 7 menu items, got %d", len(items))
 	}
 }
 
@@ -595,32 +593,32 @@ func TestHomeScreenMenuSections(t *testing.T) {
 		sections[item.section]++
 	}
 
-	if sections["USE"] != 4 {
-		t.Errorf("expected 4 USE items, got %d", sections["USE"])
+	if sections["USE"] != 2 {
+		t.Errorf("expected 2 USE items, got %d", sections["USE"])
 	}
 
-	if sections["CREATE"] != 4 {
-		t.Errorf("expected 4 CREATE items, got %d", sections["CREATE"])
+	if sections["CREATE"] != 3 {
+		t.Errorf("expected 3 CREATE items, got %d", sections["CREATE"])
 	}
 
-	if sections["MANAGE"] != 3 {
-		t.Errorf("expected 3 MANAGE items, got %d", sections["MANAGE"])
+	if sections["MANAGE"] != 2 {
+		t.Errorf("expected 2 MANAGE items, got %d", sections["MANAGE"])
 	}
 }
 
-func TestHomeScreenStubDescription(t *testing.T) {
+func TestHomeScreenValidateDescription(t *testing.T) {
 	t.Parallel()
 
 	screen, _, _ := newTestHomeScreen(nil)
 	screen.width = 80
 	screen.height = 30
 
-	// Navigate to a stub item ("Installed bundles" at index 2).
-	screen.cursor = 2
+	// Navigate to "Validate bundle" at index 3.
+	screen.cursor = 3
 	view := screen.View()
 
-	if !strings.Contains(view, "coming soon") {
-		t.Error("expected stub description to contain 'coming soon'")
+	if !strings.Contains(view, "Check bundle definition and assets") {
+		t.Error("expected validate description")
 	}
 }
 
@@ -738,6 +736,10 @@ func (m *mockCacheSummarizer) ListCached() ([]cache.CachedBundle, error) {
 	return nil, nil
 }
 
+func (m *mockCacheSummarizer) ListCachedByRecency() ([]cache.CachedBundle, error) {
+	return nil, nil
+}
+
 func (m *mockCacheSummarizer) DiskUsage() (totalBytes int64, blobCount int, err error) {
 	return 0, 0, nil
 }
@@ -797,8 +799,8 @@ func TestHomeScreenExecuteRefInput(t *testing.T) {
 
 	screen, _, _ := newTestHomeScreen(nil)
 
-	// Set cursor to "Load bundle" (index 1, hotkey 'r').
-	screen.cursor = 1
+	// Set cursor to "Load bundle" (index 0, hotkey 'r').
+	screen.cursor = 0
 
 	_, cmd := screen.executeCurrentItem()
 	if cmd == nil {

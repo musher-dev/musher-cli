@@ -13,6 +13,8 @@ require (
 	github.com/creativeprojects/go-selfupdate v1.5.2
 	github.com/fatih/color v1.19.0
 	github.com/google/uuid v1.6.0
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -23,6 +25,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.42.0
 	golang.org/x/term v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
+	oras.land/oras-go/v2 v2.6.0
 )
 
 require (
