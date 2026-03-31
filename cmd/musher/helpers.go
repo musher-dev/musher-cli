@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
@@ -58,7 +57,7 @@ func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
 
 	apiKey, err := p.APIKey()
 	if err != nil {
-		return nil, fmt.Errorf("read API key: %w", err)
+		return nil, clierrors.Errorf("read API key: %w", err)
 	}
 
 	apiKey = strings.TrimSpace(apiKey)
@@ -74,7 +73,7 @@ func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
 	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
 	if err != nil {
 		spin.Stop()
-		return nil, fmt.Errorf("initialize HTTP client: %w", err)
+		return nil, clierrors.Errorf("initialize HTTP client: %w", err)
 	}
 
 	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
@@ -82,7 +81,7 @@ func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
 	identity, err := c.GetPublisherIdentity(context.Background())
 	if err != nil {
 		spin.StopWithFailure("Authentication failed")
-		return nil, fmt.Errorf("validate credentials: %w", err)
+		return nil, clierrors.Errorf("validate credentials: %w", err)
 	}
 
 	spin.StopWithSuccess("Authenticated as " + identity.CredentialName)

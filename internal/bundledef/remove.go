@@ -1,11 +1,12 @@
 package bundledef
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // RemoveResult describes what happened during asset removal.
@@ -34,7 +35,7 @@ func RemoveAssets(dir string, identifiers []string) (*RemoveResult, error) {
 	}
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return nil, fmt.Errorf("write bundle definition: %w", err)
+		return nil, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return result, nil
@@ -56,12 +57,12 @@ func RemoveAllAssets(dir string) (int, error) {
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return 0, fmt.Errorf("read bundle definition: %w", err)
+		return 0, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	def, err := Load(dir)
 	if err != nil {
-		return 0, fmt.Errorf("parse bundle definition: %w", err)
+		return 0, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
 	count := len(def.Assets)
@@ -74,7 +75,7 @@ func RemoveAllAssets(dir string) (int, error) {
 	content = strings.TrimRight(content, "\n") + "\n"
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return 0, fmt.Errorf("write bundle definition: %w", err)
+		return 0, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return count, nil
@@ -90,30 +91,47 @@ func renderRemove(dir string, identifiers []string) (string, *RemoveResult, erro
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return "", nil, fmt.Errorf("read bundle definition: %w", err)
+		return "", nil, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	def, err := Load(dir)
 	if err != nil {
-		return "", nil, fmt.Errorf("parse bundle definition: %w", err)
+		return "", nil, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
-	// Build lookup maps from existing assets.
+	toRemove, result := resolveRemoveTargets(def.Assets, identifiers)
+
+	if len(result.Removed) == 0 {
+		return string(data), result, nil
+	}
+
+	if len(result.Removed) == len(def.Assets) {
+		content := replaceAssetsSection(string(data))
+		content = strings.TrimRight(content, "\n") + "\n"
+
+		return content, result, nil
+	}
+
+	content := removeAssetBlocks(string(data), def.Assets, toRemove)
+
+	return content, result, nil
+}
+
+func resolveRemoveTargets(assets []Asset, identifiers []string) (map[string]bool, *RemoveResult) {
 	byID := make(map[string]Asset)
 	bySrc := make(map[string]Asset)
 
-	for _, asset := range def.Assets {
+	for _, asset := range assets {
 		byID[asset.ID] = asset
 		bySrc[filepath.ToSlash(asset.Src)] = asset
 	}
 
-	// Resolve identifiers to assets to remove.
-	toRemove := make(map[string]bool) // keyed by src for uniqueness
+	toRemove := make(map[string]bool)
 	result := &RemoveResult{}
 
 	for _, ident := range identifiers {
 		if asset, ok := byID[ident]; ok {
-			if !toRemove[asset.Src] {
+			if !toRemove[filepath.ToSlash(asset.Src)] {
 				toRemove[filepath.ToSlash(asset.Src)] = true
 				result.Removed = append(result.Removed, asset)
 			}
@@ -127,61 +145,38 @@ func renderRemove(dir string, identifiers []string) (string, *RemoveResult, erro
 		}
 	}
 
-	if len(result.Removed) == 0 {
-		return string(data), result, nil
-	}
+	return toRemove, result
+}
 
-	// If removing all assets, replace the whole section.
-	if len(result.Removed) == len(def.Assets) {
-		content := replaceAssetsSection(string(data))
-		content = strings.TrimRight(content, "\n") + "\n"
+type entryRange struct {
+	start int
+	end   int
+	asset Asset
+}
 
-		return content, result, nil
-	}
-
-	content := string(data)
-
-	// Find all asset entry positions in the raw text.
+func removeAssetBlocks(content string, assets []Asset, toRemove map[string]bool) string {
 	entries := assetEntryRE.FindAllStringIndex(content, -1)
 	if len(entries) == 0 {
-		return content, result, nil
+		return content
 	}
 
-	// Match each regex entry to its parsed asset by position order.
-	// The assets appear in the same order in the YAML text as in def.Assets.
-	type entryRange struct {
-		start int
-		end   int
-		asset Asset
-	}
-
-	var ranges []entryRange
+	var deleteRanges []entryRange
 
 	for i, loc := range entries {
-		if i >= len(def.Assets) {
+		if i >= len(assets) {
 			break
 		}
 
-		asset := def.Assets[i]
-		end := findEndOfBlock(content, loc[0])
-
-		ranges = append(ranges, entryRange{
-			start: loc[0],
-			end:   end,
-			asset: asset,
-		})
-	}
-
-	// Collect ranges to delete (those matching toRemove), in reverse order.
-	var deleteRanges []entryRange
-
-	for _, r := range ranges {
-		if toRemove[filepath.ToSlash(r.asset.Src)] {
-			deleteRanges = append(deleteRanges, r)
+		asset := assets[i]
+		if toRemove[filepath.ToSlash(asset.Src)] {
+			deleteRanges = append(deleteRanges, entryRange{
+				start: loc[0],
+				end:   findEndOfBlock(content, loc[0]),
+				asset: asset,
+			})
 		}
 	}
 
-	// Sort in reverse order by start position to preserve indices during deletion.
 	sort.Slice(deleteRanges, func(i, j int) bool {
 		return deleteRanges[i].start > deleteRanges[j].start
 	})
@@ -192,7 +187,7 @@ func renderRemove(dir string, identifiers []string) (string, *RemoveResult, erro
 
 	content = strings.TrimRight(content, "\n") + "\n"
 
-	return content, result, nil
+	return content
 }
 
 // replaceAssetsSection replaces the entire assets section with `assets: []`.

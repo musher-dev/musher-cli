@@ -19,6 +19,15 @@ import (
 
 const placeholderNamespace = "your-namespace"
 
+var fetchPublisherIdentity = func(ctx context.Context) (*client.PublisherIdentity, error) {
+	_, apiClient, err := newAPIClient()
+	if err != nil {
+		return nil, err
+	}
+
+	return apiClient.GetPublisherIdentity(ctx)
+}
+
 func newBundleInitCmd() *cobra.Command {
 	var (
 		force bool
@@ -231,12 +240,9 @@ func resolveNamespace(out *output.Writer, yes bool) string {
 	interactive := !yes && prompter.CanPrompt()
 
 	// Try existing credentials first.
-	_, c, err := newAPIClient()
+	identity, err := fetchPublisherIdentity(context.Background())
 	if err == nil {
-		identity, idErr := c.GetPublisherIdentity(context.Background())
-		if idErr == nil {
-			return pickNamespace(out, identity, interactive)
-		}
+		return pickNamespace(out, identity, interactive)
 	}
 
 	// Not authenticated — offer inline login if interactive.
@@ -275,10 +281,8 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
-	// Check if bundle definition already exists (stat, not Load, so
-	// malformed files are not silently overwritten).
 	if !force {
-		if _, err := bundledef.Resolve(workDir); err == nil {
+		if _, resolveErr := bundledef.Resolve(workDir); resolveErr == nil {
 			out.Warning("Bundle definition already exists. Use 'musher bundle add' to register assets, or --force to overwrite.")
 			return nil
 		}
@@ -292,25 +296,51 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 		Namespace: namespace,
 	}
 
-	// Preview which files will be created.
-	var planned []string
+	planned := planInitFiles(workDir, empty)
+	printPlannedFiles(out, planned)
 
-	planned = append(planned, bundledef.FileName)
+	if canceled, confirmErr := confirmInit(out, yes); confirmErr != nil || canceled {
+		return confirmErr
+	}
 
-	if !empty {
-		for _, rel := range exampleAssets {
-			abs := filepath.Join(workDir, rel)
-			if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
-				planned = append(planned, rel)
-			}
-		}
+	created, err := writeInitFiles(workDir, empty, data)
+	if err != nil {
+		return err
+	}
 
-		absReadme := filepath.Join(workDir, "README.md")
-		if _, statErr := os.Stat(absReadme); os.IsNotExist(statErr) {
-			planned = append(planned, "README.md")
+	for _, f := range created {
+		out.Success("Created %s", f)
+	}
+
+	printNextSteps(out, namespace)
+	hintUndiscoveredAssets(out, workDir)
+
+	return nil
+}
+
+func planInitFiles(workDir string, empty bool) []string {
+	planned := []string{bundledef.FileName}
+
+	if empty {
+		return planned
+	}
+
+	for _, rel := range exampleAssets {
+		abs := filepath.Join(workDir, rel)
+		if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+			planned = append(planned, rel)
 		}
 	}
 
+	absReadme := filepath.Join(workDir, "README.md")
+	if _, statErr := os.Stat(absReadme); os.IsNotExist(statErr) {
+		planned = append(planned, "README.md")
+	}
+
+	return planned
+}
+
+func printPlannedFiles(out *output.Writer, planned []string) {
 	out.Info("The following files will be created:")
 
 	for _, f := range planned {
@@ -318,77 +348,107 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 	}
 
 	out.Println()
+}
 
-	if !yes {
-		prompter := prompt.New(out)
-		if !prompter.CanPrompt() {
-			return clierrors.New(clierrors.ExitUsage, "Cannot prompt for confirmation in non-interactive mode.").
-				WithHint("Use --yes to skip confirmation.")
-		}
-
-		ok, confirmErr := prompter.Confirm("Proceed?", true)
-		if confirmErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read confirmation", confirmErr)
-		}
-
-		if !ok {
-			out.Info("Canceled.")
-			return nil
-		}
+func confirmInit(out *output.Writer, yes bool) (canceled bool, err error) {
+	if yes {
+		return false, nil
 	}
 
-	var created []string
+	prompter := prompt.New(out)
+	if !prompter.CanPrompt() {
+		return false, clierrors.New(clierrors.ExitUsage, "Cannot prompt for confirmation in non-interactive mode.").
+			WithHint("Use --yes to skip confirmation.")
+	}
+
+	ok, confirmErr := prompter.Confirm("Proceed?", true)
+	if confirmErr != nil {
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Failed to read confirmation", confirmErr)
+	}
+
+	if !ok {
+		out.Info("Canceled.")
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func writeInitFiles(workDir string, empty bool, data initData) ([]string, error) {
+	tmpl := defaultTemplate
+	if empty {
+		tmpl = emptyTemplate
+	}
+
+	if err := writeTemplate(filepath.Join(workDir, bundledef.FileName), tmpl, data); err != nil {
+		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
+	}
+
+	created := []string{"musher.yaml"}
 
 	if empty {
-		if err := writeTemplate(filepath.Join(workDir, bundledef.FileName), emptyTemplate, data); err != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
-		}
-
-		created = append(created, "musher.yaml")
-	} else {
-		if err := writeTemplate(filepath.Join(workDir, bundledef.FileName), defaultTemplate, data); err != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create musher.yaml", err)
-		}
-
-		created = append(created, "musher.yaml")
-
-		// Create example asset files so validate passes out of the box.
-		for _, rel := range exampleAssets {
-			absPath := filepath.Join(workDir, rel)
-			if _, err := os.Stat(absPath); !os.IsNotExist(err) {
-				continue // preserve pre-existing files
-			}
-
-			if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil { //nolint:gosec // project files need standard read+execute for all users
-				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create directory for "+rel, err)
-			}
-
-			if writeErr := os.WriteFile(absPath, []byte(exampleFiles[rel]), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
-				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create "+rel, writeErr)
-			}
-
-			created = append(created, rel)
-		}
-
-		// Create README.md if missing.
-		readmePath := filepath.Join(workDir, "README.md")
-		if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-			readmeContent := "# " + data.Name + "\n\nA Musher bundle.\n\n## Assets\n\n" +
-				"- **code-review** — Reviews code for quality (`skills/code-review/SKILL.md`)\n" +
-				"- **test-generator** — Generates unit tests (`skills/test-generator/SKILL.md`)\n" +
-				"- **reviewer** — Agent that orchestrates code review and test generation (`agents/reviewer.md`)\n"
-			if writeErr := os.WriteFile(readmePath, []byte(readmeContent), 0o644); writeErr != nil { //nolint:gosec // G306: readme is not sensitive
-				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to create README.md", writeErr)
-			}
-
-			created = append(created, "README.md")
-		}
+		return created, nil
 	}
 
-	for _, f := range created {
-		out.Success("Created %s", f)
+	assetFiles, err := writeExampleAssets(workDir)
+	if err != nil {
+		return nil, err
 	}
 
+	created = append(created, assetFiles...)
+
+	readmeFiles, err := writeReadmeIfMissing(workDir, data)
+	if err != nil {
+		return nil, err
+	}
+
+	created = append(created, readmeFiles...)
+
+	return created, nil
+}
+
+func writeExampleAssets(workDir string) ([]string, error) {
+	var created []string
+
+	for _, rel := range exampleAssets {
+		absPath := filepath.Join(workDir, rel)
+		if _, err := os.Stat(absPath); !os.IsNotExist(err) {
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil { //nolint:gosec // project files need standard read+execute for all users
+			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create directory for "+rel, err)
+		}
+
+		if writeErr := os.WriteFile(absPath, []byte(exampleFiles[rel]), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
+			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create "+rel, writeErr)
+		}
+
+		created = append(created, rel)
+	}
+
+	return created, nil
+}
+
+func writeReadmeIfMissing(workDir string, data initData) ([]string, error) {
+	readmePath := filepath.Join(workDir, "README.md")
+	if _, err := os.Stat(readmePath); !os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	readmeContent := "# " + data.Name + "\n\nA Musher bundle.\n\n## Assets\n\n" +
+		"- **code-review** — Reviews code for quality (`skills/code-review/SKILL.md`)\n" +
+		"- **test-generator** — Generates unit tests (`skills/test-generator/SKILL.md`)\n" +
+		"- **reviewer** — Agent that orchestrates code review and test generation (`agents/reviewer.md`)\n"
+
+	if writeErr := os.WriteFile(readmePath, []byte(readmeContent), 0o644); writeErr != nil { //nolint:gosec // G306: readme is not sensitive
+		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create README.md", writeErr)
+	}
+
+	return []string{"README.md"}, nil
+}
+
+func printNextSteps(out *output.Writer, namespace string) {
 	out.Println()
 	out.Info("Next steps:")
 
@@ -401,36 +461,39 @@ func runInit(out *output.Writer, force, empty, yes bool) error {
 	out.Info("  2. Edit the example skills and agent to match your use case")
 	out.Info("  3. Run 'musher bundle validate' to check your bundle")
 	out.Info("  4. Run 'musher bundle push' to publish")
+}
 
-	// Hint about any pre-existing assets on disk not yet in the bundle.
+func hintUndiscoveredAssets(out *output.Writer, workDir string) {
 	def, loadErr := bundledef.Load(workDir)
-	if loadErr == nil {
-		discovered, discoverErr := bundledef.DiscoverAssets(workDir, def)
-		if discoverErr == nil && len(discovered) > 0 {
-			out.Println()
-			out.Info("Found %d existing asset(s) on disk not yet in musher.yaml:", len(discovered))
-
-			for _, d := range discovered {
-				out.Info("  %s (%s)", d.Src, d.Kind)
-			}
-
-			out.Info("Run 'musher bundle add --all' to register them, or 'musher bundle add' to pick interactively.")
-		}
+	if loadErr != nil {
+		return
 	}
 
-	return nil
+	discovered, discoverErr := bundledef.DiscoverAssets(workDir, def)
+	if discoverErr != nil || len(discovered) == 0 {
+		return
+	}
+
+	out.Println()
+	out.Info("Found %d existing asset(s) on disk not yet in musher.yaml:", len(discovered))
+
+	for _, d := range discovered {
+		out.Info("  %s (%s)", d.Src, d.Kind)
+	}
+
+	out.Info("Run 'musher bundle add --all' to register them, or 'musher bundle add' to pick interactively.")
 }
 
 func writeTemplate(path string, tmpl *template.Template, data initData) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // project files need standard read permissions
 	if err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
+		return clierrors.Errorf("create %s: %w", filepath.Base(path), err)
 	}
 
 	defer func() { _ = f.Close() }() //nolint:errcheck // best-effort cleanup
 
 	if err := tmpl.Execute(f, data); err != nil {
-		return fmt.Errorf("write template to %s: %w", filepath.Base(path), err)
+		return clierrors.Errorf("write template to %s: %w", filepath.Base(path), err)
 	}
 
 	return nil

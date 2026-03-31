@@ -1,0 +1,28 @@
+name: opencode
+displayName: OpenCode
+description: Open-source AI coding agent
+binary: opencode
+
+directories:
+  project: ".opencode"
+  user: "~/.config/opencode"
+
+bundleDir:
+  mode: cwd
+
+assets:
+  skillDir: ".opencode/skills"
+  agentDir: ".opencode/agents"
+  toolConfigFile: "opencode.json"
+
+mcp:
+  format: json
+  configPath: "opencode.json"
+
+status:
+  versionArgs: ["--version"]
+  installHint: "Install OpenCode: curl -fsSL https://opencode.ai/install | bash"
+  installCommand: ["bash", "-c", "curl -fsSL https://opencode.ai/install | bash"]
+  authCheck:
+    path: "~/.local/share/opencode/auth.json"
+    description: OpenCode authentication

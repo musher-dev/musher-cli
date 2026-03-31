@@ -13,6 +13,9 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COVERAGE_THRESHOLD: "70.0"
     steps:
       - uses: actions/checkout@v6
 
@@ -32,5 +35,68 @@ jobs:
       - name: Install tools
         run: task setup:tools
 
+      - name: Verify hook bootstrap
+        run: task hooks:install
+
       - name: Run canonical quality gate
         run: task check:ci
+
+      - name: Enforce Coverage Floor
+        run: task check:coverage:floor
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Validate GoReleaser config
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 14
+
+      - name: Upload to Codecov
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  smoke:
+    name: Smoke (${{ matrix.os }})
+    needs: check
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -o musher${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./cmd/musher
+
+      - name: Version smoke test
+        run: go run ./cmd/musher version
+
+      - name: Help smoke test
+        run: go run ./cmd/musher --help
+
+      - name: Run policy tests
+        run: go test ./internal/policy
+
+      - name: Run tests
+        run: go test -race ./...

@@ -10,8 +10,6 @@ import (
 )
 
 func TestNewAddCmdFlags(t *testing.T) {
-	t.Parallel()
-
 	cmd := newBundleAddCmd()
 
 	flags := []string{"all", "interactive", "dry-run", "yes", "kind", "id"}
@@ -62,6 +60,7 @@ func TestRunAddExplicitPath(t *testing.T) {
 	}
 
 	found := false
+
 	for _, a := range def.Assets {
 		if a.Src == "skills/deploy/SKILL.md" {
 			found = true
@@ -110,6 +109,7 @@ func TestRunAddExplicitWithOverrides(t *testing.T) {
 	}
 
 	found := false
+
 	for _, a := range def.Assets {
 		if a.Src == "agents/reviewer.md" {
 			found = true

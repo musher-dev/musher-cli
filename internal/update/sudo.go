@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // NeedsElevation returns true if the binary's parent directory is not writable.
@@ -37,7 +39,7 @@ func ReExecWithSudo() error {
 
 	execPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("find executable: %w", err)
+		return repoerrors.Errorf("find executable: %w", err)
 	}
 
 	fmt.Fprintln(os.Stderr, "Elevated permissions required. Requesting sudo...")
@@ -45,7 +47,7 @@ func ReExecWithSudo() error {
 	argv := append([]string{"sudo", execPath}, os.Args[1:]...)
 
 	if err := syscall.Exec(sudoPath, argv, os.Environ()); err != nil { //nolint:gosec // G204: intentional sudo re-exec
-		return fmt.Errorf("exec sudo process: %w", err)
+		return repoerrors.Errorf("exec sudo process: %w", err)
 	}
 
 	return nil

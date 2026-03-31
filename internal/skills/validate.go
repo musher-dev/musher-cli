@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,7 +31,7 @@ type frontmatter struct {
 func ParseFrontmatter(path string) (name, description string, err error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
-		return "", "", fmt.Errorf("read skill file: %w", err)
+		return "", "", repoerrors.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
@@ -45,7 +46,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 
 	var matter frontmatter
 	if err := yaml.Unmarshal([]byte(parts[0][4:]), &matter); err != nil {
-		return "", "", fmt.Errorf("parse frontmatter: %w", err)
+		return "", "", repoerrors.Errorf("parse frontmatter: %w", err)
 	}
 
 	if matter.Name == "" {
@@ -53,7 +54,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 	}
 
 	if !skillNamePattern.MatchString(matter.Name) {
-		return "", "", fmt.Errorf("name %q must contain only lowercase letters, numbers, and single hyphens", matter.Name)
+		return "", "", repoerrors.Errorf("name %q must contain only lowercase letters, numbers, and single hyphens", matter.Name)
 	}
 
 	return matter.Name, matter.Description, nil
@@ -63,7 +64,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 func ValidateFile(path string) error {
 	data, err := os.ReadFile(path) //nolint:gosec // path from validated bundle assets
 	if err != nil {
-		return fmt.Errorf("read skill file: %w", err)
+		return repoerrors.Errorf("read skill file: %w", err)
 	}
 
 	raw := string(data)
@@ -76,12 +77,27 @@ func ValidateFile(path string) error {
 		return errors.New("frontmatter must be closed with '---'")
 	}
 
-	var rawFields map[string]any
-	if err := yaml.Unmarshal([]byte(parts[0][4:]), &rawFields); err != nil {
-		return fmt.Errorf("parse frontmatter: %w", err)
+	fmContent := parts[0][4:]
+	rawFields, matter, errs := parseFrontmatterFields(fmContent)
+
+	parentDir := filepath.Base(filepath.Dir(path))
+	errs = append(errs, validateName(matter.Name, parentDir)...)
+	errs = append(errs, validateDescription(matter.Description)...)
+	errs = append(errs, validateOptionalFields(&matter)...)
+	errs = append(errs, validateMetadata(rawFields)...)
+
+	if len(errs) > 0 {
+		return repoerrors.Errorf("%s", strings.Join(errs, "; "))
 	}
 
-	var errs []string
+	return nil
+}
+
+func parseFrontmatterFields(fmContent string) (rawFields map[string]any, matter frontmatter, errs []string) {
+	if err := yaml.Unmarshal([]byte(fmContent), &rawFields); err != nil {
+		return nil, frontmatter{}, []string{fmt.Sprintf("parse frontmatter: %v", err)}
+	}
+
 	allowed := map[string]struct{}{
 		"name":          {},
 		"description":   {},
@@ -97,32 +113,44 @@ func ValidateFile(path string) error {
 		}
 	}
 
-	var matter frontmatter
-	decoder := yaml.NewDecoder(bytes.NewReader([]byte(parts[0][4:])))
+	decoder := yaml.NewDecoder(bytes.NewReader([]byte(fmContent)))
 	decoder.KnownFields(true)
+
 	if err := decoder.Decode(&matter); err != nil {
 		errs = append(errs, fmt.Sprintf("decode frontmatter: %v", err))
 	}
 
-	parentDir := filepath.Base(filepath.Dir(path))
+	return rawFields, matter, errs
+}
 
+func validateName(name, parentDir string) []string {
 	switch {
-	case matter.Name == "":
-		errs = append(errs, "name is required in frontmatter; add 'name: <skill-name>' where the name matches the parent directory")
-	case len(matter.Name) > 64:
-		errs = append(errs, "name must be 1-64 characters")
-	case !skillNamePattern.MatchString(matter.Name):
-		errs = append(errs, "name must contain only lowercase letters, numbers, and single hyphens")
-	case matter.Name != parentDir:
-		errs = append(errs, fmt.Sprintf("name %q must match parent directory %q; either rename the directory to %q or change the frontmatter name to %q", matter.Name, parentDir, matter.Name, parentDir))
+	case name == "":
+		return []string{"name is required in frontmatter; add 'name: <skill-name>' where the name matches the parent directory"}
+	case len(name) > 64:
+		return []string{"name must be 1-64 characters"}
+	case !skillNamePattern.MatchString(name):
+		return []string{"name must contain only lowercase letters, numbers, and single hyphens"}
+	case name != parentDir:
+		return []string{fmt.Sprintf("name %q must match parent directory %q; either rename the directory to %q or change the frontmatter name to %q", name, parentDir, name, parentDir)}
+	default:
+		return nil
 	}
+}
 
+func validateDescription(desc string) []string {
 	switch {
-	case strings.TrimSpace(matter.Description) == "":
-		errs = append(errs, "description is required in frontmatter; add 'description: <what this skill does>'")
-	case len(matter.Description) > 1024:
-		errs = append(errs, "description must be 1-1024 characters")
+	case strings.TrimSpace(desc) == "":
+		return []string{"description is required in frontmatter; add 'description: <what this skill does>'"}
+	case len(desc) > 1024:
+		return []string{"description must be 1-1024 characters"}
+	default:
+		return nil
 	}
+}
+
+func validateOptionalFields(matter *frontmatter) []string {
+	var errs []string
 
 	if matter.License != nil {
 		if _, ok := matter.License.(string); !ok {
@@ -134,13 +162,8 @@ func ValidateFile(path string) error {
 		value, ok := matter.Compatibility.(string)
 		if !ok {
 			errs = append(errs, "compatibility must be a string")
-		} else {
-			switch {
-			case strings.TrimSpace(value) == "":
-				errs = append(errs, "compatibility must be 1-500 characters when provided")
-			case len(value) > 500:
-				errs = append(errs, "compatibility must be 1-500 characters when provided")
-			}
+		} else if strings.TrimSpace(value) == "" || len(value) > 500 {
+			errs = append(errs, "compatibility must be 1-500 characters when provided")
 		}
 	}
 
@@ -150,22 +173,27 @@ func ValidateFile(path string) error {
 		}
 	}
 
-	if rawValue, ok := rawFields["metadata"]; ok {
-		metaMap, ok := rawValue.(map[string]any)
-		if !ok {
-			errs = append(errs, "metadata must be a map of string keys to string values")
-		} else {
-			for key, value := range metaMap {
-				if _, ok := value.(string); !ok {
-					errs = append(errs, fmt.Sprintf("metadata.%s must be a string", key))
-				}
-			}
+	return errs
+}
+
+func validateMetadata(rawFields map[string]any) []string {
+	rawValue, ok := rawFields["metadata"]
+	if !ok {
+		return nil
+	}
+
+	metaMap, ok := rawValue.(map[string]any)
+	if !ok {
+		return []string{"metadata must be a map of string keys to string values"}
+	}
+
+	var errs []string
+
+	for key, value := range metaMap {
+		if _, ok := value.(string); !ok {
+			errs = append(errs, fmt.Sprintf("metadata.%s must be a string", key))
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("%s", strings.Join(errs, "; "))
-	}
-
-	return nil
+	return errs
 }

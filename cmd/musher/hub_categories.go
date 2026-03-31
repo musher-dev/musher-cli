@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -43,7 +41,7 @@ func runHubCategories(cmd *cobra.Command, out *output.Writer) error {
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(categories); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil
@@ -56,6 +54,7 @@ func runHubCategories(cmd *cobra.Command, out *output.Writer) error {
 
 	for _, cat := range categories {
 		out.Print("%s  (%d bundles)\n", cat.DisplayName, cat.BundleCount)
+
 		if cat.Description != "" {
 			out.Muted("  %s", cat.Description)
 		}

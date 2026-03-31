@@ -22,6 +22,11 @@ import (
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
+const (
+	visibilityPrivate = "private"
+	visibilityPublic  = "public"
+)
+
 func newBundlePushCmd() *cobra.Command {
 	var (
 		publishToHub bool
@@ -63,7 +68,6 @@ const maxPushAttempts = 2
 
 func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) error {
 	ctx := cmd.Context()
-	logger := observability.FromContext(ctx)
 
 	c, err := requireAuth()
 	if err != nil {
@@ -75,29 +79,53 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
-	// Load and validate bundle definition
+	bundle, visibility, err := loadAndValidateBundle(workDir, publishToHub)
+	if err != nil {
+		return err
+	}
+
+	printPushSummary(out, bundle, visibility)
+
+	p := prompt.New(out)
+
+	if preErr := preCheckVersion(ctx, out, workDir, bundle, c, p, visibility); preErr != nil {
+		return preErr
+	}
+
+	if canceled, confirmErr := confirmPush(out, bundle, p, yes); confirmErr != nil || canceled {
+		return confirmErr
+	}
+
+	req, err := buildPushRequest(workDir, bundle, visibility)
+	if err != nil {
+		return err
+	}
+
+	return executePush(cmd.Context(), cmd, out, c, bundle, req, p, workDir, publishToHub)
+}
+
+func loadAndValidateBundle(workDir string, publishToHub bool) (*bundledef.Def, string, error) {
 	bundle, err := bundledef.Load(workDir)
 	if err != nil {
-		return clierrors.InvalidBundleDef(err.Error())
+		return nil, "", clierrors.InvalidBundleDef(err.Error())
 	}
 
 	if err := bundle.Validate(); err != nil {
-		return clierrors.InvalidBundleDef(err.Error())
+		return nil, "", clierrors.InvalidBundleDef(err.Error())
 	}
 
 	if err := bundle.ValidateAssets(workDir); err != nil {
-		return clierrors.ValidateFailed(err.Error())
+		return nil, "", clierrors.ValidateFailed(err.Error())
 	}
 
 	visibility := bundle.Visibility
 	if visibility == "" {
-		visibility = "private"
+		visibility = visibilityPrivate
 	}
 
-	// Validate --publish-to-hub preconditions before pushing.
 	if publishToHub {
-		if visibility != "public" {
-			return &clierrors.CLIError{
+		if visibility != visibilityPublic {
+			return nil, "", &clierrors.CLIError{
 				Message: "--publish-to-hub requires visibility: public",
 				Hint:    "Set 'visibility: public' in musher.yaml or remove the --publish-to-hub flag",
 				Code:    clierrors.ExitUsage,
@@ -105,46 +133,87 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 		}
 
 		if hubErr := bundle.ValidateHubReadiness(); hubErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
+			return nil, "", clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
 		}
 	}
 
-	// Show push summary.
-	printPushSummary(out, bundle, visibility)
+	return bundle, visibility, nil
+}
 
-	// Pre-check for version conflict.
-	p := prompt.New(out)
+func preCheckVersion(
+	ctx context.Context,
+	out *output.Writer,
+	workDir string,
+	bundle *bundledef.Def,
+	c *client.Client,
+	p *prompt.Prompter,
+	visibility string,
+) error {
+	logger := observability.FromContext(ctx)
+
 	exists, checkErr := c.CheckBundleVersionExists(ctx, bundle.Namespace, bundle.Slug, bundle.Version)
-
 	if checkErr != nil {
-		// Pre-check unavailable — log and fall through to push (will catch 409 reactively).
 		logger.Debug("version pre-check failed, skipping", slog.String("error", checkErr.Error()))
-	} else if exists {
-		recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
-		if recoverErr != nil {
-			return recoverErr
-		}
-
-		if recovered {
-			// Re-print summary with updated version.
-			printPushSummary(out, bundle, visibility)
-		}
+		return nil
 	}
 
-	// Confirmation prompt.
-	if !yes && p.CanPrompt() {
-		confirmed, confirmErr := p.Confirm(fmt.Sprintf("Push %s?", bundle.VersionRef()), true)
-		if confirmErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
-		}
-
-		if !confirmed {
-			out.Muted("Push canceled.")
-			return nil
-		}
+	if !exists {
+		return nil
 	}
 
-	// Build assets payload.
+	recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
+	if recoverErr != nil {
+		return recoverErr
+	}
+
+	if recovered {
+		printPushSummary(out, bundle, visibility)
+	}
+
+	return nil
+}
+
+func confirmPush(out *output.Writer, bundle *bundledef.Def, p *prompt.Prompter, yes bool) (canceled bool, err error) {
+	if yes || !p.CanPrompt() {
+		return false, nil
+	}
+
+	confirmed, confirmErr := p.Confirm(fmt.Sprintf("Push %s?", bundle.VersionRef()), true)
+	if confirmErr != nil {
+		return false, clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", confirmErr)
+	}
+
+	if !confirmed {
+		out.Muted("Push canceled.")
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func buildPushRequest(workDir string, bundle *bundledef.Def, visibility string) (*client.PushBundleRequest, error) {
+	assets, err := buildAssetsPayload(workDir, bundle)
+	if err != nil {
+		return nil, err
+	}
+
+	readmeContent, readmeFormat, err := readReadmeContent(workDir, bundle)
+	if err != nil {
+		return nil, err
+	}
+
+	return &client.PushBundleRequest{
+		Name:          bundle.Name,
+		Description:   bundle.Description,
+		Visibility:    visibility,
+		Version:       bundle.Version,
+		ReadmeContent: readmeContent,
+		ReadmeFormat:  readmeFormat,
+		Assets:        assets,
+	}, nil
+}
+
+func buildAssetsPayload(workDir string, bundle *bundledef.Def) ([]client.PushBundleAsset, error) {
 	assets := make([]client.PushBundleAsset, 0, len(bundle.Assets))
 
 	for _, asset := range bundle.Assets {
@@ -152,7 +221,7 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 
 		data, readErr := safeio.ReadFile(assetPath)
 		if readErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read asset: "+asset.Src, readErr)
+			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to read asset: "+asset.Src, readErr)
 		}
 
 		assets = append(assets, client.PushBundleAsset{
@@ -163,31 +232,35 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 		})
 	}
 
-	// Read README content if specified.
-	var readmeContent, readmeFormat string
-	if bundle.Readme != "" {
-		readmePath := filepath.Join(workDir, bundle.Readme)
+	return assets, nil
+}
 
-		data, readErr := safeio.ReadFile(readmePath)
-		if readErr != nil {
-			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read readme: "+bundle.Readme, readErr)
-		}
-
-		readmeContent = string(data)
-		readmeFormat = readmeFormatFromPath(bundle.Readme)
+func readReadmeContent(workDir string, bundle *bundledef.Def) (content, format string, err error) {
+	if bundle.Readme == "" {
+		return "", "", nil
 	}
 
-	req := &client.PushBundleRequest{
-		Name:          bundle.Name,
-		Description:   bundle.Description,
-		Visibility:    visibility,
-		Version:       bundle.Version,
-		ReadmeContent: readmeContent,
-		ReadmeFormat:  readmeFormat,
-		Assets:        assets,
+	readmePath := filepath.Join(workDir, bundle.Readme)
+
+	data, readErr := safeio.ReadFile(readmePath)
+	if readErr != nil {
+		return "", "", clierrors.Wrap(clierrors.ExitGeneral, "Failed to read readme: "+bundle.Readme, readErr)
 	}
 
-	// Push bundle with retry on version conflict (when pre-check was unavailable).
+	return string(data), readmeFormatFromPath(bundle.Readme), nil
+}
+
+func executePush(
+	ctx context.Context,
+	cmd *cobra.Command,
+	out *output.Writer,
+	c *client.Client,
+	bundle *bundledef.Def,
+	req *client.PushBundleRequest,
+	p *prompt.Prompter,
+	workDir string,
+	publishToHub bool,
+) error {
 	for attempt := range maxPushAttempts {
 		spin := out.Spinner("Pushing " + bundle.VersionRef())
 		spin.Start()
@@ -195,56 +268,89 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 		pushErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req)
 		if pushErr == nil {
 			spin.StopWithSuccess("Pushed " + bundle.VersionRef())
-
-			if publishToHub {
-				return hubPublishAfterPush(ctx, out, c, bundle)
-			}
-
-			return nil
+			return handlePostPush(ctx, out, c, bundle, publishToHub)
 		}
 
 		spin.StopWithFailure("Push failed")
 
-		var httpErr *client.HTTPStatusError
-		if !errors.As(pushErr, &httpErr) {
-			return clierrors.PublishFailed(pushErr)
+		retryOrErr := handlePushError(cmd, out, c, bundle, req, p, workDir, pushErr, attempt, publishToHub)
+		if !errors.Is(retryOrErr, errPushRetry) {
+			return retryOrErr
+		}
+	}
+
+	return nil
+}
+
+var errPushRetry = errors.New("retry push")
+
+func handlePushError(
+	cmd *cobra.Command,
+	out *output.Writer,
+	c *client.Client,
+	bundle *bundledef.Def,
+	req *client.PushBundleRequest,
+	p *prompt.Prompter,
+	workDir string,
+	pushErr error,
+	attempt int,
+	publishToHub bool,
+) error {
+	var httpErr *client.HTTPStatusError
+	if !errors.As(pushErr, &httpErr) {
+		return clierrors.PublishFailed(pushErr)
+	}
+
+	if httpErr.Status == http.StatusConflict {
+		return handlePushConflict(out, workDir, bundle, req, p, pushErr, attempt)
+	}
+
+	if httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail) {
+		recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
+		if recoverErr != nil {
+			return recoverErr
 		}
 
-		switch {
-		case httpErr.Status == http.StatusConflict && attempt == 0:
-			// Version conflict on first attempt — offer recovery.
-			recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
-			if recoverErr != nil {
-				return recoverErr
-			}
-
-			if !recovered {
-				return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
-			}
-
-			// Update request version and retry.
-			req.Version = bundle.Version
-
-			continue
-
-		case httpErr.Status == http.StatusConflict:
-			return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
-
-		case httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail):
-			recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
-			if recoverErr != nil {
-				return recoverErr
-			}
-
-			if recovered && publishToHub {
-				return hubPublishAfterPush(ctx, out, c, bundle)
-			}
-
-			return nil
-
-		default:
-			return clierrors.PublishFailed(pushErr)
+		if recovered && publishToHub {
+			return hubPublishAfterPush(cmd.Context(), out, c, bundle)
 		}
+
+		return nil
+	}
+
+	return clierrors.PublishFailed(pushErr)
+}
+
+func handlePushConflict(
+	out *output.Writer,
+	workDir string,
+	bundle *bundledef.Def,
+	req *client.PushBundleRequest,
+	p *prompt.Prompter,
+	pushErr error,
+	attempt int,
+) error {
+	if attempt > 0 {
+		return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
+	}
+
+	recovered, recoverErr := handleVersionConflictRecovery(out, workDir, bundle, p)
+	if recoverErr != nil {
+		return recoverErr
+	}
+
+	if !recovered {
+		return clierrors.VersionConflict(bundle.VersionRef(), pushErr)
+	}
+
+	req.Version = bundle.Version
+
+	return errPushRetry
+}
+
+func handlePostPush(ctx context.Context, out *output.Writer, c *client.Client, bundle *bundledef.Def, publishToHub bool) error {
+	if publishToHub {
+		return hubPublishAfterPush(ctx, out, c, bundle)
 	}
 
 	return nil
@@ -305,6 +411,7 @@ func handleVersionConflictRecovery(
 	}
 
 	out.Println()
+
 	idx, selectErr := p.Select("Select a new version:", options)
 	if selectErr != nil {
 		return false, clierrors.Wrap(clierrors.ExitGeneral, "Prompt failed", selectErr)
@@ -382,14 +489,14 @@ func handleVisibilityRecovery(
 	}
 
 	// Update musher.yaml on disk.
-	if err := bundledef.SetVisibility(workDir, "public"); err != nil {
+	if err := bundledef.SetVisibility(workDir, visibilityPublic); err != nil {
 		return false, clierrors.Wrap(clierrors.ExitGeneral, "Failed to update musher.yaml", err)
 	}
 
 	out.Success("Updated musher.yaml: visibility set to public")
 
 	// Update in-memory request and retry.
-	req.Visibility = "public"
+	req.Visibility = visibilityPublic
 
 	spin := out.Spinner("Retrying push " + bundle.VersionRef())
 	spin.Start()

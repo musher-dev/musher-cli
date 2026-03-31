@@ -6,13 +6,13 @@ package update
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"runtime"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	selfupdate "github.com/creativeprojects/go-selfupdate"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 const repoSlug = "musher-dev/musher-cli"
@@ -49,7 +49,7 @@ func NewUpdater() (*Updater, error) {
 		APIToken: os.Getenv("GITHUB_TOKEN"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create github source: %w", err)
+		return nil, repoerrors.Errorf("create github source: %w", err)
 	}
 
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
@@ -59,7 +59,7 @@ func NewUpdater() (*Updater, error) {
 		Arch:      runtime.GOARCH,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create updater: %w", err)
+		return nil, repoerrors.Errorf("create updater: %w", err)
 	}
 
 	return &Updater{updater: updater}, nil
@@ -69,7 +69,7 @@ func NewUpdater() (*Updater, error) {
 func (u *Updater) CheckLatest(ctx context.Context, currentVersion string) (*Info, error) {
 	latest, found, err := u.updater.DetectLatest(ctx, selfupdate.ParseSlug(repoSlug))
 	if err != nil {
-		return nil, fmt.Errorf("detect latest release: %w", err)
+		return nil, repoerrors.Errorf("detect latest release: %w", err)
 	}
 
 	info := &Info{
@@ -117,11 +117,11 @@ func parseSemver(raw string) (*semver.Version, bool) {
 func (u *Updater) Apply(ctx context.Context, release *selfupdate.Release) error {
 	execPath, err := selfupdate.ExecutablePath()
 	if err != nil {
-		return fmt.Errorf("find executable path: %w", err)
+		return repoerrors.Errorf("find executable path: %w", err)
 	}
 
 	if err := u.updater.UpdateTo(ctx, release, execPath); err != nil {
-		return fmt.Errorf("apply update: %w", err)
+		return repoerrors.Errorf("apply update: %w", err)
 	}
 
 	return nil
@@ -131,11 +131,11 @@ func (u *Updater) Apply(ctx context.Context, release *selfupdate.Release) error 
 func (u *Updater) ApplyVersion(ctx context.Context, version string) (*selfupdate.Release, error) {
 	release, found, err := u.updater.DetectVersion(ctx, selfupdate.ParseSlug(repoSlug), version)
 	if err != nil {
-		return nil, fmt.Errorf("detect version %s: %w", version, err)
+		return nil, repoerrors.Errorf("detect version %s: %w", version, err)
 	}
 
 	if !found {
-		return nil, fmt.Errorf("version %s not found", version)
+		return nil, repoerrors.Errorf("version %s not found", version)
 	}
 
 	if err := u.Apply(ctx, release); err != nil {

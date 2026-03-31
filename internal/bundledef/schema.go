@@ -9,6 +9,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	bundledefschema "github.com/musher-dev/musher-cli/schemas/bundledef"
 )
 
@@ -36,13 +37,13 @@ func getSchema() (*jsonschema.Schema, error) {
 	compileOnce.Do(func() {
 		var schemaDoc any
 		if err := json.Unmarshal(bundledefschema.V1Alpha1, &schemaDoc); err != nil {
-			errCompile = fmt.Errorf("unmarshal schema: %w", err)
+			errCompile = repoerrors.Errorf("unmarshal schema: %w", err)
 			return
 		}
 
 		c := jsonschema.NewCompiler()
 		if err := c.AddResource("https://schemas.musher.dev/bundledef/v1alpha1.json", schemaDoc); err != nil {
-			errCompile = fmt.Errorf("add schema resource: %w", err)
+			errCompile = repoerrors.Errorf("add schema resource: %w", err)
 			return
 		}
 
@@ -50,7 +51,7 @@ func getSchema() (*jsonschema.Schema, error) {
 	})
 
 	if errCompile != nil {
-		return nil, fmt.Errorf("compile schema: %w", errCompile)
+		return nil, repoerrors.Errorf("compile schema: %w", errCompile)
 	}
 
 	return compiledSchema, nil
@@ -88,6 +89,7 @@ func ValidateSchema(yamlData []byte) []ValidationError {
 func flattenErrors(valErr *jsonschema.ValidationError) []ValidationError {
 	if len(valErr.Causes) == 0 {
 		msg := valErr.Error()
+
 		path := "/" + strings.Join(valErr.InstanceLocation, "/")
 		if len(valErr.InstanceLocation) == 0 {
 			path = ""

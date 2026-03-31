@@ -49,13 +49,14 @@ func runHubInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(detail); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil
 	}
 
 	out.Print("%s/%s\n", detail.Publisher.Handle, detail.Slug)
+
 	if detail.DisplayName != "" {
 		out.Print("  %s\n", detail.DisplayName)
 	}

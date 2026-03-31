@@ -13,6 +13,7 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/terminal"
 )
 
@@ -112,7 +113,7 @@ func (w *Writer) PrintJSON(v any) error {
 	enc.SetIndent("", "  ")
 
 	if err := enc.Encode(v); err != nil {
-		return fmt.Errorf("encode json output: %w", err)
+		return repoerrors.Errorf("encode json output: %w", err)
 	}
 
 	return nil
@@ -136,7 +137,7 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 
 	written, writeErr := w.Out.Write(p)
 	if writeErr != nil {
-		return written, fmt.Errorf("write output: %w", writeErr)
+		return written, repoerrors.Errorf("write output: %w", writeErr)
 	}
 
 	return written, nil

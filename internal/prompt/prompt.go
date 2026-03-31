@@ -4,11 +4,11 @@ package prompt
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"golang.org/x/term"
 )
@@ -43,7 +43,7 @@ func (p *Prompter) Confirm(message string, defaultValue bool) (bool, error) {
 
 	input, err := p.reader.ReadString('\n')
 	if err != nil {
-		return defaultValue, fmt.Errorf("failed to read input: %w", err)
+		return defaultValue, repoerrors.Errorf("failed to read input: %w", err)
 	}
 
 	input = strings.TrimSpace(strings.ToLower(input))
@@ -62,7 +62,7 @@ func (p *Prompter) Password(prompt string) (string, error) {
 
 	oldState, err := term.MakeRaw(stdinFd)
 	if err != nil {
-		return "", fmt.Errorf("failed to set raw mode: %w", err)
+		return "", repoerrors.Errorf("failed to set raw mode: %w", err)
 	}
 
 	defer func() { _ = term.Restore(stdinFd, oldState) }() //nolint:errcheck // best-effort terminal restore
@@ -76,7 +76,7 @@ func (p *Prompter) Password(prompt string) (string, error) {
 		_, err := os.Stdin.Read(key[:])
 		if err != nil {
 			p.out.Println()
-			return "", fmt.Errorf("failed to read input: %w", err)
+			return "", repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		switch {
@@ -124,7 +124,7 @@ func (p *Prompter) Select(message string, options []string) (int, error) {
 
 		input, err := p.reader.ReadString('\n')
 		if err != nil {
-			return -1, fmt.Errorf("failed to read input: %w", err)
+			return -1, repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		input = strings.TrimSpace(input)
@@ -159,7 +159,7 @@ func (p *Prompter) SelectMultiple(message string, options []string) ([]int, erro
 
 		input, err := p.reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("failed to read input: %w", err)
+			return nil, repoerrors.Errorf("failed to read input: %w", err)
 		}
 
 		input = strings.TrimSpace(input)
@@ -168,53 +168,53 @@ func (p *Prompter) SelectMultiple(message string, options []string) ([]int, erro
 		}
 
 		if strings.EqualFold(input, "all") {
-			indices := make([]int, len(options))
-			for i := range options {
-				indices[i] = i
-			}
-
-			return indices, nil
+			return allIndices(len(options)), nil
 		}
 
-		parts := strings.Split(input, ",")
-		seen := make(map[int]bool)
-
-		var indices []int
-
-		valid := true
-
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-
-			num, err := strconv.Atoi(part)
-			if err != nil || num < 1 || num > len(options) {
-				p.out.Warning("Invalid selection %q. Please enter numbers between 1 and %d", part, len(options))
-
-				valid = false
-
-				break
-			}
-
-			idx := num - 1
-			if !seen[idx] {
-				seen[idx] = true
-				indices = append(indices, idx)
-			}
-		}
-
-		if !valid {
-			continue
-		}
-
-		if len(indices) == 0 {
+		indices, valid := parseSelections(input, len(options), p.out)
+		if !valid || len(indices) == 0 {
 			continue
 		}
 
 		return indices, nil
 	}
+}
+
+func allIndices(n int) []int {
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+
+	return indices
+}
+
+func parseSelections(input string, optionCount int, out *output.Writer) ([]int, bool) {
+	parts := strings.Split(input, ",")
+	seen := make(map[int]bool)
+
+	var indices []int
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		num, err := strconv.Atoi(part)
+		if err != nil || num < 1 || num > optionCount {
+			out.Warning("Invalid selection %q. Please enter numbers between 1 and %d", part, optionCount)
+			return nil, false
+		}
+
+		idx := num - 1
+		if !seen[idx] {
+			seen[idx] = true
+			indices = append(indices, idx)
+		}
+	}
+
+	return indices, true
 }
 
 // APIKey prompts for an API key with masked input (asterisks).

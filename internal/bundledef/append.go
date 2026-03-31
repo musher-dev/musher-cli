@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // assetEntryRE matches the start of an asset list entry (e.g. "  - id:").
@@ -31,8 +33,9 @@ func AppendAssets(dir string, assets []Asset) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
-		return 0, fmt.Errorf("write bundle definition: %w", err)
+		return 0, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
 	return count, nil
@@ -59,13 +62,13 @@ func renderAppend(dir string, assets []Asset) (resultContent string, appended in
 
 	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
 	if err != nil {
-		return "", 0, fmt.Errorf("read bundle definition: %w", err)
+		return "", 0, repoerrors.Errorf("read bundle definition: %w", err)
 	}
 
 	// Load parsed definition for duplicate detection.
 	def, err := Load(dir)
 	if err != nil {
-		return "", 0, fmt.Errorf("parse bundle definition: %w", err)
+		return "", 0, repoerrors.Errorf("parse bundle definition: %w", err)
 	}
 
 	trackedSrc := make(map[string]bool)
@@ -75,6 +78,7 @@ func renderAppend(dir string, assets []Asset) (resultContent string, appended in
 
 	// Filter out already-tracked assets.
 	var toAppend []Asset
+
 	for _, asset := range assets {
 		if !trackedSrc[filepath.ToSlash(asset.Src)] {
 			toAppend = append(toAppend, asset)

@@ -60,7 +60,9 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 		}
 
 		var err error
+
 		p := prompt.New(out)
+
 		apiKey, err = p.APIKey()
 		if err != nil {
 			return clierrors.Wrap(clierrors.ExitGeneral, "Failed to read API key", err)

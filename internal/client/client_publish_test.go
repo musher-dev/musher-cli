@@ -36,6 +36,7 @@ func TestYankBundleVersion(t *testing.T) {
 		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
 			gotMethod = r.Method
+
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
@@ -60,6 +61,7 @@ func TestYankBundleVersion(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
 				t.Fatalf("decode body: %v", err)
 			}
+
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
@@ -87,10 +89,12 @@ func TestYankBundleVersion(t *testing.T) {
 
 func TestPushBundle(t *testing.T) {
 	t.Run("sends correct request", func(t *testing.T) {
-		var gotPath string
-		var gotMethod string
-		var gotAuth string
-		var gotBody client.PushBundleRequest
+		var (
+			gotPath   string
+			gotMethod string
+			gotAuth   string
+			gotBody   client.PushBundleRequest
+		)
 
 		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
@@ -184,6 +188,7 @@ func TestUnyankBundleVersion(t *testing.T) {
 		c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 			gotPath = r.URL.Path
 			gotMethod = r.Method
+
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
@@ -219,6 +224,7 @@ func TestGetBundleDetail(t *testing.T) {
 	c := newMockClient("test-api-key", func(r *http.Request) (*http.Response, error) {
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
+
 		return jsonResponse(http.StatusOK, `{
 			"id":"bundle-123",
 			"namespace":"acme",
@@ -262,6 +268,7 @@ func TestCreateHubListingUsesBundleMetadata(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/namespaces/acme/bundles/my-bundle":
 			gotLookupPath = r.URL.Path
+
 			return jsonResponse(http.StatusOK, `{
 				"id":"bundle-123",
 				"namespace":"acme",
@@ -276,6 +283,7 @@ func TestCreateHubListingUsesBundleMetadata(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&gotCreateBody); err != nil {
 				t.Fatalf("decode create body: %v", err)
 			}
+
 			return jsonResponse(http.StatusCreated, `{}`), nil
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)

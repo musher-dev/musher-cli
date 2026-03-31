@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/observability"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -105,9 +106,10 @@ type Identity struct {
 // UnmarshalJSON decodes the identity JSON payload.
 func (i *Identity) UnmarshalJSON(data []byte) error {
 	type identityAlias Identity
+
 	var aux identityAlias
 	if err := json.Unmarshal(data, &aux); err != nil {
-		return fmt.Errorf("unmarshal identity: %w", err)
+		return repoerrors.Errorf("unmarshal identity: %w", err)
 	}
 
 	*i = Identity(aux)
@@ -194,7 +196,7 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 
 	resp, err := c.do(req, "/v1/runner/me")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to API: %w", err)
+		return nil, nil, repoerrors.Errorf("failed to connect to API: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -241,7 +243,7 @@ func (c *Client) GetPublisherIdentityWithMeta(ctx context.Context) (*PublisherId
 
 	resp, err := c.do(req, "/v1/publisher/me")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to API: %w", err)
+		return nil, nil, repoerrors.Errorf("failed to connect to API: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -293,7 +295,7 @@ func (c *Client) setRequestHeaders(req *http.Request) {
 func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, repoerrors.Errorf("failed to create request: %w", err)
 	}
 
 	c.setRequestHeaders(req)
@@ -305,7 +307,7 @@ func (c *Client) newRequest(ctx context.Context, method, url string, body io.Rea
 func (c *Client) newPublicRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, repoerrors.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -336,18 +338,23 @@ func (c *Client) do(req *http.Request, route string) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	durationMS := time.Since(start).Milliseconds()
 
-	if err != nil {
+	if err != nil || resp == nil {
+		errVal := err
+		if errVal == nil {
+			errVal = errors.New("server returned nil response")
+		}
+
 		logger.Error(
 			"request failed",
 			slog.String("event.type", "http.request.error"),
 			slog.Int64("duration_ms", durationMS),
-			slog.String("error", err.Error()),
+			slog.String("error", errVal.Error()),
 		)
 
 		return nil, &RequestError{
 			Operation: "http request",
 			RequestID: requestID,
-			Cause:     err,
+			Cause:     errVal,
 		}
 	}
 
@@ -370,7 +377,7 @@ func (c *Client) do(req *http.Request, route string) (*http.Response, error) {
 func encodeJSON(v any) ([]byte, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return nil, fmt.Errorf("marshal json: %w", err)
+		return nil, repoerrors.Errorf("marshal json: %w", err)
 	}
 
 	return data, nil
@@ -378,7 +385,7 @@ func encodeJSON(v any) ([]byte, error) {
 
 func decodeJSON(body io.Reader, dst any, msg string) error {
 	if err := json.NewDecoder(body).Decode(dst); err != nil {
-		return fmt.Errorf("%s: %w", msg, err)
+		return repoerrors.Errorf("%s: %w", msg, err)
 	}
 
 	return nil

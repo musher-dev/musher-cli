@@ -13,7 +13,7 @@ import (
 // handleError formats and displays a CLI error, returning the appropriate exit code.
 func handleError(out *output.Writer, err error) int {
 	var cliErr *clierrors.CLIError
-	if clierrors.As(err, &cliErr) {
+	if clierrors.As(err, &cliErr) && cliErr != nil {
 		out.Failure("%s", cliErr.Message)
 
 		if cliErr.Cause != nil {

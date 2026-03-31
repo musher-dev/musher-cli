@@ -1,11 +1,11 @@
 package update
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	selfupdate "github.com/creativeprojects/go-selfupdate"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 var executablePath = selfupdate.ExecutablePath
@@ -41,7 +41,7 @@ func EnsureWritable(ctx InstallContext) (bool, error) {
 	}
 
 	if err := ReExecWithSudo(); err != nil {
-		return false, fmt.Errorf("re-exec updater with sudo: %w", err)
+		return false, repoerrors.Errorf("re-exec updater with sudo: %w", err)
 	}
 
 	return true, nil

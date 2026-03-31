@@ -47,9 +47,11 @@ performs a full-text search across bundle names, descriptions, and tags.`,
 	return cmd
 }
 
+const sortRecent = "recent"
+
 func normalizeHubSearchSort(sort string) (string, bool) {
 	if sort == "updated" {
-		return "recent", true
+		return sortRecent, true
 	}
 
 	return sort, false
@@ -57,6 +59,7 @@ func normalizeHubSearchSort(sort string) (string, bool) {
 
 func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sort string, limit int) error {
 	var warned bool
+
 	sort, warned = normalizeHubSearchSort(sort)
 	if warned {
 		out.Warning("--sort updated is deprecated; using recent")
@@ -82,7 +85,7 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 
 	if out.JSON {
 		if jsonErr := out.PrintJSON(result); jsonErr != nil {
-			return fmt.Errorf("print JSON: %w", jsonErr)
+			return clierrors.Errorf("print JSON: %w", jsonErr)
 		}
 
 		return nil
@@ -96,9 +99,11 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 	for i := range result.Data {
 		bundle := &result.Data[i]
 		out.Print("%s/%s", bundle.Publisher.Handle, bundle.Slug)
+
 		if bundle.LatestVersion != "" {
 			out.Print(":%s", bundle.LatestVersion)
 		}
+
 		out.Print("\n")
 
 		if bundle.Summary != "" {

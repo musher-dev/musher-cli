@@ -171,6 +171,7 @@ extra: nope
 				if err == nil {
 					t.Fatal("expected error")
 				}
+
 				if !strings.Contains(err.Error(), tt.wantError) {
 					t.Fatalf("error = %q, want substring %q", err.Error(), tt.wantError)
 				}

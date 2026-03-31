@@ -30,6 +30,7 @@ func TestValidateSchemaValidFixtures(t *testing.T) {
 			errs := ValidateSchema(data)
 			if len(errs) > 0 {
 				t.Errorf("expected no errors for %s, got:", f)
+
 				for _, e := range errs {
 					t.Errorf("  %s", e)
 				}
@@ -66,6 +67,7 @@ func TestValidateSchemaInvalidFixtures(t *testing.T) {
 			}
 
 			found := false
+
 			for _, e := range errs {
 				if contains(e.String(), tt.wantErr) {
 					found = true
@@ -75,6 +77,7 @@ func TestValidateSchemaInvalidFixtures(t *testing.T) {
 
 			if !found {
 				t.Errorf("expected error containing %q, got:", tt.wantErr)
+
 				for _, e := range errs {
 					t.Errorf("  %s", e)
 				}

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // BundleDetail represents the authenticated bundle detail payload.
@@ -58,7 +60,7 @@ func (c *Client) PushBundle(ctx context.Context, namespace, bundleSlug string, r
 
 	resp, err := c.do(httpReq, path)
 	if err != nil {
-		return fmt.Errorf("push bundle: %w", err)
+		return repoerrors.Errorf("push bundle: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -85,7 +87,7 @@ func (c *Client) CheckBundleVersionExists(ctx context.Context, namespace, slug, 
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return false, fmt.Errorf("check bundle version: %w", err)
+		return false, repoerrors.Errorf("check bundle version: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -118,12 +120,12 @@ func (c *Client) GetBundleDetail(ctx context.Context, namespace, bundleSlug stri
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("get bundle detail: %w", err)
+		return nil, repoerrors.Errorf("get bundle detail: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s not found", namespace, bundleSlug)
+		return nil, repoerrors.Errorf("bundle %s/%s not found", namespace, bundleSlug)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -151,8 +153,11 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 		neturl.PathEscape(version),
 	)
 
-	var body []byte
-	var err error
+	var (
+		body []byte
+		err  error
+	)
+
 	if reason != "" {
 		body, err = encodeJSON(&YankBundleVersionRequest{Reason: reason})
 		if err != nil {
@@ -166,13 +171,14 @@ func (c *Client) YankBundleVersion(ctx context.Context, namespace, bundle, versi
 	} else {
 		req, err = c.newRequest(ctx, "POST", c.baseURL+path, emptyJSONBody())
 	}
+
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return fmt.Errorf("yank bundle version: %w", err)
+		return repoerrors.Errorf("yank bundle version: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -228,12 +234,12 @@ func (c *Client) PullBundleVersion(ctx context.Context, namespace, slug, version
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("pull bundle version: %w", err)
+		return nil, repoerrors.Errorf("pull bundle version: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+		return nil, repoerrors.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -265,12 +271,12 @@ func (c *Client) PullPublicBundleVersion(ctx context.Context, namespace, slug, v
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return nil, fmt.Errorf("pull public bundle version: %w", err)
+		return nil, repoerrors.Errorf("pull public bundle version: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
+		return nil, repoerrors.Errorf("bundle %s/%s:%s not found", namespace, slug, version)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -300,7 +306,7 @@ func (c *Client) UnyankBundleVersion(ctx context.Context, namespace, bundle, ver
 
 	resp, err := c.do(req, path)
 	if err != nil {
-		return fmt.Errorf("unyank bundle version: %w", err)
+		return repoerrors.Errorf("unyank bundle version: %w", err)
 	}
 	defer resp.Body.Close()
 

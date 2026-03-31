@@ -3,8 +3,6 @@ package main
 import "testing"
 
 func TestIsVisibilityError(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name   string
 		detail string
@@ -22,8 +20,6 @@ func TestIsVisibilityError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			if got := isVisibilityError(tt.detail); got != tt.want {
 				t.Errorf("isVisibilityError(%q) = %v, want %v", tt.detail, got, tt.want)
 			}
@@ -32,8 +28,6 @@ func TestIsVisibilityError(t *testing.T) {
 }
 
 func TestReadmeFormatFromPath(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		path string
 		want string
@@ -49,8 +43,6 @@ func TestReadmeFormatFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			t.Parallel()
-
 			if got := readmeFormatFromPath(tt.path); got != tt.want {
 				t.Errorf("readmeFormatFromPath(%q) = %q, want %q", tt.path, got, tt.want)
 			}

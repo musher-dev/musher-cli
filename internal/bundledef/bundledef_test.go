@@ -248,6 +248,7 @@ func TestSetVisibilityReplacesExistingLine(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+
 	content := `namespace: acme
 slug: my-bundle
 version: 1.0.0
@@ -282,6 +283,7 @@ func TestSetVisibilityInsertsAfterVersion(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+
 	content := `name: My Bundle
 description: A test bundle
 namespace: acme
@@ -320,6 +322,7 @@ func TestSetVisibilityPreservesComments(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+
 	content := `# My bundle config
 namespace: acme
 slug: my-bundle
@@ -380,6 +383,7 @@ func TestResolve(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, FileName), []byte("namespace: acme\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(filepath.Join(dir, FileNameAlt), []byte("namespace: acme\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
