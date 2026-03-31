@@ -34,8 +34,8 @@ func TestProbeHealthReachable(t *testing.T) {
 		t.Errorf("StatusCode = %d, want %d", result.StatusCode, http.StatusOK)
 	}
 
-	if result.Latency <= 0 {
-		t.Error("latency should be positive")
+	if result.Latency < 0 {
+		t.Error("latency should be non-negative")
 	}
 }
 

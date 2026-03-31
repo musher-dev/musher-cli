@@ -23,6 +23,16 @@ func clearPathEnvVars(t *testing.T) {
 	}
 }
 
+// absPath returns a platform-appropriate absolute path for test use.
+// On Windows, it prefixes with "C:" so filepath.IsAbs returns true.
+func absPath(unixPath string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + filepath.FromSlash(unixPath)
+	}
+
+	return unixPath
+}
+
 func TestBrandedEnvTakesPrecedence(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -30,18 +40,18 @@ func TestBrandedEnvTakesPrecedence(t *testing.T) {
 		envValue string
 		fn       func() (string, error)
 	}{
-		{"config", "MUSHER_CONFIG_HOME", "/branded/config", ConfigRoot},
-		{"data", "MUSHER_DATA_HOME", "/branded/data", DataRoot},
-		{"state", "MUSHER_STATE_HOME", "/branded/state", StateRoot},
-		{"cache", "MUSHER_CACHE_HOME", "/branded/cache", CacheRoot},
+		{"config", "MUSHER_CONFIG_HOME", absPath("/branded/config"), ConfigRoot},
+		{"data", "MUSHER_DATA_HOME", absPath("/branded/data"), DataRoot},
+		{"state", "MUSHER_STATE_HOME", absPath("/branded/state"), StateRoot},
+		{"cache", "MUSHER_CACHE_HOME", absPath("/branded/cache"), CacheRoot},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearPathEnvVars(t)
 			t.Setenv(tt.envVar, tt.envValue)
-			t.Setenv("MUSHER_HOME", "/should-not-be-used")
-			t.Setenv("XDG_CONFIG_HOME", "/also-not-used")
+			t.Setenv("MUSHER_HOME", absPath("/should-not-be-used"))
+			t.Setenv("XDG_CONFIG_HOME", absPath("/also-not-used"))
 
 			got, err := tt.fn()
 			if err != nil {
@@ -56,21 +66,23 @@ func TestBrandedEnvTakesPrecedence(t *testing.T) {
 }
 
 func TestMusherHomeFallback(t *testing.T) {
+	home := absPath("/mush")
+
 	tests := []struct {
 		name string
 		fn   func() (string, error)
 		want string
 	}{
-		{"config", ConfigRoot, "/mush/config"},
-		{"data", DataRoot, "/mush/data"},
-		{"state", StateRoot, "/mush/state"},
-		{"cache", CacheRoot, "/mush/cache"},
+		{"config", ConfigRoot, filepath.Join(home, "config")},
+		{"data", DataRoot, filepath.Join(home, "data")},
+		{"state", StateRoot, filepath.Join(home, "state")},
+		{"cache", CacheRoot, filepath.Join(home, "cache")},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearPathEnvVars(t)
-			t.Setenv("MUSHER_HOME", "/mush")
+			t.Setenv("MUSHER_HOME", home)
 
 			got, err := tt.fn()
 			if err != nil {
@@ -106,28 +118,32 @@ func TestMusherHomeMustBeAbsolute(t *testing.T) {
 
 func TestRuntimeRootBrandedEnv(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_RUNTIME_DIR", "/run/musher")
+
+	want := absPath("/run/musher")
+	t.Setenv("MUSHER_RUNTIME_DIR", want)
 
 	got, err := RuntimeRoot()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got != "/run/musher" {
-		t.Errorf("got %q, want %q", got, "/run/musher")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestRuntimeRootMusherHome(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_HOME", "/mush")
+
+	home := absPath("/mush")
+	t.Setenv("MUSHER_HOME", home)
 
 	got, err := RuntimeRoot()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/mush/run"
+	want := filepath.Join(home, "run")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -167,15 +183,18 @@ func TestRuntimeRootTempFallback(t *testing.T) {
 
 func TestRuntimeDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_RUNTIME_DIR", "/run/musher")
+
+	runtimeDir := absPath("/run/musher")
+	t.Setenv("MUSHER_RUNTIME_DIR", runtimeDir)
 
 	got, err := RuntimeDir("locks")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got != "/run/musher/locks" {
-		t.Errorf("got %q, want %q", got, "/run/musher/locks")
+	want := filepath.Join(runtimeDir, "locks")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -262,20 +281,26 @@ func TestKeyringServiceFromURL(t *testing.T) {
 
 func TestCredentialFilePath(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_DATA_HOME", "/data/musher")
+
+	dataHome := absPath("/data/musher")
+	t.Setenv("MUSHER_DATA_HOME", dataHome)
 
 	got, err := CredentialFilePath("api.musher.dev")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/data/musher/credentials/api.musher.dev/api-key"
+	want := filepath.Join(dataHome, "credentials", "api.musher.dev", "api-key")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestXDGFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("XDG fallback paths are not used on Windows")
+	}
+
 	tests := []struct {
 		name   string
 		xdgEnv string
@@ -324,14 +349,16 @@ func TestXDGRelativeIgnored(t *testing.T) {
 
 func TestLogsDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	stateHome := absPath("/state/musher")
+	t.Setenv("MUSHER_STATE_HOME", stateHome)
 
 	got, err := LogsDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/state/musher/logs"
+	want := filepath.Join(stateHome, "logs")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -339,14 +366,16 @@ func TestLogsDir(t *testing.T) {
 
 func TestDefaultLogFile(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	stateHome := absPath("/state/musher")
+	t.Setenv("MUSHER_STATE_HOME", stateHome)
 
 	got, err := DefaultLogFile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/state/musher/logs/musher.log"
+	want := filepath.Join(stateHome, "logs", "musher.log")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -354,14 +383,16 @@ func TestDefaultLogFile(t *testing.T) {
 
 func TestUpdateStateFile(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	stateHome := absPath("/state/musher")
+	t.Setenv("MUSHER_STATE_HOME", stateHome)
 
 	got, err := UpdateStateFile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/state/musher/update-check.json"
+	want := filepath.Join(stateHome, "update-check.json")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -369,14 +400,16 @@ func TestUpdateStateFile(t *testing.T) {
 
 func TestBundleCacheDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	cacheHome := absPath("/cache/musher")
+	t.Setenv("MUSHER_CACHE_HOME", cacheHome)
 
 	got, err := BundleCacheDir("ns", "slug", "v1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/cache/musher/bundles/ns/slug/v1.0.0"
+	want := filepath.Join(cacheHome, "bundles", "ns", "slug", "v1.0.0")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -384,14 +417,16 @@ func TestBundleCacheDir(t *testing.T) {
 
 func TestOCIStoreDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_DATA_HOME", "/data/musher")
+
+	dataHome := absPath("/data/musher")
+	t.Setenv("MUSHER_DATA_HOME", dataHome)
 
 	got, err := OCIStoreDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/data/musher/oci"
+	want := filepath.Join(dataHome, "oci")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -399,14 +434,16 @@ func TestOCIStoreDir(t *testing.T) {
 
 func TestBlobCacheDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	cacheHome := absPath("/cache/musher")
+	t.Setenv("MUSHER_CACHE_HOME", cacheHome)
 
 	got, err := BlobCacheDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/cache/musher/blobs"
+	want := filepath.Join(cacheHome, "blobs")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -414,14 +451,16 @@ func TestBlobCacheDir(t *testing.T) {
 
 func TestManifestCacheDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_CACHE_HOME", "/cache/musher")
+
+	cacheHome := absPath("/cache/musher")
+	t.Setenv("MUSHER_CACHE_HOME", cacheHome)
 
 	got, err := ManifestCacheDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/cache/musher/manifests"
+	want := filepath.Join(cacheHome, "manifests")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -429,14 +468,16 @@ func TestManifestCacheDir(t *testing.T) {
 
 func TestTranscriptDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_STATE_HOME", "/state/musher")
+
+	stateHome := absPath("/state/musher")
+	t.Setenv("MUSHER_STATE_HOME", stateHome)
 
 	got, err := TranscriptDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/state/musher/transcripts"
+	want := filepath.Join(stateHome, "transcripts")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -444,14 +485,16 @@ func TestTranscriptDir(t *testing.T) {
 
 func TestInstalledBundlesDir(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_DATA_HOME", "/data/musher")
+
+	dataHome := absPath("/data/musher")
+	t.Setenv("MUSHER_DATA_HOME", dataHome)
 
 	got, err := InstalledBundlesDir()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/data/musher/installed"
+	want := filepath.Join(dataHome, "installed")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -489,14 +532,16 @@ func TestRuntimeRootMusherHomeRelativeError(t *testing.T) {
 
 func TestBrandedEnvPathCleaned(t *testing.T) {
 	clearPathEnvVars(t)
-	t.Setenv("MUSHER_CONFIG_HOME", "/branded//config/./path")
+
+	dirty := absPath("/branded//config/./path")
+	t.Setenv("MUSHER_CONFIG_HOME", dirty)
 
 	got, err := ConfigRoot()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/branded/config/path"
+	want := absPath("/branded/config/path")
 	if got != want {
 		t.Errorf("got %q, want %q (path should be cleaned)", got, want)
 	}
