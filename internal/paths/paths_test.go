@@ -2,6 +2,7 @@ package paths
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -158,7 +159,7 @@ func TestRuntimeRootTempFallback(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := os.TempDir() + "/musher/run"
+	want := filepath.Join(os.TempDir(), "musher", "run")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
