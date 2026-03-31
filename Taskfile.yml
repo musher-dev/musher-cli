@@ -265,10 +265,10 @@ tasks:
         total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
         threshold=${COVERAGE_THRESHOLD}
         if awk "BEGIN{exit (!($total < $threshold))}"; then
-          printf "FAIL: total coverage %.1f%% is below %.1f%% floor\n" "$total" "$threshold" >&2
+          echo "FAIL: total coverage ${total}% is below ${threshold}% floor" >&2
           exit 1
         fi
-        printf "OK: total coverage %.1f%% meets %.1f%% floor\n" "$total" "$threshold"
+        echo "OK: total coverage ${total}% meets ${threshold}% floor"
 
   check:contracts:
     desc: Verify CLI command tree is stable
