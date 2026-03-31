@@ -747,3 +747,72 @@ type mockInstallLister struct{}
 func (m *mockInstallLister) List() ([]install.Entry, error) {
 	return nil, nil
 }
+
+func TestCmdLoadCache(t *testing.T) {
+	t.Parallel()
+
+	summarizer := &mockCacheSummarizer{}
+	cmd := cmdLoadCache(summarizer)
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+
+	msg := cmd()
+
+	result, ok := msg.(cacheResultMsg)
+	if !ok {
+		t.Fatalf("expected cacheResultMsg, got %T", msg)
+	}
+
+	if result.bundleCount != 0 {
+		t.Errorf("bundleCount = %d, want 0", result.bundleCount)
+	}
+}
+
+func TestCmdLoadInstall(t *testing.T) {
+	t.Parallel()
+
+	lister := &mockInstallLister{}
+	cmd := cmdLoadInstall(lister)
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+
+	msg := cmd()
+
+	result, ok := msg.(installResultMsg)
+	if !ok {
+		t.Fatalf("expected installResultMsg, got %T", msg)
+	}
+
+	if !result.found {
+		t.Error("expected found = true when List returns no error")
+	}
+}
+
+func TestHomeScreenExecuteRefInput(t *testing.T) {
+	t.Parallel()
+
+	screen, _, _ := newTestHomeScreen(nil)
+
+	// Set cursor to "Load bundle" (index 1, hotkey 'r').
+	screen.cursor = 1
+
+	_, cmd := screen.executeCurrentItem()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for 'Load bundle' item")
+	}
+
+	msg := cmd()
+
+	pushMsg, ok := msg.(pushScreenMsg)
+	if !ok {
+		t.Fatalf("expected pushScreenMsg, got %T", msg)
+	}
+
+	if _, ok := pushMsg.screen.(*refInputScreen); !ok {
+		t.Errorf("expected *refInputScreen, got %T", pushMsg.screen)
+	}
+}

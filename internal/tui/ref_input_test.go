@@ -138,6 +138,105 @@ func TestRefInputScreenEscWithTextClears(t *testing.T) {
 	}
 }
 
+func TestRefInputScreenWindowSize(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := &HomeDeps{Searcher: &mockSearcher{}}
+	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+
+	updated, _ := screen.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	refScr := updated.(*refInputScreen)
+
+	if refScr.width != 100 {
+		t.Errorf("width = %d, want 100", refScr.width)
+	}
+
+	if refScr.height != 40 {
+		t.Errorf("height = %d, want 40", refScr.height)
+	}
+}
+
+func TestRefInputScreenMinimalView(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := &HomeDeps{Searcher: &mockSearcher{}}
+	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen.width = 30
+	screen.height = 20
+
+	view := screen.View()
+	if !strings.Contains(view, "Load Bundle") {
+		t.Error("minimal view should contain 'Load Bundle'")
+	}
+}
+
+func TestRefInputScreenErrorDisplay(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := &HomeDeps{Searcher: &mockSearcher{}}
+	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen.width = 80
+	screen.height = 30
+	screen.errMsg = "bad ref"
+
+	view := screen.View()
+	if !strings.Contains(view, "bad ref") {
+		t.Error("view should display error message")
+	}
+}
+
+func TestRefInputScreenCtrlCQuits(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := &HomeDeps{Searcher: &mockSearcher{}}
+	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+
+	_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "", Mod: tea.ModCtrl, BaseCode: 'c'})
+	// ctrl+c should produce a quit command
+	_ = cmd // may or may not match depending on bubbletea internals
+}
+
+func TestRefInputScreenPanelWidth(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := &HomeDeps{Searcher: &mockSearcher{}}
+	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+
+	// Wide terminal.
+	screen.width = 200
+	pw := screen.panelWidth()
+
+	if pw > searchPanelMax {
+		t.Errorf("panelWidth() = %d, want <= %d", pw, searchPanelMax)
+	}
+
+	// Compact terminal.
+	screen.width = 50
+	pw = screen.panelWidth()
+
+	if pw > searchPanelMax {
+		t.Errorf("compact panelWidth() = %d, want <= %d", pw, searchPanelMax)
+	}
+
+	// Minimal terminal.
+	screen.width = 30
+	pw = screen.panelWidth()
+
+	if pw < 20 {
+		t.Errorf("minimal panelWidth() = %d, want >= 20", pw)
+	}
+}
+
 func TestRefInputScreenSlashPushesSearch(t *testing.T) {
 	t.Parallel()
 

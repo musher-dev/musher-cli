@@ -174,6 +174,38 @@ func TestDetailScreenView(t *testing.T) {
 		}
 	})
 
+	t.Run("panel layout with width", func(t *testing.T) {
+		t.Parallel()
+
+		sty := newStyles(true)
+		keys := defaultKeyMap()
+		screen := newDetailScreen(context.Background(), &mockSearcher{}, "acme", "bundle", &sty, &keys)
+		screen.loading = false
+		screen.width = 80
+		screen.height = 30
+		screen.detail = &client.HubBundleDetail{
+			HubBundleSummary: client.HubBundleSummary{
+				DisplayName:   "My Bundle",
+				Summary:       "A summary",
+				LatestVersion: "1.0.0",
+				Publisher: client.HubPublisher{
+					Handle:    "acme",
+					TrustTier: "verified",
+				},
+			},
+		}
+
+		view := screen.View()
+
+		if !strings.Contains(view, "My Bundle") {
+			t.Error("panel view should contain display name")
+		}
+
+		if !strings.Contains(view, "acme/bundle") {
+			t.Error("panel view should contain breadcrumb")
+		}
+	})
+
 	t.Run("nil detail shows empty", func(t *testing.T) {
 		t.Parallel()
 
@@ -187,6 +219,68 @@ func TestDetailScreenView(t *testing.T) {
 			t.Error("expected non-empty view even with nil detail")
 		}
 	})
+}
+
+func TestDetailScreenPanelWidth(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newDetailScreen(context.Background(), &mockSearcher{}, "acme", "bundle", &sty, &keys)
+
+	// Two-panel layout.
+	screen.width = 120
+	pw := screen.panelWidth()
+
+	if pw <= 0 {
+		t.Errorf("two-panel panelWidth() = %d, want > 0", pw)
+	}
+
+	// Compact layout.
+	screen.width = 50
+	pw = screen.panelWidth()
+
+	if pw <= 0 {
+		t.Errorf("compact panelWidth() = %d, want > 0", pw)
+	}
+
+	// Minimal layout.
+	screen.width = 30
+	pw = screen.panelWidth()
+
+	if pw < 20 {
+		t.Errorf("minimal panelWidth() = %d, want >= 20", pw)
+	}
+}
+
+func TestDetailScreenFetchDetail(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	detail := &client.HubBundleDetail{
+		HubBundleSummary: client.HubBundleSummary{
+			DisplayName: "Test",
+		},
+	}
+	searcher := &mockSearcher{detailResult: detail}
+	screen := newDetailScreen(context.Background(), searcher, "acme", "bundle", &sty, &keys)
+
+	cmd := screen.fetchDetail()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from fetchDetail")
+	}
+
+	msg := cmd()
+
+	resultMsg, ok := msg.(detailResultMsg)
+	if !ok {
+		t.Fatalf("expected detailResultMsg, got %T", msg)
+	}
+
+	if resultMsg.detail.DisplayName != "Test" {
+		t.Errorf("detail.DisplayName = %q, want %q", resultMsg.detail.DisplayName, "Test")
+	}
 }
 
 func TestDetailScreenKeyHandling(t *testing.T) {
