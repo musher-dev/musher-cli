@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.3.6](https://github.com/musher-dev/musher-cli/compare/v0.3.5...v0.3.6) (2026-03-31)
+
+
+### Features
+
+* add --no-tui persistent flag and consumer group constant ([8def4fb](https://github.com/musher-dev/musher-cli/commit/8def4fb51a2f8652808f9552ad62693ec0226c86))
+* add cache management and consumer CLI foundations ([317e876](https://github.com/musher-dev/musher-cli/commit/317e8767a67d40ac88df2ab1f42f0ee28757c510))
+* add consumer error constructors and path functions ([45626bc](https://github.com/musher-dev/musher-cli/commit/45626bc736129553402e8efef7a2efd472888311))
+* add OCI pull path, TUI screens for auth/config/validate/push, and form components ([f07726c](https://github.com/musher-dev/musher-cli/commit/f07726cac8c0f4a1354fe9f11f42abe10331a84d))
+* add package foundations for consumer CLI merge ([f0f4547](https://github.com/musher-dev/musher-cli/commit/f0f4547e4972cde3fcc6db2b7b26d80fd39cb709))
+* add search/load consumer commands with TUI and claude harness provider ([7c31ee7](https://github.com/musher-dev/musher-cli/commit/7c31ee76f0a2426d3436cbfb9b7d72b475bc7182))
+* **cache:** add cache management commands and content-addressable store ([3cc257c](https://github.com/musher-dev/musher-cli/commit/3cc257cb3694fa637d9f8055967275e0e1538e60))
+* **client:** add bundle resolve, pull, and asset download endpoints ([0ed3a08](https://github.com/musher-dev/musher-cli/commit/0ed3a08bfd3efc658ae322e3ee0787710118e60e))
+* **config:** add musher config list/get/set commands ([958505f](https://github.com/musher-dev/musher-cli/commit/958505f11a416a8fd850d173e1e9d452178b2f34))
+* **harness:** add all 6 harness providers to registry ([e6e1339](https://github.com/musher-dev/musher-cli/commit/e6e133994b5046f9a7ffaa5eec7373b01e92adfe))
+* **quality:** add comprehensive quality gates, linters, and 70%+ test coverage ([dfbf3e1](https://github.com/musher-dev/musher-cli/commit/dfbf3e16b4e6a2e1c88e476325081d8eb29f42ff))
+* **run:** add musher run command for end-to-end bundle execution ([f7b9882](https://github.com/musher-dev/musher-cli/commit/f7b9882362a69f26fa3a771a8b8e4a871090d415))
+* **testutil:** add integration test framework and dev:test-live task ([90c19db](https://github.com/musher-dev/musher-cli/commit/90c19db828b0884226a3aa6af0c3ca21dab63ec7))
+* **testutil:** add shared test helpers package ([f16ee44](https://github.com/musher-dev/musher-cli/commit/f16ee44039e09142b84960f1401ffeb0946d3698))
+* **tui:** add interactive home screen with Tokyo Night theme ([0820b87](https://github.com/musher-dev/musher-cli/commit/0820b871db430adfd2be46dd4343f4dbc90647f0))
+* **tui:** expand home screen with USE/CREATE/MANAGE sections and status panel ([22c69f9](https://github.com/musher-dev/musher-cli/commit/22c69f9f16e7ca2343a4fefb6de4c4cdf223fc5f))
+* **tui:** refactor search screen with centering, sliding window, and ref input ([259c6d9](https://github.com/musher-dev/musher-cli/commit/259c6d985dbc8d2ccaaeb621bae9baa4dd7f17ff))
+* **update:** integrate background update agent into CLI lifecycle ([6a5eef8](https://github.com/musher-dev/musher-cli/commit/6a5eef80a3c8fa7c6c47e43dd926bbec5b5c4a85))
+
+
+### Bug Fixes
+
+* **ci:** pin nilaway version and reduce memory pressure in CI ([5cb4bc0](https://github.com/musher-dev/musher-cli/commit/5cb4bc094d6cdddcfa25f71b8f2820a1dcbf8f63))
+* **ci:** replace printf %f with echo in coverage check for dash compat ([38a93a6](https://github.com/musher-dev/musher-cli/commit/38a93a66ac5005947201dd00d4ff88bfc426c26f))
+* **ci:** resolve nilaway FieldByLabel nil panic and restore coverage floor ([e29bca2](https://github.com/musher-dev/musher-cli/commit/e29bca209aee8b2b5f72a0e6b559e402cf4d9a53))
+* **test:** resolve macOS CI test failures in auth and paths ([d831400](https://github.com/musher-dev/musher-cli/commit/d831400aac42a82112b97ce149901cac5dc088f3))
+* **test:** resolve Windows CI test failures in paths and probe ([92b5b0d](https://github.com/musher-dev/musher-cli/commit/92b5b0d9533ce60c5e9f157138a2f08067c674e7))
+* **test:** skip NeedsElevation test on Windows ([0379190](https://github.com/musher-dev/musher-cli/commit/0379190a4ba6c6d1b60a954974c09b1b3fca09c3))
+
 ## [0.3.5](https://github.com/musher-dev/musher-cli/compare/v0.3.4...v0.3.5) (2026-03-28)
 
 
