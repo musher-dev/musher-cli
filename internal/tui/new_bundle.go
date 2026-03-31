@@ -311,14 +311,14 @@ func (screen *newBundleScreen) submit() tea.Cmd {
 
 func (screen *newBundleScreen) buildDef() *bundledef.Def {
 	def := &bundledef.Def{
-		Namespace:  screen.form.FieldByLabel(labelNamespace).Value(),
-		Slug:       screen.form.FieldByLabel(labelSlug).Value(),
-		Name:       screen.form.FieldByLabel(labelName).Value(),
-		Version:    screen.form.FieldByLabel(labelVersion).Value(),
-		Visibility: screen.form.FieldByLabel(labelVisibility).Value(),
+		Namespace:  screen.form.fieldValue(labelNamespace),
+		Slug:       screen.form.fieldValue(labelSlug),
+		Name:       screen.form.fieldValue(labelName),
+		Version:    screen.form.fieldValue(labelVersion),
+		Visibility: screen.form.fieldValue(labelVisibility),
 	}
 
-	desc := screen.form.FieldByLabel(labelDescription).Value()
+	desc := screen.form.fieldValue(labelDescription)
 	if desc != "" {
 		def.Description = desc
 	}

@@ -67,6 +67,15 @@ func (container *FormContainer) FieldByLabel(label string) FormField {
 	return nil
 }
 
+// fieldValue returns the value of a field by label, or empty string if not found.
+func (container *FormContainer) fieldValue(label string) string {
+	if f := container.FieldByLabel(label); f != nil {
+		return f.Value()
+	}
+
+	return ""
+}
+
 // SubmitAll runs validation on all fields and returns error messages.
 // Returns nil if all fields are valid. Moves cursor to first invalid field.
 func (container *FormContainer) SubmitAll() []string {

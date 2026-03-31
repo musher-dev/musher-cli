@@ -173,6 +173,20 @@ func TestFormContainer_View(t *testing.T) {
 	}
 }
 
+func TestFormContainer_fieldValue(t *testing.T) {
+	t.Parallel()
+
+	fc := newTestContainer()
+
+	if got := fc.fieldValue("Name"); got != "My Bundle" {
+		t.Errorf("fieldValue(Name) = %q, want %q", got, "My Bundle")
+	}
+
+	if got := fc.fieldValue("NonExistent"); got != "" {
+		t.Errorf("fieldValue(NonExistent) = %q, want empty", got)
+	}
+}
+
 func TestFormContainer_BoundaryClamping(t *testing.T) {
 	t.Parallel()
 
