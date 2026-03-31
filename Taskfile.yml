@@ -10,7 +10,7 @@ vars:
   GO_VERSION: 1.26.1
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
-  NILAWAY_VERSION: latest
+  NILAWAY_VERSION: v0.0.0-20260318203545-ad240b12fb4c
   SHFMT_VERSION: v3.13.0
   ACTIONLINT_VERSION: v1.7.11
   LEFTHOOK_VERSION: v1.13.6
@@ -242,6 +242,8 @@ tasks:
     preconditions:
       - sh: command -v nilaway >/dev/null 2>&1
         msg: "nilaway is required. Run 'task setup:tools' first."
+    env:
+      GOGC: "50"
     cmds:
       - |
         echo "Running NilAway nil-safety analysis..."

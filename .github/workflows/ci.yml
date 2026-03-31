@@ -13,6 +13,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       COVERAGE_THRESHOLD: "70.0"
     steps:
