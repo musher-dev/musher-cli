@@ -66,6 +66,23 @@ func runValidate(out *output.Writer) error {
 		return clierrors.ValidateFailed(err.Error())
 	}
 
+	if out.JSON {
+		//nolint:wrapcheck // PrintJSON is an internal helper, wrapping adds noise
+		return out.PrintJSON(struct {
+			Valid      bool   `json:"valid"`
+			Namespace  string `json:"namespace"`
+			Slug       string `json:"slug"`
+			Version    string `json:"version"`
+			AssetCount int    `json:"assetCount"`
+		}{
+			Valid:      true,
+			Namespace:  bundle.Namespace,
+			Slug:       bundle.Slug,
+			Version:    bundle.Version,
+			AssetCount: len(bundle.Assets),
+		})
+	}
+
 	out.Success("Bundle is valid: %s (%d assets)", bundle.VersionRef(), len(bundle.Assets))
 
 	return nil

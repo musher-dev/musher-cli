@@ -88,7 +88,7 @@ func runCacheList(out *output.Writer, pattern string) error {
 	}
 
 	for _, entry := range entries {
-		out.Print("%-30s %-10s %d assets    %-10s %s",
+		out.Print("%-30s %-10s %d assets    %-10s %s\n",
 			entry.Namespace+"/"+entry.Slug,
 			entry.Version,
 			entry.AssetCount,

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -150,6 +151,23 @@ func checkDirectoryStructure(context.Context) Result {
 				continue
 			}
 
+			// A parent path component is a file instead of a directory
+			// (e.g. /tmp/musher is a file, blocking /tmp/musher/run).
+			if isNotDirError(err) {
+				blocker := findFileBlockingPath(dir)
+
+				detail := fmt.Sprintf("Remove %s and let musher recreate the directory tree", dir)
+				if blocker != "" {
+					detail = fmt.Sprintf("A file exists at %s — remove it so musher can create the directory tree", blocker)
+				}
+
+				return Result{
+					Status:  StatusWarn,
+					Message: r.name + " path blocked by a non-directory",
+					Detail:  detail,
+				}
+			}
+
 			return Result{
 				Status:  StatusFail,
 				Message: fmt.Sprintf("Cannot access %s directory", r.name),
@@ -159,9 +177,9 @@ func checkDirectoryStructure(context.Context) Result {
 
 		if !info.IsDir() {
 			return Result{
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s path is not a directory: %s", r.name, dir),
-				Detail:  "Remove the file and let musher recreate it",
+				Status:  StatusWarn,
+				Message: r.name + " path exists but is not a directory",
+				Detail:  fmt.Sprintf("Remove %s and let musher recreate it as a directory", dir),
 			}
 		}
 
@@ -558,3 +576,35 @@ const (
 	xMark       = "\u2717" // x
 	warningMark = "\u26A0" // warning
 )
+
+// isNotDirError returns true if the error indicates a path component
+// is not a directory (ENOTDIR), which happens when a parent in the
+// path is a regular file.
+func isNotDirError(err error) bool {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return errors.Is(pathErr.Err, syscall.ENOTDIR)
+	}
+
+	return false
+}
+
+// findFileBlockingPath walks up from dir to find the first path component
+// that exists as a regular file instead of a directory. Returns "" if none found.
+func findFileBlockingPath(dir string) string {
+	for dir != "/" && dir != "." {
+		info, err := os.Lstat(dir)
+		if err != nil {
+			dir = filepath.Dir(dir)
+			continue
+		}
+
+		if !info.IsDir() {
+			return dir
+		}
+
+		break
+	}
+
+	return ""
+}

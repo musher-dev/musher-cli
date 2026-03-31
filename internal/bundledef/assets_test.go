@@ -7,31 +7,35 @@ import (
 	"testing"
 )
 
-func TestValidateAssetsSkillRequiresSKILLMD(t *testing.T) {
+func TestValidateAssetsSkillAuxiliaryFileAccepted(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 
-	path := filepath.Join(root, "skills", "example.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// Create both SKILL.md and auxiliary file.
+	skillDir := filepath.Join(root, "skills", "greet")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	if err := os.WriteFile(path, []byte("placeholder"), 0o644); err != nil {
+	skillContent := "---\nname: greet\ndescription: greeting skill\n---\n# Greet"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(skillDir, "examples.md"), []byte("# examples"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
 	def := &Def{
-		Assets: []Asset{{ID: "example", Src: "skills/example.md", Kind: "skill"}},
+		Assets: []Asset{
+			{ID: "greet", Src: "skills/greet/SKILL.md", Kind: "skill"},
+			{ID: "greet-examples", Src: "skills/greet/examples.md", Kind: "skill"},
+		},
 	}
 
-	err := def.ValidateAssets(root)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-
-	if !strings.Contains(err.Error(), "skill assets must point to SKILL.md") {
-		t.Fatalf("error = %q", err.Error())
+	if err := def.ValidateAssets(root); err != nil {
+		t.Fatalf("ValidateAssets() error = %v", err)
 	}
 }
 

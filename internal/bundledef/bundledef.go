@@ -389,12 +389,13 @@ func validateSkillAsset(assetPath string, asset Asset) []string {
 		return nil
 	}
 
-	if filepath.Base(asset.Src) != "SKILL.md" {
-		return []string{fmt.Sprintf("asset %q: skill assets must point to SKILL.md: %s", asset.ID, asset.Src)}
-	}
-
-	if err := skills.ValidateFile(assetPath); err != nil {
-		return []string{fmt.Sprintf("asset %q: invalid skill %s: %v", asset.ID, asset.Src, err)}
+	// Only the primary SKILL.md file requires frontmatter validation.
+	// Auxiliary skill files (examples, templates, etc.) are valid as long
+	// as they exist, which is already checked by validateAssetPath.
+	if filepath.Base(asset.Src) == "SKILL.md" {
+		if err := skills.ValidateFile(assetPath); err != nil {
+			return []string{fmt.Sprintf("asset %q: invalid skill %s: %v", asset.ID, asset.Src, err)}
+		}
 	}
 
 	return nil
