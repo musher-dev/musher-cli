@@ -9,13 +9,17 @@ on:
 permissions:
   contents: read
 
+env:
+  COVERAGE_THRESHOLD: "70.0"
+
 jobs:
-  check:
-    name: Check
+  # ---------------------------------------------------------------------------
+  # Lint — formatting, style, policy, static analysis
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      COVERAGE_THRESHOLD: "70.0"
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -32,27 +36,49 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.3
+          args: --help
+          install-mode: binary
+
       - name: Install tools
-        run: task setup:tools
+        run: |
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
 
-      - name: Verify hook bootstrap
-        run: task hooks:install
+      - name: Run lint suite
+        run: task check:ci:lint
 
-      - name: Run canonical quality gate
-        run: task check:ci
+  # ---------------------------------------------------------------------------
+  # Test — unit tests, coverage, vulnerability scan
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Enforce Coverage Floor
-        run: task check:coverage:floor
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+
+      - name: Run tests with coverage
+        run: task check:ci:test
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
-
-      - name: Validate GoReleaser config
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: check
 
       - name: Upload coverage artifact
         if: always()
@@ -71,9 +97,69 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # ---------------------------------------------------------------------------
+  # Build — cross-compilation, CLI contracts, install scripts, GoReleaser
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Run build verification
+        run: task check:ci:build
+
+      - name: Validate GoReleaser config
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+  # ---------------------------------------------------------------------------
+  # NilAway — nil-safety analysis (advisory, does not block other jobs)
+  # ---------------------------------------------------------------------------
+  nilaway:
+    name: NilAway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Install NilAway
+        run: go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260318203545-ad240b12fb4c
+
+      - name: Run NilAway analysis
+        run: task check:nilaway
+
+  # ---------------------------------------------------------------------------
+  # Smoke — platform-specific tests (macOS, Windows)
+  # ---------------------------------------------------------------------------
   smoke:
     name: Smoke (${{ matrix.os }})
-    needs: check
+    needs: [lint, test, build]
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
