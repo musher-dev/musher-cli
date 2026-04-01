@@ -327,9 +327,12 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 
 	var cacheSummarizer tui.CacheSummarizer
 
+	var packer tui.BundlePacker
+
 	if cacheRoot, err := paths.CacheRoot(); err == nil {
 		if store, err := cache.NewStore(cacheRoot); err == nil {
 			cacheSummarizer = store
+			packer = store
 		}
 	}
 
@@ -356,6 +359,7 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		Config:           cfg,
 		Validator:        tui.NewBundleValidator(),
 		Pusher:           pusher,
+		Packer:           packer,
 		DefWriter:        tui.NewBundleDefWriter(),
 		PublisherBundles: apiClient,
 		APIURL:           apiURL,

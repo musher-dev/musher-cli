@@ -175,6 +175,7 @@ type HomeDeps struct {
 	Config           ConfigManager         // nil when config unavailable.
 	Validator        BundleValidator       // nil when bundledef operations unavailable.
 	Pusher           BundlePusher          // nil when unauthenticated — push screen handles gracefully.
+	Packer           BundlePacker          // nil when cache unavailable.
 	DefWriter        BundleDefWriter       // nil when workdir is read-only.
 	PublisherBundles PublisherBundleLister // nil when publisher listing unavailable.
 	APIURL           string                // API endpoint for auth operations.

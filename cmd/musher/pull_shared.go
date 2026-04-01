@@ -27,6 +27,7 @@ type pullCacheResult struct {
 	Name        string
 	Description string
 	CacheRoot   string
+	HostID      string // Host ID that holds this manifest (_local or registry-derived).
 	Cached      bool
 	Layers      []cache.ManifestLayer
 }
@@ -45,6 +46,13 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		return nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to initialize cache store", err)
 	}
 
+	// Check locally packed bundles first (before contacting the registry).
+	if !force {
+		if result := checkLocalPack(store, namespace, slug, version, cacheRoot); result != nil {
+			return result, nil
+		}
+	}
+
 	cfg := config.Load()
 
 	hostID, err := paths.HostIDFromURL(cfg.APIURL())
@@ -59,6 +67,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 
 	if !force {
 		if result := checkCacheFreshness(store, hostID, namespace, slug, version, cacheRoot); result != nil {
+			result.HostID = hostID
 			return result, nil
 		}
 	}
@@ -84,6 +93,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		Name:        bundle.Name,
 		Description: bundle.Description,
 		CacheRoot:   cacheRoot,
+		HostID:      hostID,
 		Cached:      false,
 		Layers:      manifest.Layers,
 	}, nil
@@ -134,6 +144,27 @@ func checkCacheFreshness(store *cache.Store, hostID, namespace, slug, version, c
 		Cached:      true,
 		Layers:      manifest.Layers,
 	}
+}
+
+// checkLocalPack checks whether a locally packed bundle exists in the _local
+// host partition.  When version is empty it resolves the latest local ref.
+func checkLocalPack(store *cache.Store, namespace, slug, version, cacheRoot string) *pullCacheResult {
+	// If no version given, try the local "latest" ref.
+	if version == "" {
+		ref, err := store.ReadRef(cache.LocalHostID, namespace, slug)
+		if err != nil {
+			return nil
+		}
+
+		version = ref.Version
+	}
+
+	result := checkCacheFreshness(store, cache.LocalHostID, namespace, slug, version, cacheRoot)
+	if result != nil {
+		result.HostID = cache.LocalHostID
+	}
+
+	return result
 }
 
 func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, version string) (*client.PullBundleResponse, error) {

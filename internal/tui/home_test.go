@@ -578,8 +578,8 @@ func TestHomeScreenMenuItemCount(t *testing.T) {
 	t.Parallel()
 
 	items := buildMenuItems()
-	if len(items) != 7 {
-		t.Errorf("expected 7 menu items, got %d", len(items))
+	if len(items) != 8 {
+		t.Errorf("expected 8 menu items, got %d", len(items))
 	}
 }
 
@@ -597,8 +597,8 @@ func TestHomeScreenMenuSections(t *testing.T) {
 		t.Errorf("expected 2 USE items, got %d", sections["USE"])
 	}
 
-	if sections["CREATE"] != 3 {
-		t.Errorf("expected 3 CREATE items, got %d", sections["CREATE"])
+	if sections["CREATE"] != 4 {
+		t.Errorf("expected 4 CREATE items, got %d", sections["CREATE"])
 	}
 
 	if sections["MANAGE"] != 2 {

@@ -14,11 +14,9 @@ import (
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/bundle/session"
-	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/output"
-	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
@@ -205,14 +203,7 @@ func loadManifestFromCache(result *pullCacheResult) (*cache.Store, *cache.Bundle
 		return nil, nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to open cache store", err)
 	}
 
-	cfg := config.Load()
-
-	hostID, err := paths.HostIDFromURL(cfg.APIURL())
-	if err != nil {
-		return nil, nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to derive host ID", err)
-	}
-
-	manifest, err := store.LoadManifest(hostID, result.Namespace, result.Slug, result.Version)
+	manifest, err := store.LoadManifest(result.HostID, result.Namespace, result.Slug, result.Version)
 	if err != nil {
 		return nil, nil, clierrors.CacheCorrupt(
 			result.Namespace+"/"+result.Slug+":"+result.Version, err)

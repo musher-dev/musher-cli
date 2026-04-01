@@ -118,6 +118,33 @@ func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result,
 	return finalApp.Result(), nil
 }
 
+// RunPack launches the TUI in pack mode for the bundle in the working directory.
+// Returns nil result on quit without action.
+func RunPack(ctx context.Context, deps *HomeDeps) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newPackScreen(ctx, deps, deps.Packer, &sty, &keys)
+	app := NewApp(screen)
+
+	p := tea.NewProgram(app)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, repoerrors.Errorf("TUI error: %w", err)
+	}
+
+	finalApp, ok := finalModel.(*App)
+	if !ok {
+		return nil, errUnexpectedModel
+	}
+
+	if finalApp.Err() != nil {
+		return nil, finalApp.Err()
+	}
+
+	return finalApp.Result(), nil
+}
+
 // RunLoad launches the TUI in load mode for a specific bundle.
 // Returns the user's action (harness selection) or nil if canceled.
 func RunLoad(

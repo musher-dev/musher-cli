@@ -593,3 +593,85 @@ func storeManifestWithMeta(t *testing.T, store *cache.Store, hostID, ns, slug, v
 		t.Fatalf("StoreManifestMeta: %v", err)
 	}
 }
+
+func TestIsManifestFreshNeverExpires(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+
+	// TTL 0 means never expires (used for locally packed bundles).
+	storeManifestWithMeta(t, store, cache.LocalHostID, "ns", "slug", "1.0.0", 0)
+
+	if !store.IsManifestFresh(cache.LocalHostID, "ns", "slug", "1.0.0") {
+		t.Error("expected manifest with TTL=0 to be always fresh")
+	}
+}
+
+func TestIsManifestFreshNegativeTTLNeverExpires(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+
+	m := &cache.BundleManifest{Namespace: "ns", Slug: "slug", Version: "1.0.0"}
+	if err := store.StoreManifest(cache.LocalHostID, "ns", "slug", "1.0.0", m); err != nil {
+		t.Fatalf("StoreManifest: %v", err)
+	}
+
+	meta := &cache.ManifestMeta{
+		FetchedAt: time.Now().Add(-365 * 24 * time.Hour), // A year ago.
+		TTL:       -1,
+	}
+	if err := store.StoreManifestMeta(cache.LocalHostID, "ns", "slug", "1.0.0", meta); err != nil {
+		t.Fatalf("StoreManifestMeta: %v", err)
+	}
+
+	if !store.IsManifestFresh(cache.LocalHostID, "ns", "slug", "1.0.0") {
+		t.Error("expected manifest with TTL=-1 to be always fresh")
+	}
+}
+
+func TestCleanExpiredSkipsNeverExpire(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+
+	// Store a never-expire manifest (local pack).
+	storeManifestWithMeta(t, store, cache.LocalHostID, "ns", "slug", "1.0.0", 0)
+
+	// Store blob so the manifest has content.
+	digest, err := store.StoreBlob([]byte("content"))
+	if err != nil {
+		t.Fatalf("StoreBlob: %v", err)
+	}
+
+	m := &cache.BundleManifest{
+		Namespace: "ns", Slug: "slug", Version: "1.0.0",
+		Layers: []cache.ManifestLayer{{ContentSHA256: digest, Size: 7}},
+	}
+
+	if storeErr := store.StoreManifest(cache.LocalHostID, "ns", "slug", "1.0.0", m); storeErr != nil {
+		t.Fatalf("StoreManifest: %v", storeErr)
+	}
+
+	result, err := store.CleanExpired()
+	if err != nil {
+		t.Fatalf("CleanExpired: %v", err)
+	}
+
+	if result.ManifestsRemoved != 0 {
+		t.Errorf("expected 0 manifests removed, got %d", result.ManifestsRemoved)
+	}
+
+	// Verify the manifest is still accessible.
+	if !store.IsManifestFresh(cache.LocalHostID, "ns", "slug", "1.0.0") {
+		t.Error("expected local pack manifest to survive CleanExpired")
+	}
+}
+
+func TestLocalHostIDConstant(t *testing.T) {
+	t.Parallel()
+
+	if cache.LocalHostID != "_local" {
+		t.Errorf("LocalHostID = %q, want %q", cache.LocalHostID, "_local")
+	}
+}

@@ -88,8 +88,13 @@ func runCacheList(out *output.Writer, pattern string) error {
 	}
 
 	for _, entry := range entries {
+		ref := entry.Namespace + "/" + entry.Slug
+		if entry.HostID == cache.LocalHostID {
+			ref += " (local)"
+		}
+
 		out.Print("%-30s %-10s %d assets    %-10s %s\n",
-			entry.Namespace+"/"+entry.Slug,
+			ref,
 			entry.Version,
 			entry.AssetCount,
 			formatBytes(entry.TotalSize),
