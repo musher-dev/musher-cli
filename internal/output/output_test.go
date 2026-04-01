@@ -352,11 +352,14 @@ func TestSpinnerDisabled(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name  string
-		quiet bool
+		name       string
+		quiet      bool
+		json       bool
+		wantSilent bool
 	}{
-		{"quiet mode", true},
-		{"non-tty", false},
+		{"quiet mode", true, false, true},
+		{"json mode", false, true, true},
+		{"non-tty", false, false, false},
 	}
 
 	for _, tt := range tests {
@@ -365,6 +368,7 @@ func TestSpinnerDisabled(t *testing.T) {
 
 			w, stdout, stderr := newTestWriter()
 			w.Quiet = tt.quiet
+			w.JSON = tt.json
 
 			s := w.Spinner("loading")
 
@@ -377,9 +381,9 @@ func TestSpinnerDisabled(t *testing.T) {
 			s.UpdateMessage("updated")
 			s.Stop()
 
-			if tt.quiet {
+			if tt.wantSilent {
 				if stdout.String() != "" {
-					t.Error("quiet spinner Start should not produce stdout output")
+					t.Errorf("%s spinner should not produce stdout output, got %q", tt.name, stdout.String())
 				}
 			} else {
 				// Non-TTY disabled spinner prints fallback text.
@@ -441,6 +445,25 @@ func TestSpinnerStopWithWarning(t *testing.T) {
 
 	if !strings.Contains(stderr.String(), "maybe bad") {
 		t.Errorf("StopWithWarning should print warning message, got stderr=%q", stderr.String())
+	}
+}
+
+func TestSpinnerJSONModeSilent(t *testing.T) {
+	t.Parallel()
+
+	w, stdout, stderr := newTestWriter()
+	w.JSON = true
+
+	s := w.Spinner("working")
+	s.Start()
+	s.StopWithSuccess("all good")
+
+	if stdout.String() != "" {
+		t.Errorf("JSON mode spinner should not write to stdout, got %q", stdout.String())
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("JSON mode spinner should not write to stderr, got %q", stderr.String())
 	}
 }
 

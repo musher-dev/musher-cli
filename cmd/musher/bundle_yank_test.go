@@ -135,6 +135,18 @@ func TestNewBundleUnyankCmdUse(t *testing.T) {
 	}
 }
 
+func TestNewBundleUnyankCmdFlags(t *testing.T) {
+	cmd := newBundleUnyankCmd()
+
+	if cmd.Flags().Lookup("yes") == nil {
+		t.Error("missing --yes flag")
+	}
+
+	if cmd.Flags().ShorthandLookup("y") == nil {
+		t.Error("missing -y shorthand for --yes")
+	}
+}
+
 func TestNewBundleYankCmdUse(t *testing.T) {
 	cmd := newBundleYankCmd()
 	if cmd.Use != "yank <namespace/slug:version>" {

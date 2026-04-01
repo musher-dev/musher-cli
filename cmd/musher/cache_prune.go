@@ -174,7 +174,7 @@ func printPruneDryRun(out *output.Writer, matching []cache.CachedBundle, totalSi
 	out.Info("Would remove %d bundle version(s) (%s):", len(matching), formatBytes(totalSize))
 
 	for _, entry := range matching {
-		out.Print("  %s/%s:%s  %s  %s",
+		out.Print("  %s/%s:%s  %s  %s\n",
 			entry.Namespace, entry.Slug, entry.Version,
 			formatBytes(entry.TotalSize), timeAgo(entry.FetchedAt))
 	}

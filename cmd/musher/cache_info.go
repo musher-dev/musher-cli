@@ -67,10 +67,10 @@ func runCacheInfo(out *output.Writer) error {
 		return nil
 	}
 
-	out.Print("Cache location:  %s", cacheRoot)
-	out.Print("Total size:      %s", formatBytes(totalBytes))
-	out.Print("Bundles cached:  %d", len(entries))
-	out.Print("Blobs stored:    %d", blobCount)
+	out.Print("Cache location:  %s\n", cacheRoot)
+	out.Print("Total size:      %s\n", formatBytes(totalBytes))
+	out.Print("Bundles cached:  %d\n", len(entries))
+	out.Print("Blobs stored:    %d\n", blobCount)
 
 	return nil
 }

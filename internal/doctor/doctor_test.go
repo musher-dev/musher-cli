@@ -502,7 +502,7 @@ func TestCheckAuthentication(t *testing.T) {
 func TestCheckDirectoryStructureNotADir(t *testing.T) {
 	root := t.TempDir()
 
-	// Create a file where a directory is expected
+	// Create a file where a directory is expected (leaf is a file)
 	configPath := filepath.Join(root, "config")
 	if err := os.WriteFile(configPath, []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
@@ -515,8 +515,49 @@ func TestCheckDirectoryStructureNotADir(t *testing.T) {
 	t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(root, "run"))
 
 	result := checkDirectoryStructure(context.Background())
-	if result.Status != StatusFail {
-		t.Errorf("status = %d, want Fail when path is a file; message = %q", result.Status, result.Message)
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn when path is a file; message = %q", result.Status, result.Message)
+	}
+
+	if result.Detail == "" {
+		t.Error("expected detail with remediation guidance")
+	}
+}
+
+func TestCheckDirectoryStructureParentIsFile(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a file at a path that should be a parent directory.
+	// e.g. runtime resolves to <root>/musher/run, but <root>/musher is a file.
+	musherFile := filepath.Join(root, "musher")
+	if err := os.WriteFile(musherFile, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Point runtime dir through the file-as-parent: <root>/musher/run
+	t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(musherFile, "run"))
+
+	// Other dirs are valid
+	for _, sub := range []string{"config", "data", "state", "cache"} {
+		dir := filepath.Join(root, sub)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(root, "state"))
+	t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
+
+	result := checkDirectoryStructure(context.Background())
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn when parent is a file; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+
+	if result.Detail == "" {
+		t.Error("expected detail identifying the blocking file")
 	}
 }
 

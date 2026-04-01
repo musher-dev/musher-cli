@@ -60,31 +60,91 @@ func DiscoverAssets(bundleRoot string, def *Def) ([]DiscoveredAsset, error) {
 			candidates = discoverByExtension(dirPath, scanDir.dir, scanDir.fileExt)
 		}
 
-		for _, src := range candidates {
-			normalized := filepath.ToSlash(src)
-			if trackedSrc[normalized] {
-				continue
-			}
+		discovered = collectCandidates(candidates, scanDir.kind, trackedSrc, trackedID, discovered)
+	}
 
-			assetID := InferID(src)
-			result := DiscoveredAsset{
-				Asset: Asset{
-					ID:   assetID,
-					Src:  normalized,
-					Kind: scanDir.kind,
-				},
-			}
-
-			// Check for ID conflict: same ID, different src.
-			if existingSrc, ok := trackedID[assetID]; ok && existingSrc != normalized {
-				result.IDConflict = true
-			}
-
-			discovered = append(discovered, result)
-		}
+	// Discover auxiliary skill files (non-SKILL.md files alongside SKILL.md).
+	skillsDir := filepath.Join(bundleRoot, "skills")
+	if info, err := os.Stat(skillsDir); err == nil && info.IsDir() {
+		auxFiles := discoverSkillAuxFiles(skillsDir, "skills", "SKILL.md")
+		discovered = collectCandidates(auxFiles, kindSkill, trackedSrc, trackedID, discovered)
 	}
 
 	return discovered, nil
+}
+
+// collectCandidates converts raw source paths into DiscoveredAsset entries,
+// skipping already-tracked sources and flagging ID conflicts.
+func collectCandidates(candidates []string, kind string, trackedSrc map[string]bool, trackedID map[string]string, out []DiscoveredAsset) []DiscoveredAsset {
+	for _, src := range candidates {
+		normalized := filepath.ToSlash(src)
+		if trackedSrc[normalized] {
+			continue
+		}
+
+		assetID := InferID(src)
+		result := DiscoveredAsset{
+			Asset: Asset{
+				ID:   assetID,
+				Src:  normalized,
+				Kind: kind,
+			},
+		}
+
+		// Check for ID conflict: same ID, different src.
+		if existingSrc, ok := trackedID[assetID]; ok && existingSrc != normalized {
+			result.IDConflict = true
+		}
+
+		out = append(out, result)
+	}
+
+	return out
+}
+
+// discoverSkillAuxFiles finds non-marker files in skill directories that
+// contain a SKILL.md marker. These are auxiliary files (examples, templates,
+// data) that belong to the skill.
+func discoverSkillAuxFiles(dirPath, prefix, marker string) []string {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil
+	}
+
+	var results []string
+
+	for _, entry := range entries {
+		if !entry.IsDir() || isHidden(entry.Name()) || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		subDir := filepath.Join(dirPath, entry.Name())
+
+		// Only include auxiliary files from directories that have the marker.
+		markerPath := filepath.Join(subDir, marker)
+		if info, err := os.Lstat(markerPath); err != nil || info.IsDir() {
+			continue
+		}
+
+		subEntries, err := os.ReadDir(subDir)
+		if err != nil {
+			continue
+		}
+
+		for _, sub := range subEntries {
+			if sub.IsDir() || isHidden(sub.Name()) || sub.Type()&os.ModeSymlink != 0 {
+				continue
+			}
+
+			if sub.Name() == marker {
+				continue // already discovered by discoverMarkerFiles
+			}
+
+			results = append(results, filepath.Join(prefix, entry.Name(), sub.Name()))
+		}
+	}
+
+	return results
 }
 
 // discoverMarkerFiles looks for a specific filename in one level of subdirectories.
@@ -168,6 +228,7 @@ func discoverSubdirFiles(subPath, prefix string, exts, results []string) []strin
 //
 // Rules:
 //   - skills/review/SKILL.md → "review" (parent directory name)
+//   - skills/review/examples.md → "review-examples" (parent dir + filename stem)
 //   - agents/reviewer.md → "reviewer" (filename without extension)
 //   - agents/review/AGENT.yaml → "review" (parent directory when nested)
 func InferID(src string) string {
@@ -180,8 +241,16 @@ func InferID(src string) string {
 	}
 
 	// Three-part paths like skills/review/SKILL.md → use parent dir name.
+	// Auxiliary files like skills/review/examples.md → parent dir + filename stem.
 	if len(parts) >= 3 {
-		return SanitizeSlug(parts[len(parts)-2])
+		filename := parts[len(parts)-1]
+		if isMarkerFile(filename) {
+			return SanitizeSlug(parts[len(parts)-2])
+		}
+
+		stem := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+		return SanitizeSlug(parts[len(parts)-2] + "-" + stem)
 	}
 
 	// Two-part paths like agents/reviewer.md → use filename stem.
@@ -189,6 +258,18 @@ func InferID(src string) string {
 	stem := strings.TrimSuffix(filename, filepath.Ext(filename))
 
 	return SanitizeSlug(stem)
+}
+
+// isMarkerFile returns true for filenames that represent the primary entry
+// point of a multi-file asset directory.
+func isMarkerFile(filename string) bool {
+	upper := strings.ToUpper(filename)
+	switch upper {
+	case "SKILL.MD", "AGENT.YAML", "AGENT.YML", "AGENT.MD":
+		return true
+	default:
+		return false
+	}
 }
 
 func isHidden(name string) bool {

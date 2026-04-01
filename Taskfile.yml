@@ -96,16 +96,31 @@ tasks:
   check:ci:
     desc: Run the canonical CI quality gate
     cmds:
+      - task: check:ci:lint
+      - task: check:ci:test
+      - task: check:ci:build
+      - task: check:nilaway
+
+  check:ci:lint:
+    desc: CI lint group (format, style, policy)
+    cmds:
       - task: check:fmt
       - task: check:shell
       - task: check:workflow
       - task: check:mod
       - task: check:policy
       - task: check:lint
-      - task: check:nilaway
+
+  check:ci:test:
+    desc: CI test group (tests, coverage, vulnerabilities)
+    cmds:
       - task: check:vuln
       - task: check:test-cover
       - task: check:coverage:floor
+
+  check:ci:build:
+    desc: CI build verification group (compile, contracts, install)
+    cmds:
       - task: check:compile
       - task: check:contracts
       - task: check:install
@@ -242,12 +257,10 @@ tasks:
     preconditions:
       - sh: command -v nilaway >/dev/null 2>&1
         msg: "nilaway is required. Run 'task setup:tools' first."
-    env:
-      GOGC: "50"
     cmds:
       - |
         echo "Running NilAway nil-safety analysis..."
-        if ! nilaway -exclude-test-files ./... 2>&1; then
+        if ! timeout 600 nilaway -include-pkgs="{{.MODULE}}" -exclude-test-files ./... 2>&1; then
           echo ""
           echo "NilAway reported findings above. Review for genuine nil risks."
           echo "Note: some findings may be false positives from cross-package analysis."
@@ -272,15 +285,19 @@ tasks:
 
   check:contracts:
     desc: Verify CLI command tree is stable
+    vars:
+      CONTRACTS_BIN: '{{.BINARY}}-contracts-check'
     cmds:
-      - go run ./cmd/musher --help > /dev/null
-      - go run ./cmd/musher auth --help > /dev/null
-      - go run ./cmd/musher bundle --help > /dev/null
-      - go run ./cmd/musher cache --help > /dev/null
-      - go run ./cmd/musher config --help > /dev/null
-      - go run ./cmd/musher hub --help > /dev/null
-      - go run ./cmd/musher doctor > /dev/null 2>&1 || true
-      - go run ./cmd/musher version > /dev/null
+      - go build -o {{.CONTRACTS_BIN}} ./cmd/musher
+      - ./{{.CONTRACTS_BIN}} --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} auth --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} bundle --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} cache --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} config --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} hub --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} doctor > /dev/null 2>&1 || true
+      - ./{{.CONTRACTS_BIN}} version > /dev/null
+      - rm -f ./{{.CONTRACTS_BIN}}
 
   check:install:
     desc: Validate install scripts

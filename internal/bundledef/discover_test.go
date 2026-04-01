@@ -319,6 +319,122 @@ func TestDiscoverAssetsNewKinds(t *testing.T) {
 	}
 }
 
+func TestDiscoverAssetsSkillAuxiliaryFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create skills/greet/ with SKILL.md and auxiliary files.
+	skillDir := filepath.Join(dir, "skills", "greet")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"SKILL.md", "examples.md", "context.txt"} {
+		if err := os.WriteFile(filepath.Join(skillDir, name), []byte("content"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	discovered, err := DiscoverAssets(dir, nil)
+	if err != nil {
+		t.Fatalf("DiscoverAssets() error = %v", err)
+	}
+
+	if len(discovered) != 3 {
+		t.Fatalf("got %d discovered, want 3", len(discovered))
+	}
+
+	srcMap := make(map[string]DiscoveredAsset)
+	for _, d := range discovered {
+		srcMap[d.Src] = d
+	}
+
+	// Primary SKILL.md.
+	if d, ok := srcMap["skills/greet/SKILL.md"]; !ok {
+		t.Error("missing skills/greet/SKILL.md")
+	} else if d.ID != "greet" {
+		t.Errorf("SKILL.md ID = %q, want %q", d.ID, "greet")
+	} else if d.Kind != "skill" {
+		t.Errorf("SKILL.md Kind = %q, want %q", d.Kind, "skill")
+	}
+
+	// Auxiliary examples.md.
+	if d, ok := srcMap["skills/greet/examples.md"]; !ok {
+		t.Error("missing skills/greet/examples.md")
+	} else if d.ID != "greet-examples" {
+		t.Errorf("examples.md ID = %q, want %q", d.ID, "greet-examples")
+	} else if d.Kind != "skill" {
+		t.Errorf("examples.md Kind = %q, want %q", d.Kind, "skill")
+	}
+
+	// Auxiliary context.txt.
+	if d, ok := srcMap["skills/greet/context.txt"]; !ok {
+		t.Error("missing skills/greet/context.txt")
+	} else if d.ID != "greet-context" {
+		t.Errorf("context.txt ID = %q, want %q", d.ID, "greet-context")
+	}
+}
+
+func TestDiscoverAssetsSkillAuxRequiresMarker(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create skills/orphan/ with only auxiliary files (no SKILL.md).
+	orphanDir := filepath.Join(dir, "skills", "orphan")
+	if err := os.MkdirAll(orphanDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(orphanDir, "examples.md"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	discovered, err := DiscoverAssets(dir, nil)
+	if err != nil {
+		t.Fatalf("DiscoverAssets() error = %v", err)
+	}
+
+	if len(discovered) != 0 {
+		t.Fatalf("got %d discovered, want 0 (auxiliary files require sibling SKILL.md)", len(discovered))
+	}
+}
+
+func TestDiscoverAssetsSkillAuxFiltersTracked(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, "skills", "greet")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"SKILL.md", "examples.md"} {
+		if err := os.WriteFile(filepath.Join(skillDir, name), []byte("content"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Both files already tracked.
+	def := &Def{
+		Assets: []Asset{
+			{ID: "greet", Src: "skills/greet/SKILL.md", Kind: "skill"},
+			{ID: "greet-examples", Src: "skills/greet/examples.md", Kind: "skill"},
+		},
+	}
+
+	discovered, err := DiscoverAssets(dir, def)
+	if err != nil {
+		t.Fatalf("DiscoverAssets() error = %v", err)
+	}
+
+	if len(discovered) != 0 {
+		t.Fatalf("got %d discovered, want 0 (all files already tracked)", len(discovered))
+	}
+}
+
 func TestInferID(t *testing.T) {
 	t.Parallel()
 
@@ -331,6 +447,10 @@ func TestInferID(t *testing.T) {
 		{"agents/deploy/AGENT.yaml", "deploy"},
 		{"skills/my-cool-skill/SKILL.md", "my-cool-skill"},
 		{"agents/My Agent.md", "my-agent"},
+		// Auxiliary skill files get parent dir + filename stem.
+		{"skills/greet/examples.md", "greet-examples"},
+		{"skills/greet/context.md", "greet-context"},
+		{"skills/my-cool-skill/helpers.md", "my-cool-skill-helpers"},
 	}
 
 	for _, tt := range tests {

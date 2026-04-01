@@ -217,8 +217,13 @@ const (
 
 // Spinner creates a new spinner for long operations.
 func (w *Writer) Spinner(message string) *Spinner {
-	if w.Quiet || !w.terminal.SpinnersEnabled() {
-		return &Spinner{disabled: true, message: message, writer: w}
+	if w.Quiet || w.JSON || !w.terminal.SpinnersEnabled() {
+		return &Spinner{
+			disabled: true,
+			silent:   w.Quiet || w.JSON,
+			message:  message,
+			writer:   w,
+		}
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
@@ -238,12 +243,16 @@ type Spinner struct {
 	message  string
 	writer   *Writer
 	disabled bool
+	silent   bool // no fallback text (JSON or quiet mode)
 }
 
 // Start begins the spinner animation.
 func (s *Spinner) Start() {
 	if s.disabled {
-		s.writer.Print("%s... ", s.message)
+		if !s.silent {
+			s.writer.Print("%s... ", s.message)
+		}
+
 		return
 	}
 
@@ -262,10 +271,12 @@ func (s *Spinner) Stop() {
 // StopWithSuccess stops spinner and shows success message.
 func (s *Spinner) StopWithSuccess(message string) {
 	if s.disabled {
-		s.writer.Println("done")
+		if !s.silent {
+			s.writer.Println("done")
 
-		if message != "" {
-			s.writer.Success("%s", message)
+			if message != "" {
+				s.writer.Success("%s", message)
+			}
 		}
 
 		return
@@ -281,10 +292,12 @@ func (s *Spinner) StopWithSuccess(message string) {
 // StopWithFailure stops spinner and shows failure message.
 func (s *Spinner) StopWithFailure(message string) {
 	if s.disabled {
-		s.writer.Println("failed")
+		if !s.silent {
+			s.writer.Println("failed")
 
-		if message != "" {
-			s.writer.Failure("%s", message)
+			if message != "" {
+				s.writer.Failure("%s", message)
+			}
 		}
 
 		return
@@ -300,10 +313,12 @@ func (s *Spinner) StopWithFailure(message string) {
 // StopWithWarning stops spinner and shows warning message.
 func (s *Spinner) StopWithWarning(message string) {
 	if s.disabled {
-		s.writer.Println("warning")
+		if !s.silent {
+			s.writer.Println("warning")
 
-		if message != "" {
-			s.writer.Warning("%s", message)
+			if message != "" {
+				s.writer.Warning("%s", message)
+			}
 		}
 
 		return
