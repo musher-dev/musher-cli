@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.7](https://github.com/musher-dev/musher-cli/compare/v0.3.6...v0.3.7) (2026-04-01)
+
+
+### Features
+
+* JSON output mode, multi-file skills, and CLI polish ([d10c9fe](https://github.com/musher-dev/musher-cli/commit/d10c9feb87d5a3fd7e9fc604aab1c12630f340d4))
+* JSON output mode, multi-file skills, and CLI polish ([097d434](https://github.com/musher-dev/musher-cli/commit/097d4345daa334c01d910d0fa4bfed57645d3641)), closes [#48](https://github.com/musher-dev/musher-cli/issues/48) [#46](https://github.com/musher-dev/musher-cli/issues/46)
+
+
+### Performance Improvements
+
+* **ci:** parallelize CI pipeline and fix NilAway timeout ([58f9f7f](https://github.com/musher-dev/musher-cli/commit/58f9f7fe045e4b3adbf41498725b04b3fa5ecb8f))
+
 ## [0.3.6](https://github.com/musher-dev/musher-cli/compare/v0.3.5...v0.3.6) (2026-03-31)
 
 
