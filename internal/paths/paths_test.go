@@ -169,7 +169,11 @@ func TestRuntimeRootXDGOnLinux(t *testing.T) {
 func TestRuntimeRootTempFallback(t *testing.T) {
 	clearPathEnvVars(t)
 	tempDir := t.TempDir()
+
+	// os.TempDir reads TMPDIR on Unix, TMP/TEMP on Windows.
 	t.Setenv("TMPDIR", tempDir)
+	t.Setenv("TMP", tempDir)
+	t.Setenv("TEMP", tempDir)
 
 	got, err := RuntimeRoot()
 	if err != nil {
