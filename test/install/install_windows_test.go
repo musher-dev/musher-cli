@@ -5,6 +5,7 @@ package install_test
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -53,7 +54,7 @@ func scriptPath(t *testing.T) string {
 func runPowerShellScript(t *testing.T, args, env []string) psRunResult {
 	t.Helper()
 
-	ctx, cancel := time.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	cmdArgs := append([]string{
