@@ -366,7 +366,7 @@ func TestPrintPushSummaryDoesNotPanic(t *testing.T) {
 }
 
 func TestHandlePushErrorNonHTTP(t *testing.T) {
-	err := handlePushError(nil, nil, nil, nil, nil, nil, "", errors.New("network failure"), 0, false)
+	err := handlePushError(t.Context(), nil, nil, nil, nil, nil, nil, "", errors.New("network failure"), 0, false)
 	if err == nil {
 		t.Fatal("expected error")
 	}

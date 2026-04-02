@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -47,17 +48,14 @@ func flattenMap(prefix string, src map[string]any) map[string]any {
 	result := make(map[string]any)
 
 	for key, val := range src {
-		fullKey := key
 		if prefix != "" {
-			fullKey = prefix + "." + key
+			key = prefix + "." + key
 		}
 
 		if nested, ok := val.(map[string]any); ok {
-			for nk, nv := range flattenMap(fullKey, nested) {
-				result[nk] = nv
-			}
+			maps.Copy(result, flattenMap(key, nested))
 		} else {
-			result[fullKey] = val
+			result[key] = val
 		}
 	}
 

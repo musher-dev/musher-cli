@@ -410,7 +410,7 @@ func TestHomeScreenHarnesses(t *testing.T) {
 		Version:   "1.0.0",
 	}
 
-	screen := newHomeScreen(context.Background(), deps, &sty, &keys)
+	screen := newHomeScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 120
 	screen.height = 30
 

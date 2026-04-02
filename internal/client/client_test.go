@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -74,7 +73,7 @@ func TestValidateKey(t *testing.T) {
 			}`), nil
 		})
 
-		identity, err := c.ValidateKey(context.Background())
+		identity, err := c.ValidateKey(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -95,7 +94,7 @@ func TestValidateKey(t *testing.T) {
 			return testutil.JSONResponse(http.StatusUnauthorized, `{}`), nil
 		})
 
-		_, err := c.ValidateKey(context.Background())
+		_, err := c.ValidateKey(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 401")
 		}
@@ -112,7 +111,7 @@ func TestValidateKey(t *testing.T) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		_, err := c.ValidateKey(context.Background())
+		_, err := c.ValidateKey(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 403")
 		}
@@ -129,7 +128,7 @@ func TestValidateKey(t *testing.T) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{"detail":"db down"}`), nil
 		})
 
-		_, err := c.ValidateKey(context.Background())
+		_, err := c.ValidateKey(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 500")
 		}
@@ -142,7 +141,7 @@ func TestValidateKey(t *testing.T) {
 			return nil, errors.New("connection refused")
 		})
 
-		_, err := c.ValidateKey(context.Background())
+		_, err := c.ValidateKey(t.Context())
 		if err == nil {
 			t.Fatal("expected error on transport failure")
 		}
@@ -170,7 +169,7 @@ func TestValidateKeyWithMeta(t *testing.T) {
 			return resp, nil
 		})
 
-		identity, meta, err := c.ValidateKeyWithMeta(context.Background())
+		identity, meta, err := c.ValidateKeyWithMeta(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -198,7 +197,7 @@ func TestValidateKeyWithMeta(t *testing.T) {
 			return resp, nil
 		})
 
-		_, meta, err := c.ValidateKeyWithMeta(context.Background())
+		_, meta, err := c.ValidateKeyWithMeta(t.Context())
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -236,7 +235,7 @@ func TestGetPublisherIdentity(t *testing.T) {
 			}`), nil
 		})
 
-		identity, err := c.GetPublisherIdentity(context.Background())
+		identity, err := c.GetPublisherIdentity(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -265,7 +264,7 @@ func TestGetPublisherIdentity(t *testing.T) {
 			return testutil.JSONResponse(http.StatusUnauthorized, `{}`), nil
 		})
 
-		_, err := c.GetPublisherIdentity(context.Background())
+		_, err := c.GetPublisherIdentity(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 401")
 		}
@@ -278,7 +277,7 @@ func TestGetPublisherIdentity(t *testing.T) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		_, err := c.GetPublisherIdentity(context.Background())
+		_, err := c.GetPublisherIdentity(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 403")
 		}
@@ -403,7 +402,7 @@ func TestCheckBundleVersionExists(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `{}`), nil
 		})
 
-		exists, err := c.CheckBundleVersionExists(context.Background(), "acme", "tool", "1.0.0")
+		exists, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "1.0.0")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -420,7 +419,7 @@ func TestCheckBundleVersionExists(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		exists, err := c.CheckBundleVersionExists(context.Background(), "acme", "tool", "9.9.9")
+		exists, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "9.9.9")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -437,7 +436,7 @@ func TestCheckBundleVersionExists(t *testing.T) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{}`), nil
 		})
 
-		_, err := c.CheckBundleVersionExists(context.Background(), "acme", "tool", "1.0.0")
+		_, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error for 500")
 		}
@@ -465,7 +464,7 @@ func TestPullBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.PullBundleVersion(context.Background(), "acme", "tool", "1.0.0")
+		result, err := c.PullBundleVersion(t.Context(), "acme", "tool", "1.0.0")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -486,7 +485,7 @@ func TestPullBundleVersion(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.PullBundleVersion(context.Background(), "acme", "tool", "9.9.9")
+		_, err := c.PullBundleVersion(t.Context(), "acme", "tool", "9.9.9")
 		if err == nil {
 			t.Fatal("expected error for not found")
 		}
@@ -520,7 +519,7 @@ func TestPullPublicBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.PullPublicBundleVersion(context.Background(), "acme", "tool", "1.0.0")
+		result, err := c.PullPublicBundleVersion(t.Context(), "acme", "tool", "1.0.0")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -541,7 +540,7 @@ func TestPullPublicBundleVersion(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.PullPublicBundleVersion(context.Background(), "acme", "missing", "1.0.0")
+		_, err := c.PullPublicBundleVersion(t.Context(), "acme", "missing", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -567,7 +566,7 @@ func TestGetMyNamespaces(t *testing.T) {
 			}`), nil
 		})
 
-		ns, err := c.GetMyNamespaces(context.Background())
+		ns, err := c.GetMyNamespaces(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

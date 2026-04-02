@@ -71,7 +71,7 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 	// Resolve harness.
 	reg := newHarnessRegistry()
 
-	prov, err := resolveHarness(out, reg, harnessName)
+	prov, err := resolveHarness(ctx, out, reg, harnessName)
 	if err != nil {
 		return err
 	}
@@ -140,12 +140,12 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 }
 
 // resolveHarness gets the harness provider, either from the flag or interactive selection.
-func resolveHarness(out *output.Writer, reg *harness.Registry, harnessName string) (*harness.Provider, error) {
+func resolveHarness(ctx context.Context, out *output.Writer, reg *harness.Registry, harnessName string) (*harness.Provider, error) {
 	if harnessName != "" {
 		return resolveHarnessByName(reg, harnessName)
 	}
 
-	return resolveHarnessInteractive(out, reg)
+	return resolveHarnessInteractive(ctx, out, reg)
 }
 
 func resolveHarnessByName(reg *harness.Registry, name string) (*harness.Provider, error) {
@@ -161,7 +161,7 @@ func resolveHarnessByName(reg *harness.Registry, name string) (*harness.Provider
 	return prov, nil
 }
 
-func resolveHarnessInteractive(out *output.Writer, reg *harness.Registry) (*harness.Provider, error) {
+func resolveHarnessInteractive(ctx context.Context, out *output.Writer, reg *harness.Registry) (*harness.Provider, error) {
 	p := prompt.New(out)
 
 	if !p.CanPrompt() {
@@ -173,7 +173,7 @@ func resolveHarnessInteractive(out *output.Writer, reg *harness.Registry) (*harn
 	}
 
 	// Run health checks to show version info in the prompt.
-	reports := harness.CheckAllHealth(context.Background(), reg)
+	reports := harness.CheckAllHealth(ctx, reg)
 
 	// Separate installed from not-installed for display.
 	var installed []*harness.HealthReport

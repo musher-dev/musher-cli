@@ -319,10 +319,7 @@ func (c *configScreen) renderTwoPanel() string {
 
 	rightContent := c.renderDetailPane()
 
-	rightW := c.width - panelW - panelContentOffset - twoPanelGap
-	if rightW < 20 {
-		rightW = 20
-	}
+	rightW := max(c.width-panelW-panelContentOffset-twoPanelGap, 20)
 
 	rightPanel := renderPanel(c.styles, "Details", rightContent, rightW, c.focusArea == 1)
 

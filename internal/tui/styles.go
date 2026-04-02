@@ -109,6 +109,10 @@ type styles struct {
 	panelBorder       lipgloss.Style
 	panelBorderActive lipgloss.Style
 
+	// Action buttons (compact bordered).
+	actionBtn       lipgloss.Style
+	actionBtnActive lipgloss.Style
+
 	// Context panel.
 	contextLabel lipgloss.Style
 
@@ -263,6 +267,16 @@ func newStyles(isDark bool) styles {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorAccent).
 			Padding(1, 2),
+
+		// Action buttons (compact bordered).
+		actionBtn: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorder).
+			Padding(0, 2),
+		actionBtnActive: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorAccent).
+			Padding(0, 2),
 
 		// Context panel.
 		contextLabel: lipgloss.NewStyle().

@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -40,7 +39,7 @@ func TestYankBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
-		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "")
+		err := c.YankBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0", "")
 		if err != nil {
 			t.Fatalf("YankBundleVersion returned error: %v", err)
 		}
@@ -65,7 +64,7 @@ func TestYankBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
-		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "security vulnerability")
+		err := c.YankBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0", "security vulnerability")
 		if err != nil {
 			t.Fatalf("YankBundleVersion returned error: %v", err)
 		}
@@ -80,7 +79,7 @@ func TestYankBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		err := c.YankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0", "")
+		err := c.YankBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0", "")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -125,7 +124,7 @@ func TestPushBundle(t *testing.T) {
 			},
 		}
 
-		err := c.PushBundle(context.Background(), "my-namespace", "my-bundle", req)
+		err := c.PushBundle(t.Context(), "my-namespace", "my-bundle", req)
 		if err != nil {
 			t.Fatalf("PushBundle returned error: %v", err)
 		}
@@ -174,7 +173,7 @@ func TestPushBundle(t *testing.T) {
 			Version:    "1.0.0",
 		}
 
-		err := c.PushBundle(context.Background(), "ns", "my-bundle", req)
+		err := c.PushBundle(t.Context(), "ns", "my-bundle", req)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -192,7 +191,7 @@ func TestUnyankBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{}`), nil
 		})
 
-		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		err := c.UnyankBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0")
 		if err != nil {
 			t.Fatalf("UnyankBundleVersion returned error: %v", err)
 		}
@@ -211,7 +210,7 @@ func TestUnyankBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		err := c.UnyankBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		err := c.UnyankBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -236,7 +235,7 @@ func TestGetBundleDetail(t *testing.T) {
 		}`), nil
 	})
 
-	result, err := c.GetBundleDetail(context.Background(), "acme", "my-bundle")
+	result, err := c.GetBundleDetail(t.Context(), "acme", "my-bundle")
 	if err != nil {
 		t.Fatalf("GetBundleDetail returned error: %v", err)
 	}
@@ -291,7 +290,7 @@ func TestCreateHubListingUsesBundleMetadata(t *testing.T) {
 		}
 	})
 
-	if err := c.CreateHubListing(context.Background(), "acme", "my-bundle"); err != nil {
+	if err := c.CreateHubListing(t.Context(), "acme", "my-bundle"); err != nil {
 		t.Fatalf("CreateHubListing returned error: %v", err)
 	}
 
@@ -336,7 +335,7 @@ func TestSearchHubBundlesNormalizesUpdatedSort(t *testing.T) {
 		return jsonResponse(http.StatusOK, `{"data":[],"meta":{"nextCursor":"","hasMore":false}}`), nil
 	})
 
-	if _, err := c.SearchHubBundles(context.Background(), "", "", "updated", 20, ""); err != nil {
+	if _, err := c.SearchHubBundles(t.Context(), "", "", "updated", 20, ""); err != nil {
 		t.Fatalf("SearchHubBundles returned error: %v", err)
 	}
 

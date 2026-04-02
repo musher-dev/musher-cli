@@ -39,7 +39,7 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.11.3
+          version: v2.11.4
           args: --help
           install-mode: binary
 

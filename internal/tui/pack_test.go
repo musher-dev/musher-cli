@@ -76,7 +76,7 @@ func TestPackScreen_Init_NoValidator(t *testing.T) {
 	keys := defaultKeyMap()
 
 	deps := &HomeDeps{WorkDir: "/tmp/test"}
-	screen := newPackScreen(context.Background(), deps, nil, &sty, &keys)
+	screen := newPackScreen(t.Context(), deps, nil, &sty, &keys)
 	screen.width = 80
 	screen.height = 24
 

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,7 +18,7 @@ func TestLoadScreenBuildResult(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -57,7 +56,7 @@ func TestLoadScreenViewErrorState(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -86,7 +85,7 @@ func TestLoadScreenViewPreviewWithDetail(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -144,7 +143,7 @@ func TestLoadScreenViewPreviewWithoutDisplayName(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -178,7 +177,7 @@ func TestLoadScreenEnterAtPreviewNoHarnesses(t *testing.T) {
 	keys := defaultKeyMap()
 	reg := harness.NewRegistry()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		reg,
@@ -217,7 +216,7 @@ func TestLoadScreenViewResolvingState(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -241,7 +240,7 @@ func TestLoadScreenViewPullingState(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -266,7 +265,7 @@ func TestLoadScreenViewBreadcrumbWithVersion(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -290,7 +289,7 @@ func TestLoadScreenViewBreadcrumbWithoutVersion(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -314,7 +313,7 @@ func TestLoadScreenEnterAtResolvingIsNoop(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -335,7 +334,7 @@ func TestLoadScreenUpDownInNonHarnessStateIsNoop(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -391,7 +390,7 @@ func TestLoadScreenProgressStepsResolving(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -424,7 +423,7 @@ func TestLoadScreenProgressStepsPulling(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -458,7 +457,7 @@ func TestLoadScreenErrorRetry(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{detailResult: &client.HubBundleDetail{
 			HubBundleSummary: client.HubBundleSummary{LatestVersion: "1.0.0"},
 		}},
@@ -513,7 +512,7 @@ func TestLoadScreenAutoSelect(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -561,7 +560,7 @@ func TestLoadScreenHarnessSkipOption(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -609,7 +608,7 @@ func TestLoadScreenPreviewTwoPanel(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -671,7 +670,7 @@ func TestLoadScreenActionButtonToggle(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -726,7 +725,7 @@ func TestLoadScreenInstallAction(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -769,7 +768,7 @@ func TestLoadScreenCollapsedAssets(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -842,7 +841,7 @@ func TestLoadScreenAssetSizesComputed(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),

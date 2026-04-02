@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -16,7 +15,7 @@ func TestDetailScreenInit(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+	screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 	cmd := screen.Init()
 	if cmd == nil {
@@ -33,7 +32,7 @@ func TestDetailScreenDetailResult(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+	screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 	detail := &client.HubBundleDetail{
 		HubBundleSummary: client.HubBundleSummary{
@@ -78,7 +77,7 @@ func TestDetailScreenDetailError(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+	screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 	testErr := errors.New("network error")
 	updated, _ := screen.Update(detailErrorMsg{err: testErr})
@@ -105,7 +104,7 @@ func TestDetailScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 		view := screen.View()
 		if !strings.Contains(view, "Loading") {
@@ -118,7 +117,7 @@ func TestDetailScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 		screen.err = errors.New("test error")
 
@@ -133,7 +132,7 @@ func TestDetailScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 		screen.detail = &client.HubBundleDetail{
 			HubBundleSummary: client.HubBundleSummary{
@@ -179,7 +178,7 @@ func TestDetailScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
@@ -211,7 +210,7 @@ func TestDetailScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 
 		view := screen.View()
@@ -226,7 +225,7 @@ func TestDetailScreenPanelWidth(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+	screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 	// Two-panel layout.
 	screen.width = 120
@@ -264,7 +263,7 @@ func TestDetailScreenFetchDetail(t *testing.T) {
 		},
 	}
 	searcher := &mockSearcher{detailResult: detail}
-	screen := newDetailScreen(context.Background(), searcher, nil, nil, nil, "acme", "bundle", &sty, &keys)
+	screen := newDetailScreen(t.Context(), searcher, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 	cmd := screen.fetchDetail()
 	if cmd == nil {
@@ -291,7 +290,7 @@ func TestDetailScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "q"})
 		if cmd == nil {
@@ -304,7 +303,7 @@ func TestDetailScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 		if cmd == nil {
@@ -322,7 +321,7 @@ func TestDetailScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 		screen.detail = &client.HubBundleDetail{
 			HubBundleSummary: client.HubBundleSummary{
@@ -361,7 +360,7 @@ func TestDetailScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 		screen.loading = false
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -375,7 +374,7 @@ func TestDetailScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newDetailScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
+		screen := newDetailScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "acme", "bundle", &sty, &keys)
 
 		updated, _ := screen.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		detailScr := updated.(*detailScreen)

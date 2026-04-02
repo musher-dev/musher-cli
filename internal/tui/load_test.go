@@ -42,7 +42,7 @@ func TestLoadScreenInit(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -67,7 +67,7 @@ func TestLoadScreenResolvedTransitionsToPulling(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -105,7 +105,7 @@ func TestLoadScreenPulledTransitionsToPreview(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -143,7 +143,7 @@ func TestLoadScreenErrorHandled(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -171,7 +171,7 @@ func TestLoadScreenViewStates(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),
@@ -217,7 +217,7 @@ func TestLoadScreenQuit(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	screen := newLoadScreen(
-		context.Background(),
+		t.Context(),
 		&mockSearcher{},
 		&mockPuller{},
 		harness.NewRegistry(),

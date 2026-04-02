@@ -737,29 +737,32 @@ func (l *loadScreen) renderAssetGroups(view *strings.Builder, contentWidth int) 
 
 // renderActionButtons renders the Run/Install action buttons.
 func (l *loadScreen) renderActionButtons(view *strings.Builder) {
-	runLabel := "  Run  "
-	installLabel := "  Install  "
+	runLabel := "Run"
+	installLabel := "Install"
 
 	var runBtn, installBtn string
 
 	if l.actionFocus == 0 {
-		runBtn = l.styles.panelBorderActive.Render(runLabel)
-		installBtn = l.styles.panelBorder.Render(installLabel)
+		runBtn = l.styles.actionBtnActive.Render(runLabel)
+		installBtn = l.styles.actionBtn.Render(installLabel)
 	} else {
-		runBtn = l.styles.panelBorder.Render(runLabel)
-		installBtn = l.styles.panelBorderActive.Render(installLabel)
+		runBtn = l.styles.actionBtn.Render(runLabel)
+		installBtn = l.styles.actionBtnActive.Render(installLabel)
 	}
 
-	view.WriteString(runBtn + "  " + installBtn + "\n")
+	contentWidth := l.panelWidth() - panelContentOffset
+	btnRow := lipgloss.JoinHorizontal(lipgloss.Bottom, runBtn, "  ", installBtn)
+	view.WriteString(lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, btnRow) + "\n")
 
 	// Context-sensitive help text.
+	var hint string
 	if l.actionFocus == 0 {
-		view.WriteString(l.styles.muted.Render("launch bundle with a harness"))
+		hint = l.styles.muted.Render("launch bundle with a harness")
 	} else {
-		view.WriteString(l.styles.muted.Render("copy assets into your project"))
+		hint = l.styles.muted.Render("copy assets into your project")
 	}
 
-	view.WriteString("\n")
+	view.WriteString(lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, hint) + "\n")
 }
 
 // buildInstallResult creates a result for the install action.

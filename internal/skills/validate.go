@@ -1,3 +1,4 @@
+// Package skills validates bundled skill metadata and frontmatter content.
 package skills
 
 import (

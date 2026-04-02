@@ -1,3 +1,4 @@
+// Package validate contains focused validation helpers for user configuration.
 package validate
 
 import (

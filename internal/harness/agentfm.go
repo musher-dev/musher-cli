@@ -109,7 +109,7 @@ func TransformToolsToRecord(content []byte, filename string) ([]byte, error) {
 				Tag:  "!!map",
 			}
 
-			for _, tool := range strings.Split(valNode.Value, ",") {
+			for tool := range strings.SplitSeq(valNode.Value, ",") {
 				tool = strings.TrimSpace(tool)
 				if tool == "" {
 					continue

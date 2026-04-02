@@ -26,9 +26,9 @@ type State struct {
 	ReleaseURL     string    `json:"releaseURL,omitempty"`
 
 	StagedVersion string    `json:"stagedVersion,omitempty"`
-	StagedAt      time.Time `json:"stagedAt,omitempty"`
+	StagedAt      time.Time `json:"stagedAt,omitzero"`
 
-	LastApplyAttemptAt time.Time `json:"lastApplyAttemptAt,omitempty"`
+	LastApplyAttemptAt time.Time `json:"lastApplyAttemptAt,omitzero"`
 	LastApplyError     string    `json:"lastApplyError,omitempty"`
 
 	InstallSource          string `json:"installSource,omitempty"`

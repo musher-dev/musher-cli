@@ -314,7 +314,7 @@ func (c *Client) newPublicRequest(ctx context.Context, method, url string, body 
 	req.Header.Set("User-Agent", "musher/"+buildinfo.Version)
 	req.Header.Set("X-Request-Id", uuid.NewString())
 
-	spanCtx := trace.SpanContextFromContext(req.Context())
+	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.IsValid() {
 		req.Header.Set("X-Trace-Id", spanCtx.TraceID().String())
 	}
@@ -438,7 +438,7 @@ func responseTraceID(resp *http.Response) string {
 		return direct
 	}
 
-	traceparent := strings.TrimSpace(resp.Header.Get("traceparent"))
+	traceparent := strings.TrimSpace(resp.Header.Get("Traceparent"))
 	if traceparent == "" {
 		return ""
 	}

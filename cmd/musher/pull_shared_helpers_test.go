@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 
 func TestResolveVersionExplicit(t *testing.T) {
 	// When an explicit version is provided, it should be returned as-is.
-	resolved, fromLatest, err := resolveVersion(context.TODO(), nil, nil, "host", "acme", "test", "1.2.3", false)
+	resolved, fromLatest, err := resolveVersion(t.Context(), nil, nil, "host", "acme", "test", "1.2.3", false)
 	if err != nil {
 		t.Fatalf("resolveVersion error = %v", err)
 	}
@@ -25,7 +24,7 @@ func TestResolveVersionExplicit(t *testing.T) {
 }
 
 func TestResolveVersionExplicitWithForce(t *testing.T) {
-	resolved, fromLatest, err := resolveVersion(context.TODO(), nil, nil, "host", "acme", "test", "2.0.0", true)
+	resolved, fromLatest, err := resolveVersion(t.Context(), nil, nil, "host", "acme", "test", "2.0.0", true)
 	if err != nil {
 		t.Fatalf("resolveVersion error = %v", err)
 	}

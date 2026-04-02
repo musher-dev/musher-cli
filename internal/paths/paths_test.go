@@ -1,7 +1,6 @@
 package paths
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -169,13 +168,15 @@ func TestRuntimeRootXDGOnLinux(t *testing.T) {
 
 func TestRuntimeRootTempFallback(t *testing.T) {
 	clearPathEnvVars(t)
+	tempDir := t.TempDir()
+	t.Setenv("TMPDIR", tempDir)
 
 	got, err := RuntimeRoot()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := filepath.Join(os.TempDir(), "musher", "run")
+	want := filepath.Join(tempDir, "musher", "run")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

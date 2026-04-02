@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +17,7 @@ func TestCheckHealth_BinaryNotFound(t *testing.T) {
 		},
 	}
 
-	report := CheckHealth(context.Background(), prov)
+	report := CheckHealth(t.Context(), prov)
 
 	if report.Installed {
 		t.Error("expected Installed=false for missing binary")
@@ -52,7 +51,7 @@ func TestCheckHealth_BinaryFound(t *testing.T) {
 		},
 	}
 
-	report := CheckHealth(context.Background(), prov)
+	report := CheckHealth(t.Context(), prov)
 
 	if !report.Installed {
 		t.Error("expected Installed=true for 'go' binary")
@@ -101,7 +100,7 @@ func TestCheckHealth_AuthCheckPath(t *testing.T) {
 		},
 	}
 
-	report := CheckHealth(context.Background(), prov)
+	report := CheckHealth(t.Context(), prov)
 
 	// Find auth check.
 	var authCheck *HealthCheck
@@ -140,7 +139,7 @@ func TestCheckHealth_AuthCheckMissing(t *testing.T) {
 		},
 	}
 
-	report := CheckHealth(context.Background(), prov)
+	report := CheckHealth(t.Context(), prov)
 
 	var authCheck *HealthCheck
 
@@ -185,7 +184,7 @@ func TestCheckAllHealth_Concurrent(t *testing.T) {
 		Available: func() bool { return true },
 	})
 
-	results := CheckAllHealth(context.Background(), reg)
+	results := CheckAllHealth(t.Context(), reg)
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))

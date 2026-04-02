@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"os"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestProbeHealthReachable(t *testing.T) {
-	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+	result := probeHealthWithClient(t.Context(), "https://api.test", &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -41,7 +40,7 @@ func TestProbeHealthReachable(t *testing.T) {
 
 func TestProbeHealthUnreachable(t *testing.T) {
 	// Use a non-routable address
-	result := ProbeHealth(context.Background(), "http://192.0.2.1:1")
+	result := ProbeHealth(t.Context(), "http://192.0.2.1:1")
 
 	if result.Reachable {
 		t.Error("expected unreachable for non-routable address")
@@ -53,7 +52,7 @@ func TestProbeHealthUnreachable(t *testing.T) {
 }
 
 func TestProbeHealthInvalidURL(t *testing.T) {
-	result := ProbeHealth(context.Background(), "://invalid")
+	result := ProbeHealth(t.Context(), "://invalid")
 
 	if result.Reachable {
 		t.Error("expected unreachable for invalid URL")
@@ -65,7 +64,7 @@ func TestProbeHealthInvalidURL(t *testing.T) {
 }
 
 func TestProbeHealthEmptyHost(t *testing.T) {
-	result := ProbeHealth(context.Background(), "http://")
+	result := ProbeHealth(t.Context(), "http://")
 
 	if result.Reachable {
 		t.Error("expected unreachable for empty host")
@@ -73,7 +72,7 @@ func TestProbeHealthEmptyHost(t *testing.T) {
 }
 
 func TestProbeHealth4xxResponse(t *testing.T) {
-	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+	result := probeHealthWithClient(t.Context(), "https://api.test", &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusNotFound,
@@ -95,7 +94,7 @@ func TestProbeHealth4xxResponse(t *testing.T) {
 }
 
 func TestProbeHealthWithDateHeader(t *testing.T) {
-	result := probeHealthWithClient(context.Background(), "https://api.test", &http.Client{
+	result := probeHealthWithClient(t.Context(), "https://api.test", &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			header := make(http.Header)
 			header.Set("Date", "Mon, 02 Jan 2006 15:04:05 GMT")
@@ -120,7 +119,7 @@ func TestProbeHealthWithDateHeader(t *testing.T) {
 
 func TestProbeHealthWithCACert(t *testing.T) {
 	// Test with a non-existent CA cert file -- should still probe
-	result := ProbeHealth(context.Background(), "http://192.0.2.1:1", "/nonexistent/ca.pem")
+	result := ProbeHealth(t.Context(), "http://192.0.2.1:1", "/nonexistent/ca.pem")
 
 	if result.Reachable {
 		t.Error("expected unreachable")
