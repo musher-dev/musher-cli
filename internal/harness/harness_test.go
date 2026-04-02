@@ -239,6 +239,30 @@ func TestRegistryAvailable(t *testing.T) {
 	}
 }
 
+func TestDefaultAvailableFunc_Found(t *testing.T) {
+	t.Parallel()
+
+	// "go" should always be on PATH in test environment.
+	fn := harness.DefaultAvailableFunc("go")
+	if !fn() {
+		t.Error("expected 'go' to be available on PATH")
+	}
+
+	// Repeated call should return same result (sync.Once caching).
+	if !fn() {
+		t.Error("expected cached result to be true")
+	}
+}
+
+func TestDefaultAvailableFunc_NotFound(t *testing.T) {
+	t.Parallel()
+
+	fn := harness.DefaultAvailableFunc("musher-nonexistent-binary-xyz-12345")
+	if fn() {
+		t.Error("expected nonexistent binary to be unavailable")
+	}
+}
+
 func TestRegisterBuiltins(t *testing.T) {
 	t.Parallel()
 

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/terminal"
 )
 
 func TestRunPackSuccess(t *testing.T) {
@@ -203,6 +206,43 @@ assets:
 	err := runPack(out)
 	if err == nil {
 		t.Fatal("expected error when asset file doesn't exist")
+	}
+}
+
+func TestRunPackJSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeMusherYAML(t, dir, `namespace: acme
+slug: json-test
+version: 1.0.0
+name: JSON Test
+assets:
+  - id: "review"
+    src: skills/review/SKILL.md
+`)
+
+	writeAsset(t, dir, "skills/review/SKILL.md", "---\nname: review\ndescription: code review\n---\nReview skill content\n")
+
+	cacheDir := t.TempDir()
+	t.Setenv("MUSHER_CACHE_HOME", cacheDir)
+
+	var buf bytes.Buffer
+
+	out := output.NewWriter(&buf, &buf, &terminal.Info{})
+	out.JSON = true
+
+	if err := runPack(out); err != nil {
+		t.Fatalf("runPack() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, `"namespace": "acme"`) {
+		t.Errorf("expected namespace in JSON output, got %q", got)
+	}
+
+	if !strings.Contains(got, `"assetCount": 1`) {
+		t.Errorf("expected assetCount in JSON output, got %q", got)
 	}
 }
 
