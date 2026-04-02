@@ -1,0 +1,11 @@
+# bundle init creates a real project scaffold through the built binary
+mkdir project
+cd project
+
+exec $MUSHER_BIN --no-color --no-input bundle init --yes
+stderr 'Created musher.yaml'
+
+exists musher.yaml
+exists skills/code-review/SKILL.md
+exists skills/test-generator/SKILL.md
+exists agents/reviewer.md

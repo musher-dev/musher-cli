@@ -1,0 +1,2 @@
+# documented JSON version command stays valid
+exec $MUSHER_BIN --no-color --no-input version --json

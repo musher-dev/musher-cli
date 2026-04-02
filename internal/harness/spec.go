@@ -57,6 +57,7 @@ type MCPConfig struct {
 // CLISpec describes CLI flags the harness accepts for integration.
 type CLISpec struct {
 	MCPConfigFlag string `yaml:"mcpConfigFlag,omitempty"` // e.g. "--mcp-config"
+	AgentsFlag    string `yaml:"agentsFlag,omitempty"`    // e.g. "--agents"
 }
 
 // StatusSpec describes how to check harness health and availability.

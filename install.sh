@@ -15,6 +15,28 @@ BINARY="musher"
 DEFAULT_PREFIX="$HOME/.local"
 BASE_URL="https://github.com/${REPO}"
 
+if [ -n "${MUSHER_INSTALL_BASE_URL:-}" ]; then
+  BASE_URL="${MUSHER_INSTALL_BASE_URL}"
+fi
+
+curl_flags() {
+  if [ "${MUSHER_INSTALL_INSECURE:-0}" = "1" ]; then
+    printf '%s\n' "--proto" "=https" "--tlsv1.2" "-k" "-fsSL"
+    return
+  fi
+
+  printf '%s\n' "--proto" "=https" "--tlsv1.2" "-fsSL"
+}
+
+wget_flags() {
+  if [ "${MUSHER_INSTALL_INSECURE:-0}" = "1" ]; then
+    printf '%s\n' "--https-only" "--no-check-certificate" "-q"
+    return
+  fi
+
+  printf '%s\n' "--https-only" "-q"
+}
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 say() {
@@ -137,9 +159,11 @@ download() {
   output="$2"
 
   if has_curl; then
-    curl --proto '=https' --tlsv1.2 -fsSL -o "$output" "$url"
+    # shellcheck disable=SC2046,SC2086
+    curl $(curl_flags) -o "$output" "$url"
   elif has_wget; then
-    wget --https-only -q -O "$output" "$url"
+    # shellcheck disable=SC2046,SC2086
+    wget $(wget_flags) -O "$output" "$url"
   else
     err "Neither curl nor wget found. Please install one and try again."
   fi
@@ -149,11 +173,13 @@ download() {
 
 resolve_latest_version() {
   if has_curl; then
-    url=$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' \
+    # shellcheck disable=SC2046,SC2086
+    url=$(curl $(curl_flags) -I -o /dev/null -w '%{url_effective}' \
       "${BASE_URL}/releases/latest" 2> /dev/null) ||
       err "Failed to resolve latest version. Check ${BASE_URL}/releases"
   elif has_wget; then
-    url=$(wget --https-only --max-redirect=0 -S \
+    # shellcheck disable=SC2046,SC2086
+    url=$(wget $(wget_flags) --max-redirect=0 -S \
       "${BASE_URL}/releases/latest" 2>&1 |
       sed -n 's/.*Location: *//p' | tr -d '\r') || true
     [ -n "$url" ] || err "Failed to resolve latest version."
@@ -317,4 +343,6 @@ main() {
   say "  musher auth login"
 }
 
-main
+if [ "${INSTALL_SH_TESTING:-0}" != "1" ]; then
+  main
+fi

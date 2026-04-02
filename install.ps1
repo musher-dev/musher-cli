@@ -20,6 +20,12 @@ $ErrorActionPreference = "Stop"
 $Repo = "musher-dev/musher-cli"
 $Binary = "musher"
 $BaseUrl = "https://github.com/$Repo"
+if ($env:MUSHER_INSTALL_BASE_URL) {
+    $BaseUrl = $env:MUSHER_INSTALL_BASE_URL
+}
+if ($env:MUSHER_INSTALL_INSECURE -eq "1") {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

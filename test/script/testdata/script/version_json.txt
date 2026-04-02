@@ -1,0 +1,4 @@
+# version JSON remains machine-readable
+exec $MUSHER_BIN --no-color --no-input version --json
+stdout '"version": "dev"'
+stdout '"commit": "none"'
