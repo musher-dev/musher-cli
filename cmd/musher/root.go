@@ -13,8 +13,6 @@ import (
 	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/harness"
-	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/tui"
@@ -322,8 +320,7 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		pusher = c
 	}
 
-	reg := harness.NewRegistry()
-	harness.RegisterBuiltins(reg, claude.Module)
+	reg := newHarnessRegistry()
 
 	var cacheSummarizer tui.CacheSummarizer
 
@@ -348,10 +345,13 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		workDir = "."
 	}
 
+	healthChecker := newRegistryHealthChecker(reg)
+
 	deps := &tui.HomeDeps{
 		Searcher:         apiClient,
 		Puller:           apiClient,
 		Harnesses:        reg,
+		HealthChecker:    healthChecker,
 		Auth:             authChecker,
 		AuthMgr:          authAdapter{},
 		Cache:            cacheSummarizer,
@@ -373,14 +373,19 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		return clierrors.Errorf("home: %w", err)
 	}
 
-	if result != nil && result.Action == "load" {
+	if result != nil && result.Action == actionLoad && result.Harness != "" {
+		return runBundleFromTUIResult(cmd.Context(), out, result)
+	}
+
+	if result != nil && result.Action == actionLoad {
 		ref := result.Namespace + "/" + result.Slug
 		if result.Version != "" {
 			ref += ":" + result.Version
 		}
 
 		out.Success("Selected: %s", ref)
-		out.Info("Run: musher load %s", ref)
+		out.Info("No harness selected. Install a harness and run:")
+		out.Muted("  musher load %s", ref)
 	}
 
 	return nil

@@ -52,3 +52,4 @@ bin/
 
 # Personal shell customizations (use *.shared.sh for team defaults)
 .devcontainer/config/shell/*.local.sh
+.codex

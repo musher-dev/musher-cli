@@ -11,6 +11,7 @@ type keyMap struct {
 	Quit    key.Binding
 	Search  key.Binding
 	Tab     key.Binding
+	Load    key.Binding
 	Status  key.Binding
 	Submit  key.Binding
 	Preview key.Binding
@@ -45,6 +46,10 @@ func defaultKeyMap() keyMap {
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch"),
+		),
+		Load: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "load"),
 		),
 		Status: key.NewBinding(
 			key.WithKeys("s"),

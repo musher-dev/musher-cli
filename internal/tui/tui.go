@@ -66,10 +66,17 @@ func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 
 // RunSearch launches the TUI in search mode and returns the user's selection.
 // Returns nil result if the user quit without selecting a bundle.
-func RunSearch(ctx context.Context, searcher BundleSearcher, initialQuery string) (*Result, error) {
+func RunSearch(
+	ctx context.Context,
+	searcher BundleSearcher,
+	puller BundlePuller,
+	harnesses HarnessLister,
+	healthChecker HarnessHealthChecker,
+	initialQuery string,
+) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(ctx, searcher, initialQuery, &sty, &keys)
+	screen := newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys)
 	app := NewApp(screen)
 
 	p := tea.NewProgram(app)
@@ -152,11 +159,12 @@ func RunLoad(
 	searcher BundleSearcher,
 	puller BundlePuller,
 	harnessLister HarnessLister,
+	healthChecker HarnessHealthChecker,
 	namespace, slug, version string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newLoadScreen(ctx, searcher, puller, harnessLister, namespace, slug, version, &sty, &keys)
+	screen := newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys)
 	app := NewApp(screen)
 
 	program := tea.NewProgram(app)

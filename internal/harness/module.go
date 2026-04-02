@@ -11,16 +11,20 @@ package harness
 //  4. Add <name>.Module to the builtins list in RegisterBuiltins
 type Module struct {
 	Spec *Spec
-	// NewExecutor will be added when the executor interface is defined.
-	// For now, Module carries only the spec.
+
+	// AgentTransform adapts agent file content for the target harness.
+	// When non-nil, it is called during materialization before writing
+	// agent_spec assets. The filename helps distinguish .md from .yaml.
+	AgentTransform func(content []byte, filename string) ([]byte, error)
 }
 
 // RegisterBuiltins populates a Registry from a list of modules.
 func RegisterBuiltins(reg *Registry, modules ...*Module) {
 	for _, mod := range modules {
 		reg.Register(&Provider{
-			Spec:      mod.Spec,
-			Available: DefaultAvailableFunc(mod.Spec.Binary),
+			Spec:           mod.Spec,
+			Available:      DefaultAvailableFunc(mod.Spec.Binary),
+			AgentTransform: mod.AgentTransform,
 		})
 	}
 }

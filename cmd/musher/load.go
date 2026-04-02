@@ -4,13 +4,14 @@ import (
 	"github.com/spf13/cobra"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/harness"
-	"github.com/musher-dev/musher-cli/internal/harness/provider/claude"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/tui"
 )
 
-const actionLoad = "load"
+const (
+	actionLoad    = "load"
+	actionInstall = "install"
+)
 
 func newLoadCmd() *cobra.Command {
 	var force bool
@@ -55,47 +56,48 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 	apiURL := configForPublicClient()
 	apiClient := newPublicAPIClient(apiURL)
 
-	// Build harness registry.
-	harnessReg := harness.NewRegistry()
-	harness.RegisterBuiltins(harnessReg, claude.Module)
+	// Build harness registry with all built-in providers.
+	harnessReg := newHarnessRegistry()
+	healthChecker := newRegistryHealthChecker(harnessReg)
 
 	result, err := tui.RunLoad(
 		cmd.Context(),
 		apiClient,
 		apiClient,
 		harnessReg,
+		healthChecker,
 		namespace, slug, bundleVersion,
 	)
 	if err != nil {
 		return repoerrors.Errorf("load: %w", err)
 	}
 
-	if result == nil || result.Action != actionLoad {
+	if result == nil {
 		return nil
 	}
 
-	// Print the harness command after TUI exits.
-	if result.Harness == "" {
+	switch result.Action {
+	case actionInstall:
+		bundleRef := result.Namespace + "/" + result.Slug + ":" + result.Version
+		out.Info("Install action for %s is not yet implemented.", bundleRef)
+		out.Muted("  Use 'musher bundle pull %s' to download assets manually.", bundleRef)
+
+		return nil
+
+	case actionLoad:
+		// Launch harness with the selected bundle.
+		if result.Harness != "" {
+			return runBundleFromTUIResult(cmd.Context(), out, result)
+		}
+
 		bundleRef := result.Namespace + "/" + result.Slug + ":" + result.Version
 		out.Success("Bundle ready: %s", bundleRef)
 		out.Info("No harness selected. Install a harness and run:")
 		out.Muted("  musher load %s", bundleRef)
 
 		return nil
-	}
 
-	prov, ok := harnessReg.Get(result.Harness)
-	if !ok {
-		out.Warning("Harness %q not found in registry", result.Harness)
-
+	default:
 		return nil
 	}
-
-	bundleRef := result.Namespace + "/" + result.Slug + ":" + result.Version
-	out.Success("Bundle ready: %s", bundleRef)
-	out.Print("\n")
-	out.Info("Run with %s:", prov.Spec.DisplayName)
-	out.Print("  %s %s <bundle-dir>\n", prov.Spec.Binary, prov.Spec.BundleDir.Flag)
-
-	return nil
 }

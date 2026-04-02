@@ -19,7 +19,7 @@ func TestSearchScreenInit(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "agent", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "agent", &sty, &keys)
 
 		cmd := screen.Init()
 		if cmd == nil {
@@ -36,7 +36,7 @@ func TestSearchScreenInit(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 
 		cmd := screen.Init()
 		if cmd == nil {
@@ -54,7 +54,7 @@ func TestSearchScreenSearchResult(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(context.Background(), &mockSearcher{}, "test", &sty, &keys)
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "test", &sty, &keys)
 	screen.lastQuery = "test"
 
 	results := []client.HubBundleSummary{
@@ -97,7 +97,7 @@ func TestSearchScreenStaleResultDiscarded(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 	screen.searchID = 2 // Current search ID is 2.
 
 	oldResults := []client.HubBundleSummary{
@@ -118,7 +118,7 @@ func TestSearchScreenSearchError(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 
 	updated, _ := screen.Update(searchErrorMsg{err: errors.New("api error")})
 	searchScr := updated.(*searchScreen)
@@ -140,7 +140,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = true
 		screen.width = 80
 		screen.height = 30
@@ -156,7 +156,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.err = errors.New("connection failed")
 		screen.width = 80
 		screen.height = 30
@@ -172,14 +172,14 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
 
 		view := screen.View()
-		if !strings.Contains(view, "No results") {
-			t.Error("empty view should contain 'No results'")
+		if !strings.Contains(view, "Type to search bundles") {
+			t.Error("empty view should contain 'Type to search bundles'")
 		}
 	})
 
@@ -188,7 +188,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
@@ -224,7 +224,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 10
@@ -248,7 +248,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
@@ -264,8 +264,8 @@ func TestSearchScreenView(t *testing.T) {
 			t.Error("view should contain Search panel title")
 		}
 
-		if !strings.Contains(view, "Results") {
-			t.Error("view should contain Results panel title")
+		if !strings.Contains(view, "Featured") {
+			t.Error("view should contain Featured panel title")
 		}
 	})
 
@@ -274,7 +274,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
@@ -298,16 +298,16 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
 		screen.results = []client.HubBundleSummary{
 			{
-				Publisher:      client.HubPublisher{Handle: "acme"},
-				Slug:           "bundle",
-				StarsCount:     1500,
-				DownloadsTotal: 2500000,
+				Publisher:    client.HubPublisher{Handle: "acme"},
+				Slug:         "bundle",
+				StarsCount:   1500,
+				Downloads30D: 2500000,
 			},
 		}
 
@@ -316,8 +316,8 @@ func TestSearchScreenView(t *testing.T) {
 			t.Error("view should contain formatted star count 1.5K")
 		}
 
-		if !strings.Contains(view, "2.5M") {
-			t.Error("view should contain formatted download count 2.5M")
+		if !strings.Contains(view, "2.5M/mo") {
+			t.Error("view should contain formatted download count 2.5M/mo")
 		}
 	})
 
@@ -326,7 +326,7 @@ func TestSearchScreenView(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 30 // minimal layout
 		screen.height = 20
@@ -347,7 +347,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "q"})
@@ -361,7 +361,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: -1, Text: "q"})
@@ -380,7 +380,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 		screen.results = []client.HubBundleSummary{{Slug: "a"}}
 
@@ -397,7 +397,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
@@ -413,7 +413,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
@@ -429,7 +429,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: -1, Text: "/"})
@@ -445,7 +445,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 		screen.results = []client.HubBundleSummary{
 			{Slug: "a"},
@@ -507,7 +507,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 		screen.results = []client.HubBundleSummary{
 			{Publisher: client.HubPublisher{Handle: "acme"}, Slug: "bundle"},
@@ -535,7 +535,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 		screen.results = []client.HubBundleSummary{
 			{Slug: "a"},
@@ -554,7 +554,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -568,7 +568,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "some text", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "some text", &sty, &keys)
 		screen.focusArea = searchFocusInput
 
 		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -584,7 +584,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -603,7 +603,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -622,7 +622,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 
 		updated, _ := screen.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 		searchScr := updated.(*searchScreen)
@@ -647,7 +647,7 @@ func TestSearchScreenDebounceTick(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(context.Background(), &mockSearcher{
 			searchResult: &client.HubSearchResponse{},
-		}, "", &sty, &keys)
+		}, nil, nil, nil, "", &sty, &keys)
 		screen.debounceID = 5
 
 		updated, cmd := screen.Update(debounceTickMsg{id: 5, query: "test"})
@@ -667,7 +667,7 @@ func TestSearchScreenDebounceTick(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.debounceID = 3
 
 		_, cmd := screen.Update(debounceTickMsg{id: 1, query: "old"})
@@ -685,7 +685,7 @@ func TestSearchScreenPagination(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "test", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "test", &sty, &keys)
 		screen.searchID = 1
 
 		updated, _ := screen.Update(searchResultMsg{
@@ -711,7 +711,7 @@ func TestSearchScreenPagination(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 		screen.results = []client.HubBundleSummary{{Slug: "a"}}
 		screen.hasMore = true
@@ -730,7 +730,7 @@ func TestSearchScreenPagination(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.searchID = 1
 		screen.results = []client.HubBundleSummary{{Slug: "a"}}
 
@@ -760,7 +760,7 @@ func TestSearchScreenFooter(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusInput
 
 		footer := screen.renderFooter()
@@ -778,12 +778,12 @@ func TestSearchScreenFooter(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
 		footer := screen.renderFooter()
-		if !strings.Contains(footer, "navigate") {
-			t.Error("list footer should mention navigate")
+		if !strings.Contains(footer, "move") {
+			t.Error("list footer should mention move")
 		}
 
 		if !strings.Contains(footer, "quit") {
@@ -800,7 +800,7 @@ func TestSearchScreenSlidingWindow(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30 // adaptiveMaxVisible(30) = max(min((30-12)/4, 8), 5) = max(min(4,8),5) = 5
@@ -825,7 +825,7 @@ func TestSearchScreenSlidingWindow(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.loading = false
 		screen.width = 80
 		screen.height = 30
@@ -853,7 +853,7 @@ func TestSearchScreenSlidingWindow(t *testing.T) {
 
 		sty := newStyles(true)
 		keys := defaultKeyMap()
-		screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+		screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.scrollOffset = 5
 		screen.searchID = 1
 
@@ -873,7 +873,7 @@ func TestSearchScreenPanelWidthCapped(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 
 	// Very wide terminal.
 	screen.width = 200
@@ -890,7 +890,7 @@ func TestSearchScreenCentered(t *testing.T) {
 
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(context.Background(), &mockSearcher{}, "", &sty, &keys)
+	screen := newSearchScreen(context.Background(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 	screen.loading = false
 	screen.width = 100
 	screen.height = 40

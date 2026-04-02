@@ -9,6 +9,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
@@ -47,6 +48,20 @@ func configForPublicClient() string {
 // newPublicAPIClient creates an unauthenticated client for public endpoints.
 func newPublicAPIClient(apiURL string) *client.Client {
 	return client.New(apiURL, "")
+}
+
+// registryHealthChecker adapts the harness package functions to the
+// tui.HarnessHealthChecker interface.
+type registryHealthChecker struct {
+	reg *harness.Registry
+}
+
+func newRegistryHealthChecker(reg *harness.Registry) *registryHealthChecker {
+	return &registryHealthChecker{reg: reg}
+}
+
+func (r *registryHealthChecker) CheckAllHealth(ctx context.Context) []*harness.HealthReport {
+	return harness.CheckAllHealth(ctx, r.reg)
 }
 
 // inlineLogin performs an interactive login flow inline (without requiring the

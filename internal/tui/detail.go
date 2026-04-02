@@ -15,33 +15,48 @@ import (
 
 // detailScreen shows detailed information about a bundle.
 type detailScreen struct {
-	searcher  BundleSearcher
-	ctx       context.Context
-	publisher string
-	slug      string
-	detail    *client.HubBundleDetail
-	spinner   spinner.Model
-	loading   bool
-	err       error
-	width     int
-	height    int
-	keys      *keyMap
-	styles    *styles
+	searcher      BundleSearcher
+	puller        BundlePuller
+	harnesses     HarnessLister
+	healthChecker HarnessHealthChecker
+	ctx           context.Context
+	publisher     string
+	slug          string
+	detail        *client.HubBundleDetail
+	spinner       spinner.Model
+	loading       bool
+	err           error
+	width         int
+	height        int
+	keys          *keyMap
+	styles        *styles
 }
 
 // newDetailScreen creates a detail screen for a given bundle.
-func newDetailScreen(ctx context.Context, searcher BundleSearcher, publisher, slug string, sty *styles, keys *keyMap) *detailScreen {
+func newDetailScreen(
+	ctx context.Context,
+	searcher BundleSearcher,
+	puller BundlePuller,
+	harnesses HarnessLister,
+	healthChecker HarnessHealthChecker,
+	publisher, slug string,
+	sty *styles,
+	keys *keyMap,
+) *detailScreen {
 	spin := spinner.New()
 
 	return &detailScreen{
-		searcher:  searcher,
-		ctx:       ctx,
-		publisher: publisher,
-		slug:      slug,
-		loading:   true,
-		spinner:   spin,
-		keys:      keys,
-		styles:    sty,
+		searcher:      searcher,
+		puller:        puller,
+		harnesses:     harnesses,
+		healthChecker: healthChecker,
+		ctx:           ctx,
+		publisher:     publisher,
+		slug:          slug,
+		loading:       true,
+		spinner:       spin,
+		keys:          keys,
+		styles:        sty,
 	}
 }
 
@@ -93,16 +108,22 @@ func (d *detailScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	case key.Matches(msg, d.keys.Back):
 		return d, func() tea.Msg { return popScreenMsg{} }
 
-	case key.Matches(msg, d.keys.Enter):
+	case key.Matches(msg, d.keys.Enter), key.Matches(msg, d.keys.Load):
 		if d.detail != nil {
 			return d, func() tea.Msg {
-				return quitWithResultMsg{
-					result: &Result{
-						Action:    "load",
-						Namespace: d.publisher,
-						Slug:      d.slug,
-						Version:   d.detail.LatestVersion,
-					},
+				return pushScreenMsg{
+					screen: newLoadScreen(
+						d.ctx,
+						d.searcher,
+						d.puller,
+						d.harnesses,
+						d.healthChecker,
+						d.publisher,
+						d.slug,
+						d.detail.LatestVersion,
+						d.styles,
+						d.keys,
+					),
 				}
 			}
 		}
@@ -207,17 +228,22 @@ func (d *detailScreen) renderContent() string {
 	// Publisher + trust badge.
 	pub := "by " + det.Publisher.Handle
 
-	if det.Publisher.TrustTier == "verified" {
+	if det.Publisher.TrustTier == trustTierVerified {
 		pub += " " + d.styles.success.Render("\u2713")
 	}
 
 	content.WriteString(d.styles.muted.Render(pub))
 	content.WriteString("\n")
 
-	// Summary.
-	if det.Summary != "" {
+	// Description (full text) or summary fallback.
+	desc := det.Description
+	if desc == "" {
+		desc = det.Summary
+	}
+
+	if desc != "" {
 		content.WriteString("\n")
-		content.WriteString(det.Summary)
+		content.WriteString(desc)
 		content.WriteString("\n")
 	}
 
@@ -248,11 +274,22 @@ func (d *detailScreen) renderContent() string {
 		fields = append(fields, field{"Assets", strings.Join(det.AssetTypes, ", ")})
 	}
 
+	if len(det.Tags) > 0 {
+		fields = append(fields, field{"Tags", strings.Join(det.Tags, ", ")})
+	}
+
+	if len(det.Capabilities) > 0 {
+		fields = append(fields, field{"Capabilities", strings.Join(det.Capabilities, ", ")})
+	}
+
 	for _, f := range fields {
-		label := fmt.Sprintf("%-11s", f.label)
+		label := fmt.Sprintf("%-14s", f.label)
 		content.WriteString(d.styles.subtitle.Render(label) + " " + f.value)
 		content.WriteString("\n")
 	}
+
+	d.renderLinks(&content, det)
+	d.renderVersions(&content, det)
 
 	// Action hint.
 	content.WriteString("\n")
@@ -261,12 +298,51 @@ func (d *detailScreen) renderContent() string {
 	return content.String()
 }
 
+func (d *detailScreen) renderLinks(w *strings.Builder, det *client.HubBundleDetail) {
+	if det.RepositoryURL != "" {
+		w.WriteString("\n")
+		w.WriteString(d.styles.subtitle.Render("Repository     "))
+		w.WriteString(d.styles.accent.Render(hyperlink(det.RepositoryURL, det.RepositoryURL)))
+		w.WriteString("\n")
+	}
+
+	if det.HomepageURL != "" {
+		w.WriteString(d.styles.subtitle.Render("Homepage       "))
+		w.WriteString(d.styles.accent.Render(hyperlink(det.HomepageURL, det.HomepageURL)))
+		w.WriteString("\n")
+	}
+}
+
+func (d *detailScreen) renderVersions(w *strings.Builder, det *client.HubBundleDetail) {
+	if len(det.Versions) == 0 {
+		return
+	}
+
+	w.WriteString("\n")
+	w.WriteString(d.styles.subtitle.Render("Recent Versions"))
+	w.WriteString("\n")
+
+	showCount := min(3, len(det.Versions))
+	for i := range showCount {
+		v := det.Versions[i]
+		versionLine := "  v" + v.Version + "  " + v.PublishedAt.Format("2006-01-02")
+
+		if v.IsDeprecated {
+			w.WriteString(d.styles.warning.Render(versionLine + " (deprecated)"))
+		} else {
+			w.WriteString(d.styles.muted.Render(versionLine))
+		}
+
+		w.WriteString("\n")
+	}
+}
+
 func (d *detailScreen) renderFooter() string {
 	sep := d.styles.hintSep.Render(" \u2022 ")
 
 	hints := []string{
-		d.styles.hintKey.Render("enter") + " " + d.styles.hintDesc.Render("load"),
-		d.styles.hintKey.Render("esc") + " " + d.styles.hintDesc.Render("back"),
+		d.styles.hintKey.Render("enter") + " " + d.styles.hintDesc.Render("load bundle"),
+		d.styles.hintKey.Render("esc") + " " + d.styles.hintDesc.Render("go back"),
 		d.styles.hintKey.Render("q") + " " + d.styles.hintDesc.Render("quit"),
 	}
 

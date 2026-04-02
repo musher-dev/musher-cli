@@ -14,6 +14,10 @@ type Provider struct {
 	// Available reports whether the harness binary is installed on PATH.
 	// Lazily evaluated on first call and cached.
 	Available func() bool
+
+	// AgentTransform adapts agent file content for this harness.
+	// Nil means no transformation (pass-through).
+	AgentTransform func(content []byte, filename string) ([]byte, error)
 }
 
 // Registry is a thread-safe map of harness providers keyed by name.

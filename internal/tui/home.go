@@ -323,7 +323,7 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 
 func (h *homeScreen) pushSearchScreen() tea.Cmd {
 	return func() tea.Msg {
-		screen := newSearchScreen(h.ctx, h.deps.Searcher, "", h.styles, h.keys)
+		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Puller, h.deps.Harnesses, h.deps.HealthChecker, "", h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}

@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	searchDebounce = 300 * time.Millisecond
-	searchLimit    = 20
+	searchDebounce  = 300 * time.Millisecond
+	searchLimit     = 20
+	previewDebounce = 200 * time.Millisecond
+	previewPanelMin = 35
 )
 
 // Focus areas for the search screen.
@@ -27,20 +29,46 @@ const (
 	searchFocusList
 )
 
+// Sort modes for search results.
+var sortModes = []struct {
+	value string
+	label string
+}{
+	{"", "Relevance"},
+	{"stars", "Stars"},
+	{"downloads", "Downloads"},
+	{"recent", "Recent"},
+}
+
+// Asset type filters for search results.
+var filterTypes = []struct {
+	value string
+	label string
+}{
+	{"", "All"},
+	{"skill", "Skills"},
+	{"prompt", "Prompts"},
+	{"workflow", "Workflows"},
+	{"rule", "Rules"},
+}
+
 // searchScreen is the TUI search screen with live-filtered results.
 type searchScreen struct {
-	searcher BundleSearcher
-	ctx      context.Context
-	input    textinput.Model
-	spinner  spinner.Model
-	results  []client.HubBundleSummary
-	cursor   int
-	loading  bool
-	err      error
-	width    int
-	height   int
-	keys     *keyMap
-	styles   *styles
+	searcher      BundleSearcher
+	puller        BundlePuller
+	harnesses     HarnessLister
+	healthChecker HarnessHealthChecker
+	ctx           context.Context
+	input         textinput.Model
+	spinner       spinner.Model
+	results       []client.HubBundleSummary
+	cursor        int
+	loading       bool
+	err           error
+	width         int
+	height        int
+	keys          *keyMap
+	styles        *styles
 
 	focusArea int // searchFocusInput or searchFocusList
 
@@ -57,12 +85,39 @@ type searchScreen struct {
 	// Pagination state.
 	hasMore    bool
 	nextCursor string
+
+	// Sort and filter state.
+	sortIdx   int // index into sortModes
+	filterIdx int // index into filterTypes
+
+	// Preview state (two-panel layout).
+	previewDetail  *client.HubBundleDetail
+	previewLoading bool
+	previewErr     error
+	previewSlug    string // tracks which bundle the preview is for
+	previewID      uint64 // debounce ID for preview fetches
 }
 
 // newSearchScreen creates a new search screen.
-func newSearchScreen(ctx context.Context, searcher BundleSearcher, initialQuery string, sty *styles, keys *keyMap) *searchScreen {
+func newSearchScreen(
+	ctx context.Context,
+	searcher BundleSearcher,
+	puller BundlePuller,
+	harnesses HarnessLister,
+	healthChecker HarnessHealthChecker,
+	initialQuery string,
+	sty *styles,
+	keys *keyMap,
+) *searchScreen {
 	searchInput := textinput.New()
+	searchInput.Prompt = "/ "
 	searchInput.Placeholder = "Search bundles..."
+
+	inputStyles := searchInput.Styles()
+	inputStyles.Focused.Prompt = sty.accent
+	inputStyles.Blurred.Prompt = sty.accent
+	searchInput.SetStyles(inputStyles)
+
 	searchInput.Focus()
 
 	if initialQuery != "" {
@@ -72,14 +127,17 @@ func newSearchScreen(ctx context.Context, searcher BundleSearcher, initialQuery 
 	spin := spinner.New()
 
 	return &searchScreen{
-		searcher:  searcher,
-		ctx:       ctx,
-		input:     searchInput,
-		spinner:   spin,
-		keys:      keys,
-		styles:    sty,
-		focusArea: searchFocusInput,
-		lastQuery: initialQuery,
+		searcher:      searcher,
+		puller:        puller,
+		harnesses:     harnesses,
+		healthChecker: healthChecker,
+		ctx:           ctx,
+		input:         searchInput,
+		spinner:       spin,
+		keys:          keys,
+		styles:        sty,
+		focusArea:     searchFocusInput,
+		lastQuery:     initialQuery,
 	}
 }
 
@@ -136,6 +194,31 @@ func (s *searchScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 
 		return s, nil
+
+	case previewTickMsg:
+		if msg.id == s.previewID {
+			cmd := s.doPreviewFetch(msg.id, msg.publisher, msg.slug)
+
+			return s, cmd
+		}
+
+		return s, nil
+
+	case previewResultMsg:
+		if msg.id == s.previewID && msg.slug == s.previewSlug {
+			s.previewLoading = false
+			s.previewDetail = msg.detail
+		}
+
+		return s, nil
+
+	case previewErrorMsg:
+		if msg.id == s.previewID {
+			s.previewLoading = false
+			s.previewErr = msg.err
+		}
+
+		return s, nil
 	}
 
 	// Forward to text input when focused.
@@ -166,6 +249,9 @@ func (s *searchScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		if len(s.results) > 0 {
 			s.focusArea = searchFocusList
 			s.input.Blur()
+			cmd := s.schedulePreview()
+
+			return s, cmd
 		}
 
 		return s, nil
@@ -185,6 +271,9 @@ func (s *searchScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		if len(s.results) > 0 {
 			s.focusArea = searchFocusList
 			s.input.Blur()
+			cmd := s.schedulePreview()
+
+			return s, cmd
 		}
 
 		return s, nil
@@ -235,9 +324,43 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		if len(s.results) > 0 && s.cursor < len(s.results) {
 			bundle := s.results[s.cursor]
 
+			// In two-panel mode, preview is already visible — go straight to load.
+			if s.previewPanelFits() && classifyLayout(s.width) == layoutTwoPanel {
+				return s, func() tea.Msg {
+					return pushScreenMsg{
+						screen: newLoadScreen(
+							s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+							bundle.Publisher.Handle, bundle.Slug, bundle.LatestVersion,
+							s.styles, s.keys,
+						),
+					}
+				}
+			}
+
 			return s, func() tea.Msg {
 				return pushScreenMsg{
-					screen: newDetailScreen(s.ctx, s.searcher, bundle.Publisher.Handle, bundle.Slug, s.styles, s.keys),
+					screen: newDetailScreen(
+						s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+						bundle.Publisher.Handle, bundle.Slug, s.styles, s.keys,
+					),
+				}
+			}
+		}
+
+		return s, nil
+
+	case key.Matches(msg, s.keys.Load):
+		// Direct load — bypass detail screen.
+		if len(s.results) > 0 && s.cursor < len(s.results) {
+			bundle := s.results[s.cursor]
+
+			return s, func() tea.Msg {
+				return pushScreenMsg{
+					screen: newLoadScreen(
+						s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+						bundle.Publisher.Handle, bundle.Slug, bundle.LatestVersion,
+						s.styles, s.keys,
+					),
 				}
 			}
 		}
@@ -250,7 +373,9 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 			s.adjustScroll()
 		}
 
-		return s, nil
+		cmd := s.schedulePreview()
+
+		return s, cmd
 
 	case key.Matches(msg, s.keys.Down):
 		maxCursor := len(s.results) - 1
@@ -263,7 +388,21 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 			s.adjustScroll()
 		}
 
-		return s, nil
+		cmd := s.schedulePreview()
+
+		return s, cmd
+
+	case key.Matches(msg, s.keys.Status): // "s" — cycle sort mode
+		s.sortIdx = (s.sortIdx + 1) % len(sortModes)
+		cmd := s.doSearch(s.lastQuery)
+
+		return s, cmd
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("t"))): // "t" — cycle filter type
+		s.filterIdx = (s.filterIdx + 1) % len(filterTypes)
+		cmd := s.doSearch(s.lastQuery)
+
+		return s, cmd
 	}
 
 	return s, nil
@@ -295,6 +434,15 @@ func (s *searchScreen) handleSearchResult(msg searchResultMsg) (Screen, tea.Cmd)
 	s.nextCursor = msg.cursor
 	s.cursor = 0
 	s.scrollOffset = 0
+	s.previewDetail = nil
+	s.previewSlug = ""
+
+	// Only trigger preview if list is already focused.
+	if s.focusArea == searchFocusList {
+		cmd := s.schedulePreview()
+
+		return s, cmd
+	}
 
 	return s, nil
 }
@@ -318,13 +466,25 @@ func (s *searchScreen) View() string {
 	layout := classifyLayout(s.width)
 
 	var content string
-	if layout == layoutMinimal {
+
+	switch {
+	case layout == layoutMinimal:
 		content = s.renderMinimal()
-	} else {
+	case layout == layoutTwoPanel && s.previewPanelFits():
+		content = s.renderTwoPanel()
+	default:
 		content = s.renderWithPanels()
 	}
 
 	return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+// previewPanelFits returns true if there's enough space for a preview panel.
+func (s *searchScreen) previewPanelFits() bool {
+	searchW := min(clampMenuWidth(s.width), searchPanelMax)
+	remaining := s.width - searchW - twoPanelGap
+
+	return remaining >= previewPanelMin
 }
 
 func (s *searchScreen) panelWidth() int {
@@ -353,20 +513,16 @@ func (s *searchScreen) renderWithPanels() string {
 	// Search input panel.
 	inputContent := s.input.View()
 	view.WriteString(renderPanel(s.styles, "Search", inputContent, panelW, s.focusArea == searchFocusInput))
-	view.WriteString("\n\n")
+	view.WriteString("\n")
+
+	// Filter bar.
+	view.WriteString(s.renderFilterBar())
+	view.WriteString("\n")
 
 	// Results panel.
 	resultContent := s.renderResults(innerWidth)
 
-	resultTitle := "Results"
-
-	if len(s.results) > 0 {
-		if s.hasMore {
-			resultTitle = fmt.Sprintf("Results (%d+)", len(s.results))
-		} else {
-			resultTitle = fmt.Sprintf("Results (%d)", len(s.results))
-		}
-	}
+	resultTitle := s.resultPanelTitle()
 
 	view.WriteString(renderPanel(s.styles, resultTitle, resultContent, panelW, s.focusArea == searchFocusList))
 	view.WriteString("\n\n")
@@ -384,7 +540,9 @@ func (s *searchScreen) renderMinimal() string {
 	view.WriteString("\n\n")
 
 	view.WriteString(s.input.View())
-	view.WriteString("\n\n")
+	view.WriteString("\n")
+	view.WriteString(s.renderFilterBar())
+	view.WriteString("\n")
 
 	innerWidth := max(s.width-4, 20)
 	view.WriteString(s.renderResults(innerWidth))
@@ -393,6 +551,178 @@ func (s *searchScreen) renderMinimal() string {
 	view.WriteString(s.renderFooter())
 
 	return view.String()
+}
+
+func (s *searchScreen) renderTwoPanel() string {
+	var view strings.Builder
+
+	searchW := min(clampMenuWidth(s.width), searchPanelMax)
+	previewW := s.width - searchW - twoPanelGap
+	searchInner := searchW - panelContentOffset
+
+	// Breadcrumb.
+	view.WriteString(s.styles.breadcrumb.Render("Search"))
+	view.WriteString("\n\n")
+
+	// Build left column: search input + filter bar + results.
+	var left strings.Builder
+
+	inputContent := s.input.View()
+	left.WriteString(renderPanel(s.styles, "Search", inputContent, searchW, s.focusArea == searchFocusInput))
+	left.WriteString("\n")
+	left.WriteString(s.renderFilterBar())
+	left.WriteString("\n")
+
+	resultContent := s.renderResults(searchInner)
+	resultTitle := s.resultPanelTitle()
+	left.WriteString(renderPanel(s.styles, resultTitle, resultContent, searchW, s.focusArea == searchFocusList))
+
+	// Build right column: preview panel.
+	previewContent := s.renderPreviewContent(previewW - panelContentOffset)
+	previewTitle := "Preview"
+
+	if s.previewDetail != nil {
+		name := s.previewDetail.DisplayName
+		if name == "" {
+			name = s.previewSlug
+		}
+
+		previewTitle = name
+	}
+
+	rightPanel := renderPanel(s.styles, previewTitle, previewContent, previewW, false)
+
+	// Join horizontally.
+	gap := strings.Repeat(" ", twoPanelGap)
+	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left.String(), gap, rightPanel))
+	view.WriteString("\n\n")
+
+	// Footer.
+	view.WriteString(s.renderFooter())
+
+	return view.String()
+}
+
+func (s *searchScreen) renderPreviewContent(innerWidth int) string {
+	if s.previewLoading {
+		return s.spinner.View() + " " + s.styles.muted.Render("Loading preview...")
+	}
+
+	if s.previewErr != nil {
+		return s.styles.errStyle.Render("Error: " + s.previewErr.Error())
+	}
+
+	if s.previewDetail == nil {
+		return s.styles.muted.Render("Select a bundle to preview")
+	}
+
+	var content strings.Builder
+
+	det := s.previewDetail
+
+	// Title.
+	title := det.DisplayName
+	if title == "" {
+		title = s.previewSlug
+	}
+
+	content.WriteString(s.styles.title.Render(title))
+	content.WriteString("\n")
+
+	// Publisher + trust badge.
+	pub := "by " + det.Publisher.Handle
+	if det.Publisher.TrustTier == trustTierVerified {
+		pub += " " + s.styles.success.Render("\u2713")
+	}
+
+	content.WriteString(s.styles.muted.Render(pub))
+	content.WriteString("\n")
+
+	// Description or summary.
+	desc := det.Description
+	if desc == "" {
+		desc = det.Summary
+	}
+
+	if desc != "" {
+		content.WriteString("\n")
+
+		if ansi.StringWidth(desc) > innerWidth*3 {
+			desc = ansi.Truncate(desc, innerWidth*3, "\u2026")
+		}
+
+		content.WriteString(desc)
+		content.WriteString("\n")
+	}
+
+	// Compact metadata.
+	content.WriteString("\n")
+
+	type field struct {
+		label string
+		value string
+	}
+
+	fields := []field{}
+
+	if det.LatestVersion != "" {
+		fields = append(fields, field{"Version", det.LatestVersion})
+	}
+
+	if det.License != "" {
+		fields = append(fields, field{"License", det.License})
+	}
+
+	fields = append(fields,
+		field{"Stars", formatCount(det.StarsCount)},
+		field{"Downloads", formatCount(det.DownloadsTotal)},
+	)
+
+	if len(det.AssetTypes) > 0 {
+		fields = append(fields, field{"Assets", strings.Join(det.AssetTypes, ", ")})
+	}
+
+	if len(det.Tags) > 0 {
+		fields = append(fields, field{"Tags", strings.Join(det.Tags, ", ")})
+	}
+
+	for _, f := range fields {
+		label := fmt.Sprintf("%-11s", f.label)
+		content.WriteString(s.styles.subtitle.Render(label) + " " + f.value)
+		content.WriteString("\n")
+	}
+
+	return content.String()
+}
+
+func (s *searchScreen) resultPanelTitle() string {
+	isFeatured := s.lastQuery == ""
+
+	if len(s.results) == 0 {
+		if isFeatured {
+			return "Featured"
+		}
+
+		return "Results"
+	}
+
+	label := "Results"
+	if isFeatured {
+		label = "Featured"
+	}
+
+	if s.hasMore {
+		return fmt.Sprintf("%s (%d+)", label, len(s.results))
+	}
+
+	return fmt.Sprintf("%s (%d)", label, len(s.results))
+}
+
+func (s *searchScreen) renderFilterBar() string {
+	sortPart := s.styles.muted.Render("Sort: ") + s.styles.filterPillActive.Render(sortModes[s.sortIdx].label)
+	filterPart := s.styles.muted.Render("Type: ") + s.styles.filterPillActive.Render(filterTypes[s.filterIdx].label)
+
+	return "  " + sortPart + s.styles.muted.Render("  ") + filterPart
 }
 
 func (s *searchScreen) renderResults(innerWidth int) string {
@@ -409,7 +739,11 @@ func (s *searchScreen) renderResults(innerWidth int) string {
 
 		return content.String()
 	case !s.loading && len(s.results) == 0:
-		content.WriteString(s.styles.muted.Render("No results found"))
+		if s.lastQuery == "" {
+			content.WriteString(s.styles.muted.Render("Type to search bundles"))
+		} else {
+			content.WriteString(s.styles.muted.Render("No results found"))
+		}
 
 		return content.String()
 	}
@@ -461,7 +795,6 @@ func (s *searchScreen) renderResults(innerWidth int) string {
 }
 
 func (s *searchScreen) renderResultCard(w *strings.Builder, bundle *client.HubBundleSummary, idx, innerWidth int) {
-	// Line 1: cursor + publisher/slug:version + trust badge.
 	cursor := "  "
 	nameStyle := s.styles.resultLabel
 
@@ -470,21 +803,31 @@ func (s *searchScreen) renderResultCard(w *strings.Builder, bundle *client.HubBu
 		nameStyle = s.styles.selected
 	}
 
-	name := bundle.Publisher.Handle + "/" + bundle.Slug
-	if bundle.LatestVersion != "" {
-		name += ":" + bundle.LatestVersion
+	// Line 1: display name (or fallback to publisher/slug) + trust badge.
+	displayName := bundle.DisplayName
+	if displayName == "" {
+		displayName = bundle.Publisher.Handle + "/" + bundle.Slug
 	}
 
-	line1 := cursor + nameStyle.Render(name)
+	line1 := cursor + nameStyle.Render(displayName)
 
-	if bundle.Publisher.TrustTier == "verified" {
+	if bundle.Publisher.TrustTier == trustTierVerified {
 		line1 += " " + s.styles.success.Render("\u2713")
 	}
 
 	w.WriteString(line1)
 	w.WriteString("\n")
 
-	// Line 2: summary (truncated).
+	// Line 2: publisher/slug:version reference.
+	ref := bundle.Publisher.Handle + "/" + bundle.Slug
+	if bundle.LatestVersion != "" {
+		ref += ":" + bundle.LatestVersion
+	}
+
+	w.WriteString("  " + s.styles.resultRef.Render(ref))
+	w.WriteString("\n")
+
+	// Line 3: summary (truncated).
 	if bundle.Summary != "" {
 		summaryMax := max(innerWidth-4, 20)
 		summary := bundle.Summary
@@ -497,8 +840,17 @@ func (s *searchScreen) renderResultCard(w *strings.Builder, bundle *client.HubBu
 		w.WriteString("\n")
 	}
 
-	// Line 3: stats.
-	stats := fmt.Sprintf("\u2605 %s  \u2193 %s", formatCount(bundle.StarsCount), formatCount(bundle.DownloadsTotal))
+	// Line 4: stats — stars, trending downloads, version, license.
+	stats := fmt.Sprintf("\u2605 %s  \u2193 %s/mo", formatCount(bundle.StarsCount), formatCount(bundle.Downloads30D))
+
+	if bundle.LatestVersion != "" {
+		stats += "  v" + bundle.LatestVersion
+	}
+
+	if bundle.License != "" {
+		stats += "  " + bundle.License
+	}
+
 	w.WriteString("  " + s.styles.muted.Render(stats))
 	w.WriteString("\n")
 }
@@ -510,15 +862,25 @@ func (s *searchScreen) renderFooter() string {
 
 	if s.focusArea == searchFocusInput {
 		hints = []string{
-			s.styles.hintKey.Render("tab") + " " + s.styles.hintDesc.Render("results"),
-			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("back"),
+			s.styles.hintKey.Render("tab") + " " + s.styles.hintDesc.Render("browse results"),
+			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("go back"),
 		}
 	} else {
+		const hintLoad = "load"
+
+		enterHint := "view details"
+		if s.previewPanelFits() && classifyLayout(s.width) == layoutTwoPanel {
+			enterHint = hintLoad
+		}
+
 		hints = []string{
-			s.styles.hintKey.Render("\u2191/\u2193") + " " + s.styles.hintDesc.Render("navigate"),
-			s.styles.hintKey.Render("enter") + " " + s.styles.hintDesc.Render("select"),
-			s.styles.hintKey.Render("tab") + " " + s.styles.hintDesc.Render("search"),
-			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("back"),
+			s.styles.hintKey.Render("\u2191/\u2193") + " " + s.styles.hintDesc.Render("move"),
+			s.styles.hintKey.Render("enter") + " " + s.styles.hintDesc.Render(enterHint),
+			s.styles.hintKey.Render("r") + " " + s.styles.hintDesc.Render(hintLoad),
+			s.styles.hintKey.Render("s") + " " + s.styles.hintDesc.Render("sort"),
+			s.styles.hintKey.Render("t") + " " + s.styles.hintDesc.Render("filter"),
+			s.styles.hintKey.Render("/") + " " + s.styles.hintDesc.Render("search"),
+			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("go back"),
 			s.styles.hintKey.Render("q") + " " + s.styles.hintDesc.Render("quit"),
 		}
 	}
@@ -534,8 +896,11 @@ func (s *searchScreen) doSearch(query string) tea.Cmd {
 
 	id := s.searchID
 
+	sortValue := sortModes[s.sortIdx].value
+	filterValue := filterTypes[s.filterIdx].value
+
 	return func() tea.Msg {
-		result, err := s.searcher.SearchHubBundles(s.ctx, query, "", "", searchLimit, "")
+		result, err := s.searcher.SearchHubBundles(s.ctx, query, filterValue, sortValue, searchLimit, "")
 		if err != nil {
 			return searchErrorMsg{err: err}
 		}
@@ -556,9 +921,11 @@ func (s *searchScreen) doLoadMore() tea.Cmd {
 	s.searchID++
 
 	id := s.searchID
+	sortValue := sortModes[s.sortIdx].value
+	filterValue := filterTypes[s.filterIdx].value
 
 	return func() tea.Msg {
-		result, err := s.searcher.SearchHubBundles(s.ctx, s.lastQuery, "", "", searchLimit, s.nextCursor)
+		result, err := s.searcher.SearchHubBundles(s.ctx, s.lastQuery, filterValue, sortValue, searchLimit, s.nextCursor)
 		if err != nil {
 			return searchErrorMsg{err: err}
 		}
@@ -578,6 +945,49 @@ func (s *searchScreen) scheduleDebounce(id uint64, query string) tea.Cmd {
 	return tea.Tick(searchDebounce, func(_ time.Time) tea.Msg {
 		return debounceTickMsg{id: id, query: query}
 	})
+}
+
+// schedulePreview triggers a debounced preview fetch for the selected bundle.
+func (s *searchScreen) schedulePreview() tea.Cmd {
+	if classifyLayout(s.width) != layoutTwoPanel {
+		return nil
+	}
+
+	if s.cursor >= len(s.results) {
+		return nil
+	}
+
+	bundle := s.results[s.cursor]
+	slug := bundle.Publisher.Handle + "/" + bundle.Slug
+
+	// Skip if already showing this bundle.
+	if slug == s.previewSlug && s.previewDetail != nil {
+		return nil
+	}
+
+	s.previewID++
+	s.previewSlug = slug
+	s.previewLoading = true
+	s.previewDetail = nil
+	s.previewErr = nil
+
+	id := s.previewID
+
+	return tea.Tick(previewDebounce, func(_ time.Time) tea.Msg {
+		return previewTickMsg{id: id, publisher: bundle.Publisher.Handle, slug: bundle.Slug}
+	})
+}
+
+// doPreviewFetch fetches detail for the preview panel.
+func (s *searchScreen) doPreviewFetch(id uint64, publisher, slug string) tea.Cmd {
+	return func() tea.Msg {
+		detail, err := s.searcher.GetHubBundleDetail(s.ctx, publisher, slug)
+		if err != nil {
+			return previewErrorMsg{id: id, err: err}
+		}
+
+		return previewResultMsg{id: id, slug: publisher + "/" + slug, detail: detail}
+	}
 }
 
 // searchResultMsg carries search results back to the screen.
@@ -607,4 +1017,24 @@ type searchErrorMsg struct {
 type debounceTickMsg struct {
 	id    uint64
 	query string
+}
+
+// previewResultMsg carries a preview detail fetch result.
+type previewResultMsg struct {
+	id     uint64
+	slug   string
+	detail *client.HubBundleDetail
+}
+
+// previewErrorMsg carries a preview fetch error.
+type previewErrorMsg struct {
+	id  uint64
+	err error
+}
+
+// previewTickMsg fires after the preview debounce interval.
+type previewTickMsg struct {
+	id        uint64
+	publisher string
+	slug      string
 }

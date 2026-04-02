@@ -85,14 +85,18 @@ type refInputScreen struct {
 	spinner          spinner.Model
 
 	// Navigation.
-	focusArea int // refFocusInput or refFocusList
-	cursor    int
-	scrollOff int
+	focusArea  int // refFocusInput or refFocusList
+	focusPanel int // 0=left, 1=right (two-panel only)
+	cursor     int
+	scrollOff  int
+
+	// Right panel cursor (two-panel only).
+	rightCursor int
 }
 
 func newRefInputScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMap) *refInputScreen {
 	searchInput := textinput.New()
-	searchInput.Placeholder = "namespace/slug:version"
+	searchInput.Placeholder = "namespace/slug or namespace/slug:version"
 	searchInput.Focus()
 
 	spin := spinner.New()
@@ -133,6 +137,7 @@ func (r *refInputScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		r.width = msg.Width
 		r.height = msg.Height
+		r.updateInputWidth()
 
 		return r, nil
 
@@ -199,6 +204,18 @@ func (r *refInputScreen) handleIdentityMsg(msg refIdentityMsg) (Screen, tea.Cmd)
 }
 
 func (r *refInputScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+	isTwoPanel := classifyLayout(r.width) == layoutTwoPanel
+
+	// In two-panel mode, Tab switches panels.
+	if isTwoPanel && key.Matches(msg, r.keys.Tab) {
+		return r.handleTwoPanelTab()
+	}
+
+	// In two-panel mode with right panel focused, handle separately.
+	if isTwoPanel && r.focusPanel == 1 && r.focusArea == refFocusList {
+		return r.handleRightPanelKey(msg)
+	}
+
 	if r.focusArea == refFocusList {
 		return r.handleListKey(msg)
 	}
@@ -226,11 +243,12 @@ func (r *refInputScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		// "/" escapes to the search/browse screen.
 		return r, func() tea.Msg {
 			return pushScreenMsg{
-				screen: newSearchScreen(r.ctx, r.deps.Searcher, "", r.styles, r.keys),
+				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
 			}
 		}
 
 	case key.Matches(msg, r.keys.Tab):
+		// Two-panel Tab is handled in handleKey before reaching here.
 		if len(r.suggestions) > 0 {
 			r.focusArea = refFocusList
 			r.input.Blur()
@@ -244,6 +262,22 @@ func (r *refInputScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return r, nil
 
 	case key.Matches(msg, r.keys.Down):
+		isTwoPanel := classifyLayout(r.width) == layoutTwoPanel
+
+		if isTwoPanel {
+			// In two-panel mode, down arrow moves into the left panel's list.
+			filtered := r.filteredRecent()
+			// +1 for the "Find on Hub" action item.
+			if len(filtered) > 0 || true {
+				r.focusArea = refFocusList
+				r.input.Blur()
+				r.cursor = 0
+				r.scrollOff = 0
+			}
+
+			return r, nil
+		}
+
 		if len(r.suggestions) > 0 {
 			r.focusArea = refFocusList
 			r.input.Blur()
@@ -271,6 +305,14 @@ func (r *refInputScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 }
 
 func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+	isTwoPanel := classifyLayout(r.width) == layoutTwoPanel
+
+	// In two-panel mode, the left panel list contains filtered recent + "Find on Hub" action.
+	listLen := len(r.suggestions)
+	if isTwoPanel {
+		listLen = r.leftPanelListLen()
+	}
+
 	maxVisible := r.maxVisibleSuggestions()
 
 	switch {
@@ -284,6 +326,7 @@ func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return r, r.input.Focus()
 
 	case key.Matches(msg, r.keys.Tab):
+		// Two-panel Tab is handled in handleKey before reaching here.
 		r.focusArea = refFocusInput
 		r.input.Focus()
 
@@ -307,7 +350,7 @@ func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return r, nil
 
 	case key.Matches(msg, r.keys.Down):
-		if r.cursor < len(r.suggestions)-1 {
+		if r.cursor < listLen-1 {
 			r.cursor++
 
 			if r.cursor >= r.scrollOff+maxVisible {
@@ -318,6 +361,10 @@ func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return r, nil
 
 	case key.Matches(msg, r.keys.Enter):
+		if isTwoPanel {
+			return r.handleLeftPanelEnter()
+		}
+
 		if r.cursor < len(r.suggestions) {
 			selected := r.suggestions[r.cursor]
 			cmd := r.loadSuggestion(&selected)
@@ -330,7 +377,128 @@ func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	case key.Matches(msg, r.keys.Search):
 		return r, func() tea.Msg {
 			return pushScreenMsg{
-				screen: newSearchScreen(r.ctx, r.deps.Searcher, "", r.styles, r.keys),
+				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
+			}
+		}
+	}
+
+	return r, nil
+}
+
+// leftPanelListLen returns the number of navigable items in the left panel (recent + Find on Hub).
+func (r *refInputScreen) leftPanelListLen() int {
+	return len(r.filteredRecent()) + 1 // +1 for "Find on Hub" action
+}
+
+func (r *refInputScreen) handleLeftPanelEnter() (Screen, tea.Cmd) {
+	filtered := r.filteredRecent()
+
+	if r.cursor < len(filtered) {
+		selected := filtered[r.cursor]
+		cmd := r.loadSuggestion(&selected)
+
+		return r, cmd
+	}
+
+	// "Find on Hub" action.
+	return r, func() tea.Msg {
+		return pushScreenMsg{
+			screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
+		}
+	}
+}
+
+func (r *refInputScreen) handleTwoPanelTab() (Screen, tea.Cmd) {
+	if r.focusPanel == 0 {
+		// Switch to right panel.
+		r.focusPanel = 1
+		r.focusArea = refFocusList
+		r.input.Blur()
+
+		return r, nil
+	}
+
+	// Switch back to left panel, focus input.
+	r.focusPanel = 0
+	r.focusArea = refFocusInput
+	r.input.Focus()
+
+	return r, r.input.Focus()
+}
+
+func (r *refInputScreen) handleRightPanelKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+	rightListLen := r.rightPanelListLen()
+
+	switch {
+	case key.Matches(msg, r.keys.Quit):
+		return r, tea.Quit
+
+	case key.Matches(msg, r.keys.Back):
+		// Go back to left panel input.
+		r.focusPanel = 0
+		r.focusArea = refFocusInput
+		r.input.Focus()
+
+		return r, r.input.Focus()
+
+	case key.Matches(msg, r.keys.Up):
+		if r.rightCursor > 0 {
+			r.rightCursor--
+		}
+
+		return r, nil
+
+	case key.Matches(msg, r.keys.Down):
+		if r.rightCursor < rightListLen-1 {
+			r.rightCursor++
+		}
+
+		return r, nil
+
+	case key.Matches(msg, r.keys.Enter):
+		return r.handleRightPanelEnter()
+
+	case key.Matches(msg, r.keys.Search):
+		return r, func() tea.Msg {
+			return pushScreenMsg{
+				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
+			}
+		}
+	}
+
+	return r, nil
+}
+
+// rightPanelListLen returns the number of navigable items in the right panel.
+func (r *refInputScreen) rightPanelListLen() int {
+	filtered := r.filteredPublisher()
+	if len(filtered) > 0 {
+		return len(filtered)
+	}
+
+	// "Sign in" action when unauthenticated.
+	if r.deps.Auth == nil || (!r.publisherLoaded && !r.publisherLoading) {
+		return 1
+	}
+
+	return 0
+}
+
+func (r *refInputScreen) handleRightPanelEnter() (Screen, tea.Cmd) {
+	filtered := r.filteredPublisher()
+
+	if r.rightCursor < len(filtered) {
+		selected := filtered[r.rightCursor]
+		cmd := r.loadSuggestion(&selected)
+
+		return r, cmd
+	}
+
+	// "Sign in" action.
+	if r.deps.AuthMgr != nil {
+		return r, func() tea.Msg {
+			return pushScreenMsg{
+				screen: newAuthScreen(r.ctx, r.deps, r.styles, r.keys),
 			}
 		}
 	}
@@ -370,6 +538,7 @@ func (r *refInputScreen) submit() (Screen, tea.Cmd) {
 				r.deps.Searcher,
 				r.deps.Puller,
 				r.deps.Harnesses,
+				r.deps.HealthChecker,
 				ref.Namespace,
 				ref.Slug,
 				ref.Version,
@@ -388,6 +557,7 @@ func (r *refInputScreen) loadSuggestion(item *suggestion) tea.Cmd {
 				r.deps.Searcher,
 				r.deps.Puller,
 				r.deps.Harnesses,
+				r.deps.HealthChecker,
 				item.namespace,
 				item.slug,
 				item.version,
@@ -457,6 +627,17 @@ func (r *refInputScreen) maxVisibleSuggestions() int {
 	return min(available, maxRecentSuggestions+maxPublisherSuggestions)
 }
 
+// updateInputWidth sizes the text input to fit the current panel width.
+func (r *refInputScreen) updateInputWidth() {
+	pw := r.panelWidth()
+	// Subtract panel chrome (border + padding) and prompt width.
+	inputWidth := pw - panelContentOffset - lipgloss.Width(r.input.Prompt)
+
+	if inputWidth > 0 {
+		r.input.SetWidth(inputWidth)
+	}
+}
+
 // --- View ---
 
 // View implements Screen.
@@ -464,9 +645,13 @@ func (r *refInputScreen) View() string {
 	layout := classifyLayout(r.width)
 
 	var content string
-	if layout == layoutMinimal {
+
+	switch layout {
+	case layoutTwoPanel:
+		content = r.renderTwoPanelRef()
+	case layoutMinimal:
 		content = r.renderMinimal()
-	} else {
+	default:
 		content = r.renderWithPanel()
 	}
 
@@ -504,13 +689,15 @@ func (r *refInputScreen) renderWithPanel() string {
 	}
 
 	body.WriteString("\n\n")
-	body.WriteString(r.styles.muted.Render("Enter a bundle ref like ") + r.styles.accent.Render("acme/my-bundle:1.0.0"))
 
 	// Suggestion sections.
 	suggestionsView := r.renderSuggestions(panelW - panelContentOffset)
 	if suggestionsView != "" {
-		body.WriteString("\n\n")
 		body.WriteString(suggestionsView)
+	} else {
+		body.WriteString(r.styles.muted.Render("Type a bundle reference, or press ") +
+			r.styles.accent.Render("/") +
+			r.styles.muted.Render(" to search the Hub"))
 	}
 
 	view.WriteString(renderPanel(r.styles, "Load Bundle", body.String(), panelW, true))
@@ -543,6 +730,225 @@ func (r *refInputScreen) renderMinimal() string {
 	view.WriteString(r.renderFooter())
 
 	return view.String()
+}
+
+func (r *refInputScreen) renderTwoPanelRef() string {
+	var view strings.Builder
+
+	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
+	view.WriteString("\n\n")
+
+	panelW := clampMenuWidth(r.width)
+
+	// Left panel: input + recent bundles + find action.
+	leftContent := r.renderLeftPanelContent(panelW - panelContentOffset)
+	leftPanel := renderPanel(r.styles, "Load Bundle", leftContent, panelW, r.focusPanel == 0)
+
+	// Right panel: publisher bundles or auth CTA.
+	rightContent := r.renderRightPanelContent(panelW - panelContentOffset)
+	rightPanel := renderPanel(r.styles, "My Bundles", rightContent, panelW, r.focusPanel == 1)
+
+	gap := strings.Repeat(" ", twoPanelGap)
+	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
+
+	view.WriteString(panels)
+	view.WriteString("\n\n")
+	view.WriteString(r.renderTwoPanelFooter())
+
+	return view.String()
+}
+
+func (r *refInputScreen) renderLeftPanelContent(availWidth int) string {
+	var body strings.Builder
+
+	body.WriteString(r.input.View())
+
+	if r.errMsg != "" {
+		body.WriteString("\n\n")
+		body.WriteString(r.styles.errStyle.Render(r.errMsg))
+	}
+
+	// Recent bundles section.
+	if r.cacheLoading || len(r.recentBundles) > 0 {
+		body.WriteString("\n\n")
+		r.renderLeftRecentSection(&body, availWidth)
+	}
+
+	// Separator and hub action.
+	body.WriteString("\n\n")
+	body.WriteString(r.styles.muted.Render(strings.Repeat("\u2500 ", min(availWidth/2, 20))))
+	body.WriteString("\n")
+
+	hubLabel := "Find a bundle on the Hub"
+	hubBadge := r.styles.hotkey.Render("[/]")
+	hubActive := r.focusPanel == 0 && r.focusArea == refFocusList && r.cursor >= len(r.filteredRecent())
+
+	var lineLeft string
+
+	if hubActive {
+		lineLeft = r.styles.accent.Render(cursorActive) + hubLabel
+	} else {
+		lineLeft = cursorBlank + hubLabel
+	}
+
+	// Right-align the badge.
+	leftWidth := ansi.StringWidth(lineLeft)
+	badgeWidth := ansi.StringWidth(hubBadge)
+	gap := availWidth - leftWidth - badgeWidth
+
+	if gap > 1 {
+		body.WriteString(lineLeft + strings.Repeat(" ", gap) + hubBadge)
+	} else {
+		body.WriteString(lineLeft + "  " + hubBadge)
+	}
+
+	return body.String()
+}
+
+func (r *refInputScreen) renderLeftRecentSection(out *strings.Builder, availWidth int) {
+	out.WriteString(r.styles.sectionHeader.Render("RECENT"))
+
+	if r.cacheLoading {
+		out.WriteString(" " + r.spinner.View())
+		out.WriteString("\n")
+
+		return
+	}
+
+	out.WriteString("\n")
+
+	filtered := r.filteredRecent()
+	for idx, item := range filtered {
+		isSelected := r.focusPanel == 0 && r.focusArea == refFocusList && idx == r.cursor
+		out.WriteString(r.renderRefItem(&item, isSelected, availWidth))
+	}
+}
+
+func (r *refInputScreen) renderRightPanelContent(availWidth int) string {
+	var body strings.Builder
+
+	if r.publisherLoading {
+		body.WriteString(r.spinner.View() + " Loading your bundles...")
+
+		return body.String()
+	}
+
+	if !r.publisherLoaded || len(r.publisherBundles) == 0 {
+		switch {
+		case r.publisherLoaded && len(r.publisherBundles) == 0:
+			body.WriteString(r.styles.muted.Render("No published bundles yet"))
+		default:
+			// Not authenticated — show sign-in CTA.
+			body.WriteString(r.styles.muted.Render("Sign in to see your bundles"))
+			body.WriteString("\n\n")
+			r.renderAuthAction(&body)
+		}
+
+		return body.String()
+	}
+
+	// Authenticated with bundles.
+	body.WriteString(r.styles.sectionHeader.Render("PUBLISHED"))
+	body.WriteString("\n")
+
+	filtered := r.filteredPublisher()
+	for idx, item := range filtered {
+		isSelected := r.focusPanel == 1 && r.focusArea == refFocusList && idx == r.rightCursor
+		body.WriteString(r.renderRefItem(&item, isSelected, availWidth))
+	}
+
+	return body.String()
+}
+
+func (r *refInputScreen) renderAuthAction(body *strings.Builder) {
+	authActive := r.focusPanel == 1 && r.focusArea == refFocusList && r.rightCursor == 0
+
+	if authActive {
+		body.WriteString(r.styles.accent.Render(cursorActive))
+		body.WriteString(r.styles.menuItemActive.Render("Sign in"))
+	} else {
+		body.WriteString(cursorBlank)
+		body.WriteString(r.styles.menuItem.Render("Sign in"))
+	}
+
+	body.WriteString("  " + r.styles.hotkey.Render("[a]"))
+}
+
+func (r *refInputScreen) renderRefItem(item *suggestion, isSelected bool, availWidth int) string {
+	ref := item.ref()
+
+	var line string
+
+	if isSelected {
+		cursor := r.styles.accent.Render(cursorActive)
+		label := r.styles.menuItemActive.Render(ref)
+		line = cursor + label
+	} else {
+		label := r.styles.menuItem.Render(ref)
+		line = cursorBlank + label
+	}
+
+	// Add relative time for recent bundles.
+	if item.source == sourceRecent && !item.fetchedAt.IsZero() {
+		age := relativeTime(item.fetchedAt)
+		lineWidth := ansi.StringWidth(line)
+		ageWidth := ansi.StringWidth(age)
+		gap := availWidth - lineWidth - ageWidth
+
+		if gap > 1 {
+			line += strings.Repeat(" ", gap) + r.styles.muted.Render(age)
+		}
+	}
+
+	return line + "\n"
+}
+
+func (r *refInputScreen) renderTwoPanelFooter() string {
+	sep := r.styles.hintSep.Render(" \u2022 ")
+
+	hints := []string{
+		r.styles.hintKey.Render("\u2191/\u2193") + " " + r.styles.hintDesc.Render("navigate"),
+		r.styles.hintKey.Render("tab") + " " + r.styles.hintDesc.Render("switch"),
+		r.styles.hintKey.Render("enter") + " " + r.styles.hintDesc.Render("select"),
+		r.styles.hintKey.Render("/") + " " + r.styles.hintDesc.Render("search"),
+		r.styles.hintKey.Render("esc") + " " + r.styles.hintDesc.Render("back"),
+	}
+
+	return strings.Join(hints, sep)
+}
+
+// filteredRecent returns recent bundles filtered by current input.
+func (r *refInputScreen) filteredRecent() []suggestion {
+	filter := strings.ToLower(strings.TrimSpace(r.input.Value()))
+
+	var result []suggestion
+
+	for idx := range r.recentBundles {
+		entry := &r.recentBundles[idx]
+
+		if filter == "" || strings.Contains(strings.ToLower(entry.qualifiedName()), filter) {
+			result = append(result, *entry)
+		}
+	}
+
+	return result
+}
+
+// filteredPublisher returns publisher bundles filtered by current input.
+func (r *refInputScreen) filteredPublisher() []suggestion {
+	filter := strings.ToLower(strings.TrimSpace(r.input.Value()))
+
+	var result []suggestion
+
+	for idx := range r.publisherBundles {
+		entry := &r.publisherBundles[idx]
+
+		if filter == "" || strings.Contains(strings.ToLower(entry.qualifiedName()), filter) {
+			result = append(result, *entry)
+		}
+	}
+
+	return result
 }
 
 func (r *refInputScreen) renderSuggestions(availWidth int) string {
