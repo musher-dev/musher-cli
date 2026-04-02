@@ -100,10 +100,17 @@ func (tr *testRegistry) handleToken(w http.ResponseWriter, _ *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":      "test-token-12345",
-		"expires_in": 300,
-	})
+	payload := struct {
+		Token     string `json:"token"`
+		ExpiresIn int    `json:"expires_in"`
+	}{
+		Token:     "test-token-12345",
+		ExpiresIn: 300,
+	}
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (tr *testRegistry) handleManifest(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +122,12 @@ func (tr *testRegistry) handleManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	manifest := tr.buildManifest()
-	data, _ := json.Marshal(manifest)
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	dgst := sha256.Sum256(data)
 
@@ -237,7 +249,7 @@ func TestPullBundle_HappyPath(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	result, err := oci.PullBundle(context.Background(), cfg, resolved)
+	result, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err != nil {
 		t.Fatalf("PullBundle returned error: %v", err)
 	}
@@ -305,7 +317,7 @@ func TestPullBundle_PublicNoCredentials(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	result, err := oci.PullBundle(context.Background(), cfg, resolved)
+	result, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err != nil {
 		t.Fatalf("PullBundle returned error: %v", err)
 	}
@@ -375,7 +387,7 @@ func TestPullBundle_WithAPIKey(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	result, err := oci.PullBundle(context.Background(), cfg, resolved)
+	result, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err != nil {
 		t.Fatalf("PullBundle returned error: %v", err)
 	}
@@ -430,7 +442,7 @@ func TestPullBundle_TokenEndpoint500(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	_, err := oci.PullBundle(context.Background(), cfg, resolved)
+	_, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err == nil {
 		t.Fatal("expected error when token endpoint returns 500 and auth is required")
 	}
@@ -452,7 +464,7 @@ func TestPullBundle_ManifestNotFound(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	_, err := oci.PullBundle(context.Background(), cfg, resolved)
+	_, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err == nil {
 		t.Fatal("expected error when manifest returns 404")
 	}
@@ -480,7 +492,7 @@ func TestPullBundle_BlobFetchFailure(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	_, err := oci.PullBundle(context.Background(), cfg, resolved)
+	_, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err == nil {
 		t.Fatal("expected error when blob fetch returns 500")
 	}
@@ -496,7 +508,7 @@ func TestPullBundle_EmptyOCIRef(t *testing.T) {
 
 	cfg := oci.RegistryConfig{RegistryURL: "localhost"}
 
-	_, err := oci.PullBundle(context.Background(), cfg, resolved)
+	_, err := oci.PullBundle(t.Context(), cfg, resolved)
 	if err == nil {
 		t.Fatal("expected error for empty OCI ref")
 	}
@@ -519,7 +531,7 @@ func TestPullBundle_ContextCancellation(t *testing.T) {
 		PlainHTTP:   true,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel immediately
 
 	_, err := oci.PullBundle(ctx, cfg, resolved)

@@ -11,4 +11,7 @@ import (
 var specData []byte
 
 // Module is the harness module for OpenCode registration.
-var Module = &harness.Module{Spec: harness.MustParseSpec(specData)}
+var Module = &harness.Module{
+	Spec:           harness.MustParseSpec(specData),
+	AgentTransform: harness.TransformToolsToRecord,
+}

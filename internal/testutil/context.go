@@ -36,7 +36,7 @@ func TestContext(t *testing.T) (ctx context.Context, stdout, stderr *bytes.Buffe
 	t.Helper()
 
 	writer, stdout, stderr := TestOutputWriter(t)
-	ctx = writer.WithContext(context.Background())
+	ctx = writer.WithContext(t.Context())
 
 	return ctx, stdout, stderr
 }

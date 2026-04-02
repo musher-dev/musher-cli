@@ -4,9 +4,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/pathutil"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
@@ -57,20 +57,12 @@ func backupIfExists(path string) (CleanupFunc, error) {
 
 // expandTilde replaces a leading "~/" with the user's home directory.
 func expandTilde(path string) (string, error) {
-	if !strings.HasPrefix(path, "~/") && path != "~" {
-		return path, nil
-	}
-
-	home, err := os.UserHomeDir()
+	expanded, err := pathutil.ExpandTilde(path)
 	if err != nil {
-		return "", repoerrors.Errorf("expand home directory: %w", err)
+		return "", repoerrors.Errorf("expand tilde: %w", err)
 	}
 
-	if path == "~" {
-		return home, nil
-	}
-
-	return filepath.Join(home, path[2:]), nil
+	return expanded, nil
 }
 
 // removeFileCleanup returns a CleanupFunc that removes a single file.

@@ -244,7 +244,7 @@ func (p *pushScreen) startValidation() (Screen, tea.Cmd) {
 	if p.deps.Validator == nil {
 		p.state = pushStateValidateFailed
 		p.checks[0].status = checkFailed
-		p.checks[0].detail = "bundle validation not available"
+		p.checks[0].detail = validatorUnavailableMsg
 
 		return p, nil
 	}

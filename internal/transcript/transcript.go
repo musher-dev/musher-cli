@@ -20,6 +20,6 @@ type Event struct {
 type Session struct {
 	ID        string    `json:"id"`
 	StartTime time.Time `json:"startTime"`
-	CloseTime time.Time `json:"closeTime,omitempty"`
+	CloseTime time.Time `json:"closeTime,omitzero"`
 	BundleRef string    `json:"bundleRef"`
 }

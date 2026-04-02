@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -35,7 +34,7 @@ func TestResolveBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ResolveBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		result, err := c.ResolveBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0")
 		if err != nil {
 			t.Fatalf("ResolveBundleVersion returned error: %v", err)
 		}
@@ -114,7 +113,7 @@ func TestResolveBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ResolveBundleVersion(context.Background(), "acme", "my-bundle", "")
+		result, err := c.ResolveBundleVersion(t.Context(), "acme", "my-bundle", "")
 		if err != nil {
 			t.Fatalf("ResolveBundleVersion returned error: %v", err)
 		}
@@ -133,7 +132,7 @@ func TestResolveBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusNotFound, `{"error":"not found"}`), nil
 		})
 
-		_, err := c.ResolveBundleVersion(context.Background(), "acme", "missing", "1.0.0")
+		_, err := c.ResolveBundleVersion(t.Context(), "acme", "missing", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -148,7 +147,7 @@ func TestResolveBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		_, err := c.ResolveBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		_, err := c.ResolveBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -159,7 +158,7 @@ func TestResolveBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusOK, `not json`), nil
 		})
 
-		_, err := c.ResolveBundleVersion(context.Background(), "acme", "my-bundle", "1.0.0")
+		_, err := c.ResolveBundleVersion(t.Context(), "acme", "my-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -194,7 +193,7 @@ func TestResolvePublicBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ResolvePublicBundleVersion(context.Background(), "public-ns", "pub-bundle", "0.1.0")
+		result, err := c.ResolvePublicBundleVersion(t.Context(), "public-ns", "pub-bundle", "0.1.0")
 		if err != nil {
 			t.Fatalf("ResolvePublicBundleVersion returned error: %v", err)
 		}
@@ -248,7 +247,7 @@ func TestResolvePublicBundleVersion(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ResolvePublicBundleVersion(context.Background(), "public-ns", "pub-bundle", "")
+		result, err := c.ResolvePublicBundleVersion(t.Context(), "public-ns", "pub-bundle", "")
 		if err != nil {
 			t.Fatalf("ResolvePublicBundleVersion returned error: %v", err)
 		}
@@ -267,7 +266,7 @@ func TestResolvePublicBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusNotFound, `{"error":"not found"}`), nil
 		})
 
-		_, err := c.ResolvePublicBundleVersion(context.Background(), "public-ns", "missing", "1.0.0")
+		_, err := c.ResolvePublicBundleVersion(t.Context(), "public-ns", "missing", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -282,7 +281,7 @@ func TestResolvePublicBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusInternalServerError, `{}`), nil
 		})
 
-		_, err := c.ResolvePublicBundleVersion(context.Background(), "public-ns", "pub-bundle", "1.0.0")
+		_, err := c.ResolvePublicBundleVersion(t.Context(), "public-ns", "pub-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -293,7 +292,7 @@ func TestResolvePublicBundleVersion(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{broken`), nil
 		})
 
-		_, err := c.ResolvePublicBundleVersion(context.Background(), "public-ns", "pub-bundle", "1.0.0")
+		_, err := c.ResolvePublicBundleVersion(t.Context(), "public-ns", "pub-bundle", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}

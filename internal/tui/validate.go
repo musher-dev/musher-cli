@@ -60,7 +60,7 @@ func (v *validateScreen) Init() tea.Cmd {
 		// No validator available — mark all as failed.
 		v.state = validateStateFailed
 		v.checks[0].status = checkFailed
-		v.checks[0].detail = "bundle validation not available"
+		v.checks[0].detail = validatorUnavailableMsg
 
 		return nil
 	}

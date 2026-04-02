@@ -49,7 +49,7 @@ func TestRefInputScreenInit(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	cmd := screen.Init()
 	if cmd == nil {
@@ -65,7 +65,7 @@ func TestRefInputScreenInitWithCache(t *testing.T) {
 	deps := newTestRefInputDeps()
 	deps.Cache = &mockCacheSummarizerWithRecency{}
 
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	cmd := screen.Init()
 	if cmd == nil {
@@ -85,7 +85,7 @@ func TestRefInputScreenInitWithAuth(t *testing.T) {
 	deps := newTestRefInputDeps()
 	deps.Auth = &mockAuth{identity: &client.PublisherIdentity{CredentialName: "test"}}
 
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	cmd := screen.Init()
 	if cmd == nil {
@@ -99,7 +99,7 @@ func TestRefInputScreenView(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -115,7 +115,7 @@ func TestRefInputScreenSubmitValidRef(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.input.SetValue("acme/my-bundle:1.0.0")
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -146,7 +146,7 @@ func TestRefInputScreenSubmitInvalidRef(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.input.SetValue("invalid-no-slash")
 
 	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -163,7 +163,7 @@ func TestRefInputScreenSubmitEmpty(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	refScr := updated.(*refInputScreen)
@@ -179,7 +179,7 @@ func TestRefInputScreenSubmitEmptyWithSuggestions(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -208,7 +208,7 @@ func TestRefInputScreenEscEmptyPops(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if cmd == nil {
@@ -227,7 +227,7 @@ func TestRefInputScreenEscWithTextClears(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.input.SetValue("acme/bundle")
 
 	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -244,7 +244,7 @@ func TestRefInputScreenWindowSize(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	updated, _ := screen.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	refScr := updated.(*refInputScreen)
@@ -264,7 +264,7 @@ func TestRefInputScreenMinimalView(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 30
 	screen.height = 20
 
@@ -280,7 +280,7 @@ func TestRefInputScreenErrorDisplay(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 	screen.errMsg = "bad ref"
@@ -297,7 +297,7 @@ func TestRefInputScreenCtrlCQuits(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "", Mod: tea.ModCtrl, BaseCode: 'c'})
 	// ctrl+c should produce a quit command
@@ -310,7 +310,7 @@ func TestRefInputScreenPanelWidth(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	// Wide terminal.
 	screen.width = 200
@@ -343,7 +343,7 @@ func TestRefInputScreenSlashPushesSearch(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "/"})
 	if cmd == nil {
@@ -370,7 +370,7 @@ func TestRefInputCacheResultPopulatesSuggestions(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -399,7 +399,7 @@ func TestRefInputPublisherResultPopulatesSuggestions(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -427,7 +427,7 @@ func TestRefInputDeduplication(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	// Same namespace/slug in both sources — recent should win.
 	screen.recentBundles = []suggestion{
@@ -459,7 +459,7 @@ func TestRefInputTextFiltering(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	screen.recentBundles = []suggestion{
 		{namespace: "acme", slug: "agent", version: "1.0.0", source: "recent"},
@@ -492,7 +492,7 @@ func TestRefInputTabSwitchesFocus(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 	screen.recentBundles = []suggestion{
@@ -523,7 +523,7 @@ func TestRefInputTabNoopWithoutSuggestions(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	refScr := updated.(*refInputScreen)
@@ -539,7 +539,7 @@ func TestRefInputArrowDownToList(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 	screen.recentBundles = []suggestion{
@@ -567,7 +567,7 @@ func TestRefInputListNavigation(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 	screen.recentBundles = []suggestion{
@@ -612,7 +612,7 @@ func TestRefInputListEnterSelectsSuggestion(t *testing.T) {
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
 	deps.Puller = &mockPuller{}
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 	screen.recentBundles = []suggestion{
@@ -648,7 +648,7 @@ func TestRefInputIdentityMsgTriggersPublisherLoad(t *testing.T) {
 	deps.PublisherBundles = &mockPublisherBundleLister{
 		response: &client.HubSearchResponse{},
 	}
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -674,7 +674,7 @@ func TestRefInputIdentityMsgErrorHandled(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	msg := refIdentityMsg{err: context.Canceled}
 
@@ -697,7 +697,7 @@ func TestRefInputIdentityNoPublisherLister(t *testing.T) {
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
 	// PublisherBundles is nil.
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	msg := refIdentityMsg{
 		namespaces: []client.NamespaceHandle{{Handle: "myorg"}},
@@ -717,7 +717,7 @@ func TestRefInputViewWithSuggestions(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 40
 
@@ -754,7 +754,7 @@ func TestRefInputFooterShowsTabHint(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -782,7 +782,7 @@ func TestRefInputGracefulNilDeps(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := &HomeDeps{Searcher: &mockSearcher{}} // Cache, Auth, PublisherBundles all nil
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 30
 
@@ -809,7 +809,7 @@ func TestRefInputListEscReturnsToInput(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 	deps := newTestRefInputDeps()
-	screen := newRefInputScreen(context.Background(), deps, &sty, &keys)
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 	screen.focusArea = refFocusList
 
 	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -842,6 +842,267 @@ func TestRelativeTime(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("relativeTime(-%v) = %q, want %q", tt.ago, got, tt.want)
 		}
+	}
+}
+
+func TestRefInputTwoPanelView(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 120
+	screen.height = 40
+
+	screen.recentBundles = []suggestion{
+		{namespace: "acme", slug: "agent", version: "1.0.0", source: "recent", fetchedAt: time.Now()},
+	}
+	screen.publisherBundles = []suggestion{
+		{namespace: "myorg", slug: "my-bundle", version: "2.0.0", source: "yours"},
+	}
+	screen.publisherLoaded = true
+	screen.rebuildSuggestions()
+
+	view := screen.View()
+
+	if !strings.Contains(view, "Load Bundle") {
+		t.Error("two-panel view should contain 'Load Bundle' title")
+	}
+
+	if !strings.Contains(view, "My Bundles") {
+		t.Error("two-panel view should contain 'My Bundles' panel title")
+	}
+
+	if !strings.Contains(view, "RECENT") {
+		t.Error("two-panel view should contain 'RECENT' section")
+	}
+
+	if !strings.Contains(view, "Find a bundle on the Hub") {
+		t.Error("two-panel view should contain hub action")
+	}
+}
+
+func TestRefInputTwoPanelTabSwitchesPanel(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 120 // Two-panel threshold
+	screen.height = 40
+
+	if screen.focusPanel != 0 {
+		t.Errorf("initial focusPanel = %d, want 0", screen.focusPanel)
+	}
+
+	// Tab switches to right panel.
+	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	refScr := updated.(*refInputScreen)
+
+	if refScr.focusPanel != 1 {
+		t.Errorf("focusPanel after tab = %d, want 1", refScr.focusPanel)
+	}
+
+	if refScr.focusArea != refFocusList {
+		t.Errorf("focusArea after tab to right = %d, want refFocusList", refScr.focusArea)
+	}
+
+	// Tab again switches back to left panel input.
+	updated, _ = refScr.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	refScr = updated.(*refInputScreen)
+
+	if refScr.focusPanel != 0 {
+		t.Errorf("focusPanel after second tab = %d, want 0", refScr.focusPanel)
+	}
+
+	if refScr.focusArea != refFocusInput {
+		t.Errorf("focusArea after tab back = %d, want refFocusInput", refScr.focusArea)
+	}
+}
+
+func TestRefInputTwoPanelRightPanelNavigation(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 120
+	screen.height = 40
+
+	screen.publisherBundles = []suggestion{
+		{namespace: "myorg", slug: "a", version: "1.0.0", source: "yours"},
+		{namespace: "myorg", slug: "b", version: "2.0.0", source: "yours"},
+	}
+	screen.publisherLoaded = true
+	screen.rebuildSuggestions()
+
+	// Switch to right panel.
+	screen.focusPanel = 1
+	screen.focusArea = refFocusList
+	screen.rightCursor = 0
+
+	// Down.
+	updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	refScr := updated.(*refInputScreen)
+
+	if refScr.rightCursor != 1 {
+		t.Errorf("rightCursor after down = %d, want 1", refScr.rightCursor)
+	}
+
+	// Up.
+	updated, _ = refScr.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	refScr = updated.(*refInputScreen)
+
+	if refScr.rightCursor != 0 {
+		t.Errorf("rightCursor after up = %d, want 0", refScr.rightCursor)
+	}
+}
+
+func TestRefInputTwoPanelRightPanelEnterLoadsSuggestion(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	deps.Puller = &mockPuller{}
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 120
+	screen.height = 40
+
+	screen.publisherBundles = []suggestion{
+		{namespace: "myorg", slug: "my-bundle", version: "2.0.0", source: "yours"},
+	}
+	screen.publisherLoaded = true
+	screen.rebuildSuggestions()
+
+	// Focus right panel.
+	screen.focusPanel = 1
+	screen.focusArea = refFocusList
+	screen.rightCursor = 0
+
+	_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for enter on right panel suggestion")
+	}
+
+	msg := cmd()
+	pushMsg, ok := msg.(pushScreenMsg)
+
+	if !ok {
+		t.Fatalf("expected pushScreenMsg, got %T", msg)
+	}
+
+	if _, ok := pushMsg.screen.(*loadScreen); !ok {
+		t.Errorf("expected *loadScreen, got %T", pushMsg.screen)
+	}
+}
+
+func TestRefInputLeftPanelFindOnHub(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 120
+	screen.height = 40
+
+	// No recent bundles — "Find on Hub" is at cursor 0.
+	screen.focusPanel = 0
+	screen.focusArea = refFocusList
+	screen.cursor = 0 // "Find on Hub" action (no recents, so index 0 = action)
+
+	_, cmd := screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for enter on Find on Hub")
+	}
+
+	msg := cmd()
+	pushMsg, ok := msg.(pushScreenMsg)
+
+	if !ok {
+		t.Fatalf("expected pushScreenMsg, got %T", msg)
+	}
+
+	if _, ok := pushMsg.screen.(*searchScreen); !ok {
+		t.Errorf("expected *searchScreen, got %T", pushMsg.screen)
+	}
+}
+
+func TestRefInputEmptyStateMessage(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+	screen.width = 80
+	screen.height = 30
+
+	view := screen.View()
+	if !strings.Contains(view, "search the Hub") {
+		t.Error("empty state should suggest searching the Hub")
+	}
+}
+
+func TestRefInputFilteredRecent(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+
+	screen.recentBundles = []suggestion{
+		{namespace: "acme", slug: "agent", version: "1.0.0", source: "recent"},
+		{namespace: "other", slug: "tools", version: "1.0.0", source: "recent"},
+	}
+
+	// No filter.
+	filtered := screen.filteredRecent()
+	if len(filtered) != 2 {
+		t.Errorf("unfiltered recent = %d, want 2", len(filtered))
+	}
+
+	// With filter.
+	screen.input.SetValue("acme")
+	filtered = screen.filteredRecent()
+
+	if len(filtered) != 1 {
+		t.Errorf("filtered recent = %d, want 1", len(filtered))
+	}
+
+	if filtered[0].namespace != "acme" {
+		t.Error("expected filtered result to be acme")
+	}
+}
+
+func TestRefInputFilteredPublisher(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	deps := newTestRefInputDeps()
+	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
+
+	screen.publisherBundles = []suggestion{
+		{namespace: "myorg", slug: "bundleA", version: "1.0.0", source: "yours"},
+		{namespace: "myorg", slug: "bundleB", version: "2.0.0", source: "yours"},
+	}
+
+	filtered := screen.filteredPublisher()
+	if len(filtered) != 2 {
+		t.Errorf("unfiltered publisher = %d, want 2", len(filtered))
+	}
+
+	screen.input.SetValue("bundleA")
+	filtered = screen.filteredPublisher()
+
+	if len(filtered) != 1 {
+		t.Errorf("filtered publisher = %d, want 1", len(filtered))
 	}
 }
 

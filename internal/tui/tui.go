@@ -66,10 +66,17 @@ func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 
 // RunSearch launches the TUI in search mode and returns the user's selection.
 // Returns nil result if the user quit without selecting a bundle.
-func RunSearch(ctx context.Context, searcher BundleSearcher, initialQuery string) (*Result, error) {
+func RunSearch(
+	ctx context.Context,
+	searcher BundleSearcher,
+	puller BundlePuller,
+	harnesses HarnessLister,
+	healthChecker HarnessHealthChecker,
+	initialQuery string,
+) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(ctx, searcher, initialQuery, &sty, &keys)
+	screen := newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys)
 	app := NewApp(screen)
 
 	p := tea.NewProgram(app)
@@ -118,6 +125,33 @@ func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result,
 	return finalApp.Result(), nil
 }
 
+// RunPack launches the TUI in pack mode for the bundle in the working directory.
+// Returns nil result on quit without action.
+func RunPack(ctx context.Context, deps *HomeDeps) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+	screen := newPackScreen(ctx, deps, deps.Packer, &sty, &keys)
+	app := NewApp(screen)
+
+	p := tea.NewProgram(app)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, repoerrors.Errorf("TUI error: %w", err)
+	}
+
+	finalApp, ok := finalModel.(*App)
+	if !ok {
+		return nil, errUnexpectedModel
+	}
+
+	if finalApp.Err() != nil {
+		return nil, finalApp.Err()
+	}
+
+	return finalApp.Result(), nil
+}
+
 // RunLoad launches the TUI in load mode for a specific bundle.
 // Returns the user's action (harness selection) or nil if canceled.
 func RunLoad(
@@ -125,11 +159,12 @@ func RunLoad(
 	searcher BundleSearcher,
 	puller BundlePuller,
 	harnessLister HarnessLister,
+	healthChecker HarnessHealthChecker,
 	namespace, slug, version string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newLoadScreen(ctx, searcher, puller, harnessLister, namespace, slug, version, &sty, &keys)
+	screen := newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys)
 	app := NewApp(screen)
 
 	program := tea.NewProgram(app)

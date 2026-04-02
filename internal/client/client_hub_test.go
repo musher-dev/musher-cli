@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -72,7 +71,7 @@ func TestSearchHubBundles(t *testing.T) {
 				return testutil.JSONResponse(http.StatusOK, `{"data":[],"meta":{"nextCursor":"","hasMore":false}}`), nil
 			})
 
-			result, err := c.SearchHubBundles(context.Background(), tt.query, tt.bundleType, tt.sort, tt.limit, tt.cursor)
+			result, err := c.SearchHubBundles(t.Context(), tt.query, tt.bundleType, tt.sort, tt.limit, tt.cursor)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -111,7 +110,7 @@ func TestSearchHubBundles(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.SearchHubBundles(context.Background(), "skill", "", "", 10, "")
+		result, err := c.SearchHubBundles(t.Context(), "skill", "", "", 10, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -148,7 +147,7 @@ func TestSearchHubBundles(t *testing.T) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{"detail":"internal error"}`), nil
 		})
 
-		_, err := c.SearchHubBundles(context.Background(), "", "", "", 0, "")
+		_, err := c.SearchHubBundles(t.Context(), "", "", "", 0, "")
 		if err == nil {
 			t.Fatal("expected error for 500 status")
 		}
@@ -165,7 +164,7 @@ func TestSearchHubBundles(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `{"data":[],"meta":{"nextCursor":"","hasMore":false}}`), nil
 		})
 
-		_, err := c.SearchHubBundles(context.Background(), "", "", "", 0, "")
+		_, err := c.SearchHubBundles(t.Context(), "", "", "", 0, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -200,7 +199,7 @@ func TestGetHubBundleDetail(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.GetHubBundleDetail(context.Background(), "acme", "my-bundle")
+		result, err := c.GetHubBundleDetail(t.Context(), "acme", "my-bundle")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -233,7 +232,7 @@ func TestGetHubBundleDetail(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.GetHubBundleDetail(context.Background(), "acme", "missing")
+		_, err := c.GetHubBundleDetail(t.Context(), "acme", "missing")
 		if err == nil {
 			t.Fatal("expected error for not found")
 		}
@@ -250,7 +249,7 @@ func TestGetHubBundleDetail(t *testing.T) {
 			return testutil.JSONResponse(http.StatusBadGateway, `{}`), nil
 		})
 
-		_, err := c.GetHubBundleDetail(context.Background(), "acme", "bundle")
+		_, err := c.GetHubBundleDetail(t.Context(), "acme", "bundle")
 		if err == nil {
 			t.Fatal("expected error for 502 status")
 		}
@@ -278,7 +277,7 @@ func TestListPublisherBundles(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ListPublisherBundles(context.Background(), "acme", 2, "page1")
+		result, err := c.ListPublisherBundles(t.Context(), "acme", 2, "page1")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -315,7 +314,7 @@ func TestListPublisherBundles(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `{"data":[],"meta":{"hasMore":false}}`), nil
 		})
 
-		_, err := c.ListPublisherBundles(context.Background(), "acme", 0, "")
+		_, err := c.ListPublisherBundles(t.Context(), "acme", 0, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -332,7 +331,7 @@ func TestListPublisherBundles(t *testing.T) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{}`), nil
 		})
 
-		_, err := c.ListPublisherBundles(context.Background(), "acme", 10, "")
+		_, err := c.ListPublisherBundles(t.Context(), "acme", 10, "")
 		if err == nil {
 			t.Fatal("expected error for 500 status")
 		}
@@ -358,7 +357,7 @@ func TestListHubCategories(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ListHubCategories(context.Background())
+		result, err := c.ListHubCategories(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -391,7 +390,7 @@ func TestListHubCategories(t *testing.T) {
 			return testutil.JSONResponse(http.StatusServiceUnavailable, `{}`), nil
 		})
 
-		_, err := c.ListHubCategories(context.Background())
+		_, err := c.ListHubCategories(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 503 status")
 		}
@@ -413,7 +412,7 @@ func TestDeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `{}`), nil
 		})
 
-		err := c.DeprecateHubBundle(context.Background(), "acme", "old-bundle", "use new-bundle instead")
+		err := c.DeprecateHubBundle(t.Context(), "acme", "old-bundle", "use new-bundle instead")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -434,7 +433,7 @@ func TestDeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNoContent, `{}`), nil
 		})
 
-		err := c.DeprecateHubBundle(context.Background(), "acme", "old-bundle", "")
+		err := c.DeprecateHubBundle(t.Context(), "acme", "old-bundle", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -447,7 +446,7 @@ func TestDeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		err := c.DeprecateHubBundle(context.Background(), "acme", "bundle", "deprecated")
+		err := c.DeprecateHubBundle(t.Context(), "acme", "bundle", "deprecated")
 		if err == nil {
 			t.Fatal("expected error for 403 status")
 		}
@@ -469,7 +468,7 @@ func TestUndeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `{}`), nil
 		})
 
-		err := c.UndeprecateHubBundle(context.Background(), "acme", "restored-bundle")
+		err := c.UndeprecateHubBundle(t.Context(), "acme", "restored-bundle")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -490,7 +489,7 @@ func TestUndeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNoContent, ``), nil
 		})
 
-		err := c.UndeprecateHubBundle(context.Background(), "acme", "bundle")
+		err := c.UndeprecateHubBundle(t.Context(), "acme", "bundle")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -503,7 +502,7 @@ func TestUndeprecateHubBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		err := c.UndeprecateHubBundle(context.Background(), "acme", "bundle")
+		err := c.UndeprecateHubBundle(t.Context(), "acme", "bundle")
 		if err == nil {
 			t.Fatal("expected error for 403 status")
 		}
@@ -529,7 +528,7 @@ func TestGetRunnerNamespaces(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.GetRunnerNamespaces(context.Background())
+		result, err := c.GetRunnerNamespaces(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -550,7 +549,7 @@ func TestGetRunnerNamespaces(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.GetRunnerNamespaces(context.Background())
+		_, err := c.GetRunnerNamespaces(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 404")
 		}
@@ -567,7 +566,7 @@ func TestGetRunnerNamespaces(t *testing.T) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{}`), nil
 		})
 
-		_, err := c.GetRunnerNamespaces(context.Background())
+		_, err := c.GetRunnerNamespaces(t.Context())
 		if err == nil {
 			t.Fatal("expected error")
 		}

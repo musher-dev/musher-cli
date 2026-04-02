@@ -75,7 +75,7 @@ func TestRun(t *testing.T) {
 		return Result{Status: StatusFail, Message: "broken"}
 	})
 
-	results := r.Run(context.Background())
+	results := r.Run(t.Context())
 
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
@@ -113,7 +113,7 @@ func TestRunEmpty(t *testing.T) {
 	t.Parallel()
 
 	r := &Runner{}
-	results := r.Run(context.Background())
+	results := r.Run(t.Context())
 
 	if len(results) != 0 {
 		t.Fatalf("expected 0 results for empty runner, got %d", len(results))
@@ -245,7 +245,7 @@ func TestCheckProxyEnvironment(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			result := checkProxyEnvironment(context.Background())
+			result := checkProxyEnvironment(t.Context())
 			if result.Status != tt.wantStatus {
 				t.Errorf("status = %d, want %d; message = %q", result.Status, tt.wantStatus, result.Message)
 			}
@@ -307,7 +307,7 @@ func TestCheckCustomCABundle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup(t)
 
-			result := checkCustomCABundle(context.Background())
+			result := checkCustomCABundle(t.Context())
 			if result.Status != tt.wantStatus {
 				t.Errorf("status = %d, want %d; message = %q, detail = %q",
 					result.Status, tt.wantStatus, result.Message, result.Detail)
@@ -350,7 +350,7 @@ func TestCheckConfigFile(t *testing.T) {
 				}
 			}
 
-			result := checkConfigFile(context.Background())
+			result := checkConfigFile(t.Context())
 			if result.Status != tt.wantStatus {
 				t.Errorf("status = %d, want %d; message = %q, detail = %q",
 					result.Status, tt.wantStatus, result.Message, result.Detail)
@@ -376,7 +376,7 @@ func TestCheckDirectoryStructure(t *testing.T) {
 		t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
 		t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(root, "run"))
 
-		result := checkDirectoryStructure(context.Background())
+		result := checkDirectoryStructure(t.Context())
 		if result.Status != StatusPass {
 			t.Errorf("status = %d, want Pass; message = %q", result.Status, result.Message)
 		}
@@ -391,7 +391,7 @@ func TestCheckDirectoryStructure(t *testing.T) {
 		t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
 		t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(root, "run"))
 
-		result := checkDirectoryStructure(context.Background())
+		result := checkDirectoryStructure(t.Context())
 		if result.Status != StatusWarn {
 			t.Errorf("status = %d, want Warn; message = %q", result.Status, result.Message)
 		}
@@ -422,7 +422,7 @@ func TestCheckCredentialsFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup(t)
 
-			result := checkCredentialsFile(context.Background())
+			result := checkCredentialsFile(t.Context())
 			if result.Status != tt.wantStatus {
 				t.Errorf("status = %d, want %d; message = %q, detail = %q",
 					result.Status, tt.wantStatus, result.Message, result.Detail)
@@ -435,7 +435,7 @@ func TestCheckCLIVersion(t *testing.T) {
 	t.Run("disabled updates", func(t *testing.T) {
 		t.Setenv("MUSHER_UPDATE_DISABLED", "1")
 
-		result := checkCLIVersion(context.Background())
+		result := checkCLIVersion(t.Context())
 
 		// Should pass with note about disabled
 		if result.Status != StatusPass && result.Status != StatusWarn {
@@ -455,7 +455,7 @@ func TestCheckAPIConnectivity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	result := checkAPIConnectivity(ctx)
@@ -476,7 +476,7 @@ func TestCheckClockSkew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	result := checkClockSkew(ctx)
@@ -492,7 +492,7 @@ func TestCheckAuthentication(t *testing.T) {
 	t.Setenv("MUSHER_DATA_HOME", filepath.Join(dir, "data"))
 	t.Setenv("MUSHER_API_KEY", "")
 
-	result := checkAuthentication(context.Background())
+	result := checkAuthentication(t.Context())
 
 	if result.Status != StatusFail {
 		t.Errorf("status = %d, want Fail with no credentials; message = %q", result.Status, result.Message)
@@ -514,7 +514,7 @@ func TestCheckDirectoryStructureNotADir(t *testing.T) {
 	t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
 	t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(root, "run"))
 
-	result := checkDirectoryStructure(context.Background())
+	result := checkDirectoryStructure(t.Context())
 	if result.Status != StatusWarn {
 		t.Errorf("status = %d, want Warn when path is a file; message = %q", result.Status, result.Message)
 	}
@@ -550,7 +550,7 @@ func TestCheckDirectoryStructureParentIsFile(t *testing.T) {
 	t.Setenv("MUSHER_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
 
-	result := checkDirectoryStructure(context.Background())
+	result := checkDirectoryStructure(t.Context())
 	if result.Status != StatusWarn {
 		t.Errorf("status = %d, want Warn when parent is a file; message = %q, detail = %q",
 			result.Status, result.Message, result.Detail)
@@ -582,7 +582,7 @@ func TestCheckDirectoryStructureNotWritable(t *testing.T) {
 	t.Setenv("MUSHER_CACHE_HOME", filepath.Join(root, "cache"))
 	t.Setenv("MUSHER_RUNTIME_DIR", filepath.Join(root, "run"))
 
-	result := checkDirectoryStructure(context.Background())
+	result := checkDirectoryStructure(t.Context())
 	// Either fail (not writable) or warn (some missing) depending on which directory is checked first
 	if result.Status == StatusPass {
 		t.Errorf("expected non-pass status when config dir is read-only; got %q", result.Message)

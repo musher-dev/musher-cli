@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"testing"
@@ -28,7 +27,7 @@ func TestResolveBundle(t *testing.T) {
 			}`), nil
 		})
 
-		result, err := c.ResolveBundle(context.Background(), "acme", "tool", "1.0.0")
+		result, err := c.ResolveBundle(t.Context(), "acme", "tool", "1.0.0")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -57,7 +56,7 @@ func TestResolveBundle(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.ResolveBundle(context.Background(), "acme", "missing", "1.0.0")
+		_, err := c.ResolveBundle(t.Context(), "acme", "missing", "1.0.0")
 		if err == nil {
 			t.Fatal("expected error for not found")
 		}
@@ -80,7 +79,7 @@ func TestPullBundle(t *testing.T) {
 		}`), nil
 	})
 
-	_, err := c.PullBundle(context.Background(), "acme", "tool", "1.0.0")
+	_, err := c.PullBundle(t.Context(), "acme", "tool", "1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +99,7 @@ func TestFetchBundleAsset(t *testing.T) {
 			return testutil.JSONResponse(http.StatusOK, `asset content`), nil
 		})
 
-		body, err := c.FetchBundleAsset(context.Background(), "asset-123")
+		body, err := c.FetchBundleAsset(t.Context(), "asset-123")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -119,7 +118,7 @@ func TestFetchBundleAsset(t *testing.T) {
 			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
 		})
 
-		_, err := c.FetchBundleAsset(context.Background(), "missing")
+		_, err := c.FetchBundleAsset(t.Context(), "missing")
 		if err == nil {
 			t.Fatal("expected error for not found")
 		}
@@ -138,7 +137,7 @@ func TestFetchHubBundleAsset(t *testing.T) {
 		return testutil.JSONResponse(http.StatusOK, `hub asset content`), nil
 	})
 
-	body, err := c.FetchHubBundleAsset(context.Background(), "acme", "tool", "SKILL.md", "1.0.0")
+	body, err := c.FetchHubBundleAsset(t.Context(), "acme", "tool", "SKILL.md", "1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

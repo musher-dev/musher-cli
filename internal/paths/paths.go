@@ -1,3 +1,4 @@
+// Package paths resolves musher runtime, config, cache, and state paths.
 package paths
 
 import (

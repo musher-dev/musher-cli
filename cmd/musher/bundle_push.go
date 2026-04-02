@@ -273,7 +273,7 @@ func executePush(
 
 		spin.StopWithFailure("Push failed")
 
-		retryOrErr := handlePushError(cmd, out, c, bundle, req, p, workDir, pushErr, attempt, publishToHub)
+		retryOrErr := handlePushError(ctx, cmd, out, c, bundle, req, p, workDir, pushErr, attempt, publishToHub)
 		if !errors.Is(retryOrErr, errPushRetry) {
 			return retryOrErr
 		}
@@ -285,6 +285,7 @@ func executePush(
 var errPushRetry = errors.New("retry push")
 
 func handlePushError(
+	ctx context.Context,
 	cmd *cobra.Command,
 	out *output.Writer,
 	c *client.Client,
@@ -306,13 +307,13 @@ func handlePushError(
 	}
 
 	if httpErr.Status == http.StatusForbidden && isVisibilityError(httpErr.Detail) {
-		recovered, recoverErr := handleVisibilityRecovery(cmd, out, workDir, bundle, c, req, pushErr)
+		recovered, recoverErr := handleVisibilityRecovery(ctx, cmd, out, workDir, bundle, c, req, pushErr)
 		if recoverErr != nil {
 			return recoverErr
 		}
 
 		if recovered && publishToHub {
-			return hubPublishAfterPush(cmd.Context(), out, c, bundle)
+			return hubPublishAfterPush(ctx, out, c, bundle)
 		}
 
 		return nil
@@ -459,6 +460,7 @@ func isVisibilityError(detail string) bool {
 // when a 403 indicates the user's plan doesn't allow more private bundles.
 // Returns (true, nil) when recovery succeeded and the push was retried successfully.
 func handleVisibilityRecovery(
+	ctx context.Context,
 	cmd *cobra.Command,
 	out *output.Writer,
 	workDir string,
@@ -501,7 +503,7 @@ func handleVisibilityRecovery(
 	spin := out.Spinner("Retrying push " + bundle.VersionRef())
 	spin.Start()
 
-	if retryErr := c.PushBundle(cmd.Context(), bundle.Namespace, bundle.Slug, req); retryErr != nil {
+	if retryErr := c.PushBundle(ctx, bundle.Namespace, bundle.Slug, req); retryErr != nil {
 		spin.StopWithFailure("Push failed")
 		return false, clierrors.PublishFailed(retryErr)
 	}

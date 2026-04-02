@@ -1,3 +1,4 @@
+// Package observability provides logging and telemetry helpers for the CLI.
 package observability
 
 import (

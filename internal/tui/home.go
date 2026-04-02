@@ -108,6 +108,7 @@ func buildMenuItems() []menuItem {
 		// CREATE — authoring lifecycle.
 		{label: "New bundle", description: "Create a new bundle definition", hotkey: 'i', section: "CREATE"},
 		{label: "Validate bundle", description: "Check bundle definition and assets", hotkey: 'v', section: "CREATE"},
+		{label: "Pack bundle", description: "Validate and cache bundle locally for testing", hotkey: 'k', section: "CREATE"},
 		{label: "Push to registry", description: "Validate and push a bundle", hotkey: 'p', section: "CREATE"},
 
 		// MANAGE — system maintenance.
@@ -307,6 +308,10 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 		cmd := h.pushValidateScreen()
 
 		return h, cmd
+	case 'k':
+		cmd := h.pushPackScreen()
+
+		return h, cmd
 	case 'p':
 		cmd := h.pushPushScreen()
 
@@ -318,7 +323,7 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 
 func (h *homeScreen) pushSearchScreen() tea.Cmd {
 	return func() tea.Msg {
-		screen := newSearchScreen(h.ctx, h.deps.Searcher, "", h.styles, h.keys)
+		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Puller, h.deps.Harnesses, h.deps.HealthChecker, "", h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}
@@ -359,6 +364,14 @@ func (h *homeScreen) pushNewBundleScreen() tea.Cmd {
 func (h *homeScreen) pushValidateScreen() tea.Cmd {
 	return func() tea.Msg {
 		screen := newValidateScreen(h.ctx, h.deps, h.styles, h.keys)
+
+		return pushScreenMsg{screen: screen}
+	}
+}
+
+func (h *homeScreen) pushPackScreen() tea.Cmd {
+	return func() tea.Msg {
+		screen := newPackScreen(h.ctx, h.deps, h.deps.Packer, h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}

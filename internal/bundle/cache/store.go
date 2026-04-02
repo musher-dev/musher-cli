@@ -38,6 +38,11 @@ const (
 	DefaultRefTTL      = 300   // 5 minutes
 )
 
+// LocalHostID is the reserved host identifier for locally packed bundles.
+// The underscore prefix is impossible for real hostnames (DNS RFC), so it
+// cannot collide with registry-derived host IDs.
+const LocalHostID = "_local"
+
 // cacheDirTagContent is the standard CACHEDIR.TAG content per
 // https://bford.info/cachedir/spec.html .
 const cacheDirTagContent = "Signature: 8a477f597d28d172789f06886806bc55\n" +
@@ -280,6 +285,11 @@ func (s *Store) IsManifestFresh(hostID, namespace, slug, version string) bool {
 	meta, err := s.LoadManifestMeta(hostID, namespace, slug, version)
 	if err != nil {
 		return false
+	}
+
+	// TTL <= 0 means the entry never expires (e.g. locally packed bundles).
+	if meta.TTL <= 0 {
+		return true
 	}
 
 	expiry := meta.FetchedAt.Add(time.Duration(meta.TTL) * time.Second)
@@ -608,6 +618,11 @@ func (s *Store) removeExpiredManifests(dir string) (int, error) {
 			return nil //nolint:nilerr // skip malformed metadata
 		}
 
+		// TTL <= 0 means the entry never expires (e.g. locally packed bundles).
+		if meta.TTL <= 0 {
+			return nil
+		}
+
 		expiry := meta.FetchedAt.Add(time.Duration(meta.TTL) * time.Second)
 		if time.Now().Before(expiry) {
 			return nil // still fresh
@@ -653,8 +668,9 @@ func (s *Store) removeExpiredRefs(dir string) (int, error) {
 			return nil //nolint:nilerr // skip malformed refs
 		}
 
-		if time.Now().Before(ref.ExpiresAt) {
-			return nil // still fresh
+		// Zero ExpiresAt means the ref never expires (e.g. locally packed bundles).
+		if ref.ExpiresAt.IsZero() || time.Now().Before(ref.ExpiresAt) {
+			return nil // still fresh or never-expire
 		}
 
 		_ = os.Remove(path) //nolint:errcheck,gosec // best-effort cleanup

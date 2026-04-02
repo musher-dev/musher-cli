@@ -38,6 +38,9 @@ const (
 	validationStepCount = 4
 )
 
+// validatorUnavailableMsg is the error detail shown when no BundleValidator is configured.
+const validatorUnavailableMsg = "bundle validation not available"
+
 // validateCheck is a single validation step with its result.
 type validateCheck struct {
 	label   string

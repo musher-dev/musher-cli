@@ -1,3 +1,4 @@
+// Package safeio provides trusted filesystem helpers for musher-managed paths.
 package safeio
 
 import (

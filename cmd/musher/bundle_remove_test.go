@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -31,15 +32,7 @@ func TestNewRemoveCmdFlags(t *testing.T) {
 func TestNewRemoveCmdAlias(t *testing.T) {
 	cmd := newBundleRemoveCmd()
 
-	found := false
-
-	for _, alias := range cmd.Aliases {
-		if alias == "rm" {
-			found = true
-
-			break
-		}
-	}
+	found := slices.Contains(cmd.Aliases, "rm")
 
 	if !found {
 		t.Error("missing alias 'rm'")

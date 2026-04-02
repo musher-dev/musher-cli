@@ -27,13 +27,9 @@ func maybeStartAgent(currentVersion string) {
 		AutoApply:      cfg.UpdateAutoApply(),
 	}
 
-	agentWG.Add(1)
-
-	go func() {
-		defer agentWG.Done()
-
+	agentWG.Go(func() {
 		_ = update.RunAgent(agentCfg) //nolint:errcheck // errors are logged and persisted in state
-	}()
+	})
 }
 
 // waitForAgent waits up to timeout for the background agent goroutine to finish,

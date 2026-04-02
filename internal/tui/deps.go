@@ -31,6 +31,11 @@ type HarnessLister interface {
 	Get(name string) (*harness.Provider, bool)
 }
 
+// HarnessHealthChecker runs health diagnostics on harness providers.
+type HarnessHealthChecker interface {
+	CheckAllHealth(ctx context.Context) []*harness.HealthReport
+}
+
 // AuthChecker checks authentication status.
 // *client.Client satisfies this interface via GetPublisherIdentity.
 type AuthChecker interface {
@@ -168,6 +173,7 @@ type HomeDeps struct {
 	Searcher         BundleSearcher
 	Puller           BundlePuller
 	Harnesses        HarnessLister
+	HealthChecker    HarnessHealthChecker  // nil when health checks unavailable.
 	Auth             AuthChecker           // nil when unauthenticated — home screen handles gracefully.
 	AuthMgr          AuthManager           // nil when auth management unavailable.
 	Cache            CacheSummarizer       // nil when cache unavailable.
@@ -175,6 +181,7 @@ type HomeDeps struct {
 	Config           ConfigManager         // nil when config unavailable.
 	Validator        BundleValidator       // nil when bundledef operations unavailable.
 	Pusher           BundlePusher          // nil when unauthenticated — push screen handles gracefully.
+	Packer           BundlePacker          // nil when cache unavailable.
 	DefWriter        BundleDefWriter       // nil when workdir is read-only.
 	PublisherBundles PublisherBundleLister // nil when publisher listing unavailable.
 	APIURL           string                // API endpoint for auth operations.

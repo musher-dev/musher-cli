@@ -4,8 +4,13 @@
 version: "2"
 
 run:
+  relative-path-mode: gomod
   timeout: 5m
   tests: true
+  modules-download-mode: readonly
+  enable-build-vcs: true
+  allow-parallel-runners: true
+  allow-serial-runners: true
 
 linters:
   default: none
@@ -57,10 +62,22 @@ linters:
     - nakedret        # Naked returns in long functions
     - gocognit        # Cognitive complexity
     - wsl_v5          # Whitespace style linting
+    - contextcheck    # Prefer inherited contexts
+    - canonicalheader # Canonical HTTP header keys
+    - modernize       # Modern Go simplifications
+    - musttag         # Require serialization tags
+    - loggercheck     # Structured logger argument correctness
+    - spancheck       # OpenTelemetry span correctness
+    - gocheckcompilerdirectives # Validate //go: directives
+    - gomoddirectives # Keep go.mod directives disciplined
+    - errchkjson      # Catch bad JSON encode/decode usage
+    - asciicheck      # Ban non-ASCII identifiers
   settings:
     govet:
       enable:
         - shadow        # Variable shadowing detection
+    copyloopvar:
+      check-alias: true
     errcheck:
       check-type-assertions: true
       check-blank: true
@@ -89,7 +106,12 @@ linters:
         - name: increment-decrement
         - name: range
         - name: receiver-naming
+        - name: range-val-in-closure
+        - name: package-comments
+        - name: comment-spacings
+        - name: superfluous-else
         - name: time-naming
+        - name: time-equal
         - name: unexported-return
         - name: var-declaration
         - name: var-naming
@@ -208,6 +230,14 @@ linters:
       comparison: true
     misspell:
       locale: "US"
+    usetesting:
+      os-create-temp: true
+      os-mkdir-temp: true
+      os-setenv: true
+      os-temp-dir: true
+      os-chdir: true
+      context-background: true
+      context-todo: true
     varnamelen:
       min-name-length: 3
       check-receiver: false
@@ -256,7 +286,16 @@ linters:
       max-func-lines: 15
     gocognit:
       min-complexity: 20
+    predeclared:
+      qualified-name: true
+    spancheck:
+      checks:
+        - end
+        - record-error
+        - set-status
   exclusions:
+    generated: strict
+    warn-unused: true
     rules:
       - path: _test\.go
         linters:
@@ -273,6 +312,8 @@ linters:
       - path: _test\.go
         linters:
           - gocognit
+          - contextcheck
+          - musttag
       - path: internal/tui/
         linters:
           - forbidigo    # TUI uses bubbletea rendering, not fmt.Print to stdout

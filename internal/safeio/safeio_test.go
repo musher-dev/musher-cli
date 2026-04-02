@@ -637,7 +637,7 @@ func TestWriteFileAtomic_MultipleOverwrites(t *testing.T) {
 	p := filepath.Join(dir, "multi")
 
 	for i := range 10 {
-		data := []byte(fmt.Sprintf("iteration-%d", i))
+		data := fmt.Appendf(nil, "iteration-%d", i)
 		if err := WriteFileAtomic(p, data, 0o600); err != nil {
 			t.Fatalf("iteration %d: %v", i, err)
 		}
@@ -748,7 +748,7 @@ func TestWriteFileAtomic_ConcurrentWrites(t *testing.T) {
 
 	for i := range 5 {
 		go func(n int) {
-			done <- WriteFileAtomic(p, []byte(fmt.Sprintf("writer-%d", n)), 0o600)
+			done <- WriteFileAtomic(p, fmt.Appendf(nil, "writer-%d", n), 0o600)
 		}(i)
 	}
 

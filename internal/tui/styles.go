@@ -24,6 +24,9 @@ const (
 	searchMaxVisibleMin = 5  // minimum visible results in sliding window
 	searchMaxVisibleMax = 8  // maximum visible results on tall terminals
 	searchPanelMax      = 80 // max width for search/detail panels
+
+	// Publisher trust tier values.
+	trustTierVerified = "verified"
 )
 
 // layoutMode classifies the current terminal width for responsive rendering.
@@ -63,10 +66,10 @@ func clampMenuWidth(termWidth int) int {
 }
 
 // adaptiveMaxVisible returns the number of result items to show based on terminal height.
-// Each result card is ~4 lines (name, summary, stats, separator). Chrome (breadcrumb,
-// input panel, footer, borders) uses ~12 lines.
+// Each result card is ~5 lines (display name, ref, summary, stats, separator). Chrome
+// (breadcrumb, input panel, footer, borders) uses ~12 lines.
 func adaptiveMaxVisible(termHeight int) int {
-	available := (termHeight - 12) / 4
+	available := (termHeight - 12) / 5
 	return max(searchMaxVisibleMin, min(available, searchMaxVisibleMax))
 }
 
@@ -106,6 +109,10 @@ type styles struct {
 	panelBorder       lipgloss.Style
 	panelBorderActive lipgloss.Style
 
+	// Action buttons (compact bordered).
+	actionBtn       lipgloss.Style
+	actionBtnActive lipgloss.Style
+
 	// Context panel.
 	contextLabel lipgloss.Style
 
@@ -123,6 +130,11 @@ type styles struct {
 	statusBar   lipgloss.Style
 	resultItem  lipgloss.Style
 	resultLabel lipgloss.Style
+	resultRef   lipgloss.Style
+
+	// Filter bar.
+	filterPill       lipgloss.Style
+	filterPillActive lipgloss.Style
 
 	// Loading / empty states.
 	placeholder lipgloss.Style
@@ -131,6 +143,11 @@ type styles struct {
 	fieldLabel lipgloss.Style
 	fieldError lipgloss.Style
 	checkbox   lipgloss.Style
+
+	// Progress pipeline steps.
+	stepDone    lipgloss.Style
+	stepActive  lipgloss.Style
+	stepPending lipgloss.Style
 }
 
 // formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
@@ -251,6 +268,16 @@ func newStyles(isDark bool) styles {
 			BorderForeground(colorAccent).
 			Padding(1, 2),
 
+		// Action buttons (compact bordered).
+		actionBtn: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBorder).
+			Padding(0, 2),
+		actionBtnActive: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorAccent).
+			Padding(0, 2),
+
 		// Context panel.
 		contextLabel: lipgloss.NewStyle().
 			Foreground(colorTextSec).
@@ -281,6 +308,15 @@ func newStyles(isDark bool) styles {
 			PaddingLeft(2),
 		resultLabel: lipgloss.NewStyle().
 			Bold(true),
+		resultRef: lipgloss.NewStyle().
+			Foreground(colorTextSec),
+
+		// Filter bar.
+		filterPill: lipgloss.NewStyle().
+			Foreground(colorDim),
+		filterPillActive: lipgloss.NewStyle().
+			Foreground(colorAccent).
+			Bold(true),
 
 		// Loading / empty states.
 		placeholder: lipgloss.NewStyle().
@@ -295,5 +331,14 @@ func newStyles(isDark bool) styles {
 			Foreground(colorError),
 		checkbox: lipgloss.NewStyle().
 			Foreground(colorSuccess),
+
+		// Progress pipeline steps.
+		stepDone: lipgloss.NewStyle().
+			Foreground(colorSuccess),
+		stepActive: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorAccent),
+		stepPending: lipgloss.NewStyle().
+			Foreground(colorMuted),
 	}
 }

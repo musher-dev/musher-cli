@@ -119,3 +119,57 @@ func TestRenderUpdateNotice_UpdateAvailable(t *testing.T) {
 		t.Errorf("expected 'musher update' hint in output, got %q", got)
 	}
 }
+
+func TestRenderUpdateNotice_HomebrewUpgrade(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", dir)
+
+	state := `{"latestVersion":"2.0.0","currentVersion":"1.0.0","installSource":"homebrew"}`
+	if err := os.WriteFile(filepath.Join(dir, "update-check.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+
+	out := output.NewWriter(&buf, &buf, &terminal.Info{})
+
+	renderUpdateNotice(out, "1.0.0")
+
+	got := buf.String()
+	if got == "" {
+		t.Fatal("expected update notice output, got nothing")
+	}
+
+	if !bytes.Contains(buf.Bytes(), []byte("v1.0.0")) || !bytes.Contains(buf.Bytes(), []byte("v2.0.0")) {
+		t.Errorf("expected version info in output, got %q", got)
+	}
+}
+
+func TestRenderUpdateNotice_StagedPending(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", dir)
+
+	state := `{"latestVersion":"2.0.0","currentVersion":"1.0.0","installSource":"standalone","stagedVersion":"2.0.0","stagedAt":"2026-01-01T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, "update-check.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+
+	out := output.NewWriter(&buf, &buf, &terminal.Info{})
+
+	renderUpdateNotice(out, "1.0.0")
+
+	got := buf.String()
+	if got == "" {
+		t.Fatal("expected update notice output, got nothing")
+	}
+
+	if !bytes.Contains(buf.Bytes(), []byte("v2.0.0")) {
+		t.Errorf("expected staged version in output, got %q", got)
+	}
+
+	if !bytes.Contains(buf.Bytes(), []byte("staged")) {
+		t.Errorf("expected 'staged' in output, got %q", got)
+	}
+}

@@ -304,10 +304,7 @@ func (a *authScreen) renderTwoPanel() string {
 
 	rightContent := a.renderDetailContent()
 
-	rightW := a.width - panelW - panelContentOffset - twoPanelGap
-	if rightW < 20 {
-		rightW = 20
-	}
+	rightW := max(a.width-panelW-panelContentOffset-twoPanelGap, 20)
 
 	rightPanel := renderPanel(a.styles, "Details", rightContent, rightW, a.focusArea == 1)
 

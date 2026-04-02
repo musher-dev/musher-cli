@@ -1,7 +1,6 @@
 package observability
 
 import (
-	"context"
 	"testing"
 )
 
@@ -39,7 +38,7 @@ func TestIsTelemetryEnabled(t *testing.T) {
 func TestNoopShutdown(t *testing.T) {
 	t.Parallel()
 
-	err := noopShutdown(context.Background())
+	err := noopShutdown(t.Context())
 	if err != nil {
 		t.Fatalf("noopShutdown error = %v", err)
 	}
@@ -48,12 +47,12 @@ func TestNoopShutdown(t *testing.T) {
 func TestSetupTelemetryDisabled(t *testing.T) {
 	t.Parallel()
 
-	shutdown, err := SetupTelemetry(context.Background(), nil)
+	shutdown, err := SetupTelemetry(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("SetupTelemetry(nil) error = %v", err)
 	}
 
-	if err := shutdown(context.Background()); err != nil {
+	if err := shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown error = %v", err)
 	}
 }
@@ -65,12 +64,12 @@ func TestSetupTelemetryDisabledExplicit(t *testing.T) {
 		Enabled: false,
 	}
 
-	shutdown, err := SetupTelemetry(context.Background(), cfg)
+	shutdown, err := SetupTelemetry(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("SetupTelemetry(disabled) error = %v", err)
 	}
 
-	if err := shutdown(context.Background()); err != nil {
+	if err := shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown error = %v", err)
 	}
 }
@@ -97,7 +96,7 @@ func TestSetupTelemetryEnabled(t *testing.T) {
 		Environment: "test",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	shutdown, err := SetupTelemetry(ctx, cfg)
 	if err != nil {
@@ -120,7 +119,7 @@ func TestSetupTelemetryDefaults(t *testing.T) {
 		Endpoint: "localhost:1",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	shutdown, err := SetupTelemetry(ctx, cfg)
 	if err != nil {
@@ -141,7 +140,7 @@ func TestSetupTelemetryWithEnvDefaults(t *testing.T) {
 		Endpoint: "localhost:1",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	shutdown, err := SetupTelemetry(ctx, cfg)
 	if err != nil {
@@ -160,7 +159,7 @@ func TestSetupTelemetryWithCommit(t *testing.T) {
 		Commit:   "deadbeef",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	shutdown, err := SetupTelemetry(ctx, cfg)
 	if err != nil {

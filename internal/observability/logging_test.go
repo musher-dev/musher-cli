@@ -232,7 +232,7 @@ func TestWithLoggerAndFromContext(t *testing.T) {
 	t.Run("returns default when no logger in context", func(t *testing.T) {
 		t.Parallel()
 
-		logger := FromContext(context.Background())
+		logger := FromContext(t.Context())
 		if logger == nil {
 			t.Fatal("FromContext returned nil")
 		}
@@ -242,7 +242,7 @@ func TestWithLoggerAndFromContext(t *testing.T) {
 		t.Parallel()
 
 		original := slog.New(slog.NewTextHandler(os.Stderr, nil))
-		ctx := WithLogger(context.Background(), original)
+		ctx := WithLogger(t.Context(), original)
 		got := FromContext(ctx)
 
 		if got != original {
@@ -253,7 +253,7 @@ func TestWithLoggerAndFromContext(t *testing.T) {
 	t.Run("nil logger in context falls back to default", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.WithValue(context.Background(), contextKey{}, (*slog.Logger)(nil))
+		ctx := context.WithValue(t.Context(), contextKey{}, (*slog.Logger)(nil))
 		logger := FromContext(ctx)
 
 		if logger == nil {

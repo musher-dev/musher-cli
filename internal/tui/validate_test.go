@@ -87,7 +87,7 @@ func TestValidateScreen_Init_NoValidator(t *testing.T) {
 	keys := defaultKeyMap()
 
 	deps := &HomeDeps{WorkDir: "/tmp/test"}
-	screen := newValidateScreen(context.Background(), deps, &sty, &keys)
+	screen := newValidateScreen(t.Context(), deps, &sty, &keys)
 	screen.width = 80
 	screen.height = 24
 

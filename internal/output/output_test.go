@@ -2,7 +2,6 @@ package output
 
 import (
 	"bytes"
-	"context"
 	"strings"
 	"testing"
 
@@ -332,7 +331,7 @@ func TestWithContextAndFromContext(t *testing.T) {
 	t.Parallel()
 
 	w, _, _ := newTestWriter()
-	ctx := w.WithContext(context.Background())
+	ctx := w.WithContext(t.Context())
 	got := FromContext(ctx)
 
 	if got != w {
@@ -341,7 +340,7 @@ func TestWithContextAndFromContext(t *testing.T) {
 }
 
 func TestFromContextDefault(t *testing.T) {
-	got := FromContext(context.Background())
+	got := FromContext(t.Context())
 
 	if got == nil {
 		t.Fatal("FromContext with empty context should return default, not nil")

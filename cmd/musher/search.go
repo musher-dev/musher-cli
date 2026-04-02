@@ -48,12 +48,18 @@ falls back to batch output.`,
 			apiURL := configForPublicClient()
 			apiClient := newPublicAPIClient(apiURL)
 
-			result, err := tui.RunSearch(cmd.Context(), apiClient, query)
+			harnessReg := newHarnessRegistry()
+			healthChecker := newRegistryHealthChecker(harnessReg)
+
+			result, err := tui.RunSearch(cmd.Context(), apiClient, apiClient, harnessReg, healthChecker, query)
 			if err != nil {
 				return repoerrors.Errorf("search: %w", err)
 			}
 
-			// If the user selected a bundle to load, print the reference.
+			if result != nil && result.Action == actionLoad && result.Harness != "" {
+				return runBundleFromTUIResult(cmd.Context(), out, result)
+			}
+
 			if result != nil && result.Action == actionLoad {
 				ref := result.Namespace + "/" + result.Slug
 				if result.Version != "" {
@@ -61,7 +67,8 @@ falls back to batch output.`,
 				}
 
 				out.Success("Selected: %s", ref)
-				out.Info("Run: musher load %s", ref)
+				out.Info("No harness selected. Install a harness and run:")
+				out.Muted("  musher load %s", ref)
 			}
 
 			return nil

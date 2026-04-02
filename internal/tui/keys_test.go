@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
@@ -29,15 +30,7 @@ func TestDefaultKeyMap(t *testing.T) {
 			t.Parallel()
 
 			boundKeys := tt.binding.Keys()
-			found := false
-
-			for _, k := range boundKeys {
-				if k == tt.wantKey {
-					found = true
-
-					break
-				}
-			}
+			found := slices.Contains(boundKeys, tt.wantKey)
 
 			if !found {
 				t.Errorf("binding %q does not contain key %q, has %v", tt.name, tt.wantKey, boundKeys)

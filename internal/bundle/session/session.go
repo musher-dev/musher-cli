@@ -45,11 +45,18 @@ type LoadSession struct {
 	once     sync.Once
 }
 
+// AgentTransformFunc adapts agent file content for a target harness.
+// It receives raw file bytes and the filename, and returns transformed content.
+type AgentTransformFunc func(content []byte, filename string) ([]byte, error)
+
 // PrepareLoadSession creates a LoadSession by materializing all bundle assets
 // from the cache into a harness-native layout.
+// The agentTransform parameter, when non-nil, is applied to agent_spec assets
+// before writing them to adapt frontmatter for the target harness.
 func PrepareLoadSession(
 	store *cache.Store,
 	spec *harness.Spec,
+	agentTransform AgentTransformFunc,
 	manifest *cache.BundleManifest,
 	projectDir string,
 ) (*LoadSession, error) {
@@ -63,7 +70,7 @@ func PrepareLoadSession(
 		return nil, err
 	}
 
-	if err := materializeLayers(sess, store, spec, manifest, mode, baseDir, projectDir); err != nil {
+	if err := materializeLayers(sess, store, spec, agentTransform, manifest, mode, baseDir, projectDir); err != nil {
 		sess.Cleanup()
 
 		return nil, err
@@ -109,6 +116,7 @@ func materializeLayers(
 	sess *LoadSession,
 	store *cache.Store,
 	spec *harness.Spec,
+	agentTransform AgentTransformFunc,
 	manifest *cache.BundleManifest,
 	mode, baseDir, projectDir string,
 ) error {
@@ -122,7 +130,7 @@ func materializeLayers(
 			return repoerrors.Errorf("read asset %s: %w", layer.LogicalPath, err)
 		}
 
-		if err := materializeLayer(sess, layer.AssetType, layer.LogicalPath, spec, mode, baseDir, content, dirs, &toolContents); err != nil {
+		if err := materializeLayer(sess, layer.AssetType, layer.LogicalPath, spec, agentTransform, mode, baseDir, content, dirs, &toolContents); err != nil {
 			return repoerrors.Errorf("materialize %s: %w", layer.LogicalPath, err)
 		}
 	}
@@ -137,6 +145,7 @@ func materializeLayer(
 	sess *LoadSession,
 	assetType, logicalPath string,
 	spec *harness.Spec,
+	agentTransform AgentTransformFunc,
 	mode, baseDir string,
 	content []byte,
 	dirs *createdDirs,
@@ -149,8 +158,18 @@ func materializeLayer(
 		return sess.materializeWithCleanup(mode, baseDir, filepath.Join(spec.Assets.SkillDir, filepath.Dir(relPath)), filepath.Base(relPath), content, dirs)
 	case "agent_spec":
 		relPath := assetRelativePath(logicalPath)
+		filename := filepath.Base(relPath)
 
-		return sess.materializeWithCleanup(mode, baseDir, filepath.Join(spec.Assets.AgentDir, filepath.Dir(relPath)), filepath.Base(relPath), content, dirs)
+		if agentTransform != nil {
+			var err error
+
+			content, err = agentTransform(content, filename)
+			if err != nil {
+				return repoerrors.Errorf("transform agent %s for %s: %w", filename, spec.Name, err)
+			}
+		}
+
+		return sess.materializeWithCleanup(mode, baseDir, filepath.Join(spec.Assets.AgentDir, filepath.Dir(relPath)), filename, content, dirs)
 	case "toolset":
 		*toolContents = append(*toolContents, content)
 	}
