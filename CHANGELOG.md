@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.8](https://github.com/musher-dev/musher-cli/compare/v0.3.7...v0.3.8) (2026-04-02)
+
+
+### Features
+
+* add bundle pack command for local testing ([b5b2501](https://github.com/musher-dev/musher-cli/commit/b5b250139aef4705d9704f90a9ff964146c7443e))
+* add bundle pack command for local testing ([9c4f176](https://github.com/musher-dev/musher-cli/commit/9c4f176f07121ad3f6ee293c0285430289ace461))
+
+
+### Bug Fixes
+
+* set TMP/TEMP env vars in runtime root test for Windows ([ace90e9](https://github.com/musher-dev/musher-cli/commit/ace90e93122cd254fb11224a899e401527cc5f34))
+
 ## [0.3.7](https://github.com/musher-dev/musher-cli/compare/v0.3.6...v0.3.7) (2026-04-01)
 
 
