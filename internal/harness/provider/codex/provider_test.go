@@ -37,12 +37,12 @@ func TestModuleSpecFields(t *testing.T) {
 
 	spec := codex.Module.Spec
 
-	if spec.BundleDir.Mode != "add_dir" {
-		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "add_dir")
+	if spec.BundleDir.Mode != "cwd" {
+		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "cwd")
 	}
 
-	if spec.BundleDir.Flag != "--add-dir" {
-		t.Errorf("spec.BundleDir.Flag = %q, want %q", spec.BundleDir.Flag, "--add-dir")
+	if spec.BundleDir.Flag != "" {
+		t.Errorf("spec.BundleDir.Flag = %q, want empty", spec.BundleDir.Flag)
 	}
 
 	if spec.Assets.SkillDir != ".agents/skills" {
@@ -59,6 +59,18 @@ func TestModuleSpecFields(t *testing.T) {
 
 	if spec.MCP.ConfigPath != ".codex/config.toml" {
 		t.Errorf("spec.MCP.ConfigPath = %q, want %q", spec.MCP.ConfigPath, ".codex/config.toml")
+	}
+}
+
+func TestModuleAgentTransform(t *testing.T) {
+	t.Parallel()
+
+	if codex.Module.AgentTransform == nil {
+		t.Fatal("codex.Module.AgentTransform is nil")
+	}
+
+	if codex.Module.AgentFileExt != ".toml" {
+		t.Errorf("codex.Module.AgentFileExt = %q, want %q", codex.Module.AgentFileExt, ".toml")
 	}
 }
 
@@ -82,6 +94,14 @@ func TestModuleRegistration(t *testing.T) {
 	}
 
 	_ = prov.Available()
+
+	if prov.AgentTransform == nil {
+		t.Error("provider.AgentTransform is nil after registration")
+	}
+
+	if prov.AgentFileExt != ".toml" {
+		t.Errorf("provider.AgentFileExt = %q, want %q", prov.AgentFileExt, ".toml")
+	}
 
 	names := reg.Names()
 	if len(names) != 1 || names[0] != "codex" {

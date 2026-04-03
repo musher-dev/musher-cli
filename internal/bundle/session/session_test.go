@@ -136,6 +136,29 @@ func TestBackupIfExists(t *testing.T) {
 			t.Error("expected nil restore func")
 		}
 	})
+
+	t.Run("intermediate path is a file", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Create a regular file where a directory is expected.
+		filePath := filepath.Join(dir, ".codex")
+		if writeErr := os.WriteFile(filePath, []byte{}, 0o644); writeErr != nil {
+			t.Fatalf("WriteFile() error = %v", writeErr)
+		}
+
+		// Try to backup a path through the file — should be treated as "not exist".
+		path := filepath.Join(dir, ".codex", "agents", "reviewer.toml")
+
+		restore, backupErr := backupIfExists(path)
+		if !errors.Is(backupErr, errNoBackupNeeded) {
+			t.Errorf("expected errNoBackupNeeded for ENOTDIR, got %v", backupErr)
+		}
+
+		if restore != nil {
+			t.Error("expected nil restore func")
+		}
+	})
 }
 
 func TestCleanupLIFOOrder(t *testing.T) {
@@ -263,6 +286,90 @@ func TestToolConfigArgs(t *testing.T) {
 		args := sess.ToolConfigArgs()
 		if args != nil {
 			t.Errorf("args = %v, want nil", args)
+		}
+	})
+}
+
+func TestBackupBlockingFiles(t *testing.T) {
+	t.Parallel()
+
+	t.Run("file blocking directory", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Create a regular file where a directory is expected.
+		blockingFile := filepath.Join(dir, ".codex")
+		if writeErr := os.WriteFile(blockingFile, []byte("marker"), 0o644); writeErr != nil {
+			t.Fatalf("WriteFile() error = %v", writeErr)
+		}
+
+		sess := &LoadSession{}
+		dirs := newCreatedDirs()
+
+		if err := sess.backupBlockingFiles(dir, filepath.Join(".codex", "agents"), dirs); err != nil {
+			t.Fatalf("backupBlockingFiles() error = %v", err)
+		}
+
+		// The blocking file should have been backed up (moved to .musher-backup).
+		if _, statErr := os.Stat(blockingFile); !os.IsNotExist(statErr) {
+			t.Error("blocking file should have been backed up (moved away)")
+		}
+
+		backupPath := blockingFile + ".musher-backup"
+		if _, statErr := os.Stat(backupPath); statErr != nil {
+			t.Errorf("backup file should exist: %v", statErr)
+		}
+
+		// Cleanup should restore the original file.
+		sess.Cleanup()
+
+		got, readErr := os.ReadFile(blockingFile)
+		if readErr != nil {
+			t.Fatalf("ReadFile() after cleanup: %v", readErr)
+		}
+
+		if string(got) != "marker" {
+			t.Errorf("restored content = %q, want %q", got, "marker")
+		}
+	})
+
+	t.Run("directory exists no conflict", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Create a real directory — should be a no-op.
+		subDir := filepath.Join(dir, ".codex")
+		if mkErr := os.Mkdir(subDir, 0o755); mkErr != nil {
+			t.Fatalf("Mkdir() error = %v", mkErr)
+		}
+
+		sess := &LoadSession{}
+		dirs := newCreatedDirs()
+
+		if err := sess.backupBlockingFiles(dir, filepath.Join(".codex", "agents"), dirs); err != nil {
+			t.Fatalf("backupBlockingFiles() error = %v", err)
+		}
+
+		// Directory should still exist.
+		info, statErr := os.Stat(subDir)
+		if statErr != nil {
+			t.Fatalf("directory should still exist: %v", statErr)
+		}
+
+		if !info.IsDir() {
+			t.Error("path should still be a directory")
+		}
+	})
+
+	t.Run("path does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		sess := &LoadSession{}
+		dirs := newCreatedDirs()
+
+		if err := sess.backupBlockingFiles(dir, filepath.Join(".codex", "agents"), dirs); err != nil {
+			t.Fatalf("backupBlockingFiles() error = %v", err)
 		}
 	})
 }

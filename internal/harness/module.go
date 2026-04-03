@@ -16,6 +16,11 @@ type Module struct {
 	// When non-nil, it is called during materialization before writing
 	// agent_spec assets. The filename helps distinguish .md from .yaml.
 	AgentTransform func(content []byte, filename string) ([]byte, error)
+
+	// AgentFileExt, when non-empty, replaces the file extension of agent
+	// assets during materialization. For example, ".toml" causes
+	// "reviewer.md" to be written as "reviewer.toml".
+	AgentFileExt string
 }
 
 // RegisterBuiltins populates a Registry from a list of modules.
@@ -25,6 +30,7 @@ func RegisterBuiltins(reg *Registry, modules ...*Module) {
 			Spec:           mod.Spec,
 			Available:      DefaultAvailableFunc(mod.Spec.Binary),
 			AgentTransform: mod.AgentTransform,
+			AgentFileExt:   mod.AgentFileExt,
 		})
 	}
 }

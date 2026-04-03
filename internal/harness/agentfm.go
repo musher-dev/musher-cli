@@ -2,6 +2,9 @@ package harness
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -149,4 +152,116 @@ func TransformToolsToRecord(content []byte, filename string) ([]byte, error) {
 	out := bytes.TrimSuffix(buf.Bytes(), []byte("...\n"))
 
 	return JoinFrontmatter(out, body, filename), nil
+}
+
+// codexSupportedFields lists agent frontmatter fields that map to Codex TOML.
+var codexSupportedFields = map[string]bool{
+	"description": true,
+	"model":       true,
+}
+
+// TransformAgentToTOML converts agent definitions (markdown with YAML
+// frontmatter, YAML, or JSON) into the TOML format expected by Codex CLI agent
+// role files. The markdown body / JSON prompt becomes developer_instructions.
+// Unsupported fields are dropped with a logged warning.
+func TransformAgentToTOML(content []byte, filename string) ([]byte, error) {
+	name := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+
+	fields, body, err := parseAgentForTOML(content, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildCodexTOML(name, fields, body), nil
+}
+
+// parseAgentForTOML extracts structured fields and body text from an agent
+// definition file. JSON files are parsed directly; all other formats use
+// frontmatter splitting.
+func parseAgentForTOML(content []byte, filename string) (map[string]any, string, error) { //nolint:gocritic // unnamed results are clearer here
+	ext := strings.ToLower(filepath.Ext(filename))
+
+	if ext == ".json" {
+		var fields map[string]any
+		if err := json.Unmarshal(content, &fields); err != nil {
+			return nil, "", repoerrors.Errorf("parse JSON agent for TOML conversion: %w", err)
+		}
+
+		prompt, _ := fields["prompt"].(string) //nolint:errcheck // type assertion, not error check
+
+		return fields, prompt, nil
+	}
+
+	fm, rawBody, hasFM := SplitFrontmatter(content, filename)
+
+	var fields map[string]any
+
+	if hasFM && len(fm) > 0 {
+		if err := yaml.Unmarshal(fm, &fields); err != nil {
+			return nil, "", repoerrors.Errorf("parse agent frontmatter for TOML conversion: %w", err)
+		}
+	}
+
+	return fields, strings.TrimSpace(string(rawBody)), nil
+}
+
+// codexIgnoredFields lists fields that are handled or intentionally skipped
+// during TOML conversion (not worth warning about).
+var codexIgnoredFields = map[string]bool{
+	"description": true,
+	"model":       true,
+	"prompt":      true,
+	"name":        true,
+}
+
+// buildCodexTOML assembles TOML content for a Codex agent role file.
+func buildCodexTOML(name string, fields map[string]any, body string) []byte {
+	var buf bytes.Buffer
+
+	writeTOMLString(&buf, "name", name)
+
+	desc := name // fallback: Codex requires a description
+
+	if fields != nil {
+		if d, ok := fields["description"].(string); ok && d != "" {
+			desc = d
+		}
+
+		writeTOMLString(&buf, "description", desc)
+
+		if model, ok := fields["model"].(string); ok && model != "" {
+			writeTOMLString(&buf, "model", model)
+		}
+
+		for key := range fields {
+			if !codexIgnoredFields[key] && !codexSupportedFields[key] {
+				slog.Warn("agent field not supported by harness",
+					"agent", name, "field", key, "harness", "codex")
+			}
+		}
+	} else {
+		writeTOMLString(&buf, "description", desc)
+	}
+
+	// developer_instructions is required by Codex. Use the prompt/body if
+	// available, otherwise fall back to the description.
+	if body == "" {
+		body = desc
+	}
+
+	writeTOMLMultilineString(&buf, "developer_instructions", body)
+
+	return buf.Bytes()
+}
+
+// writeTOMLString writes a key = "value" line. Go's %q verb handles escaping.
+func writeTOMLString(buf *bytes.Buffer, key, value string) {
+	fmt.Fprintf(buf, "%s = %q\n", key, value)
+}
+
+// writeTOMLMultilineString writes a key with a triple-quoted multiline value.
+// The closing """ is placed immediately after the content (no trailing newline
+// inside the value) per the TOML spec.
+func writeTOMLMultilineString(buf *bytes.Buffer, key, value string) {
+	fmt.Fprintf(buf, "%s = \"\"\"\n%s\"\"\"\n", key, value)
 }

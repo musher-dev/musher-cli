@@ -18,6 +18,10 @@ type Provider struct {
 	// AgentTransform adapts agent file content for this harness.
 	// Nil means no transformation (pass-through).
 	AgentTransform func(content []byte, filename string) ([]byte, error)
+
+	// AgentFileExt, when non-empty, replaces the file extension of agent
+	// assets during materialization (e.g. ".toml" for Codex).
+	AgentFileExt string
 }
 
 // Registry is a thread-safe map of harness providers keyed by name.

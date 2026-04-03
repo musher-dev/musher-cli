@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/pathutil"
@@ -38,6 +39,13 @@ func backupIfExists(path string) (CleanupFunc, error) {
 	_, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			return nil, errNoBackupNeeded
+		}
+
+		// ENOTDIR: an intermediate path component is a regular file
+		// (e.g. ".codex" is a file, not a directory, so ".codex/agents/x.toml"
+		// cannot exist). Treat this the same as "not exist".
+		if errors.Is(err, syscall.ENOTDIR) {
 			return nil, errNoBackupNeeded
 		}
 

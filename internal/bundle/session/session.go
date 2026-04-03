@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -44,6 +45,10 @@ type LoadSession struct {
 	// agentsFlag is the CLI flag name for inline agent injection (e.g. "--agents").
 	agentsFlag string
 
+	// agentFileExt, when non-empty, replaces the file extension of agent
+	// assets (e.g. ".toml" causes "reviewer.md" → "reviewer.toml").
+	agentFileExt string
+
 	// agents collects raw agent file content keyed by filename.
 	// Populated when agentsFlag is set, instead of writing agents to disk.
 	agents map[string][]byte
@@ -64,6 +69,7 @@ func PrepareLoadSession(
 	store *cache.Store,
 	spec *harness.Spec,
 	agentTransform AgentTransformFunc,
+	agentFileExt string,
 	manifest *cache.BundleManifest,
 	projectDir string,
 ) (*LoadSession, error) {
@@ -72,7 +78,7 @@ func PrepareLoadSession(
 		mode = ModeCwd
 	}
 
-	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag, spec.CLI.AgentsFlag)
+	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag, spec.CLI.AgentsFlag, agentFileExt)
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +93,12 @@ func PrepareLoadSession(
 }
 
 // initSession creates a LoadSession and determines the base directory for assets.
-func initSession(mode, projectDir, mcpConfigFlag, agentsFlag string) (*LoadSession, string, error) {
+func initSession(mode, projectDir, mcpConfigFlag, agentsFlag, agentFileExt string) (*LoadSession, string, error) {
 	sess := &LoadSession{
 		WorkingDir:    projectDir,
 		mcpConfigFlag: mcpConfigFlag,
 		agentsFlag:    agentsFlag,
+		agentFileExt:  agentFileExt,
 	}
 
 	switch mode {
@@ -175,6 +182,12 @@ func materializeLayer(
 			if err != nil {
 				return repoerrors.Errorf("transform agent %s for %s: %w", filename, spec.Name, err)
 			}
+		}
+
+		// Replace agent file extension if the harness requires a different format
+		// (e.g. Codex expects .toml instead of .md).
+		if sess.agentFileExt != "" {
+			filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + sess.agentFileExt
 		}
 
 		// When the harness supports inline agent injection (e.g. Claude's
@@ -305,6 +318,12 @@ func (s *LoadSession) registerCwdCleanup(baseDir, subDir, filename string, dirs 
 	fullDir := filepath.Join(baseDir, subDir)
 	fullPath := filepath.Join(fullDir, filename)
 
+	// If any intermediate path component is a regular file (not a directory),
+	// it would block MkdirAll. Back it up so directory creation can proceed.
+	if err := s.backupBlockingFiles(baseDir, subDir, dirs); err != nil {
+		return err
+	}
+
 	// Back up existing file if present.
 	restore, err := backupIfExists(fullPath)
 
@@ -319,10 +338,60 @@ func (s *LoadSession) registerCwdCleanup(baseDir, subDir, filename string, dirs 
 	}
 
 	// Track directory for cleanup (only if we created it).
-	if _, statErr := os.Stat(fullDir); os.IsNotExist(statErr) {
+	// Also treat ENOTDIR (intermediate path is a regular file) as non-existent,
+	// since MkdirAll will need to create the directory.
+	if _, statErr := os.Stat(fullDir); os.IsNotExist(statErr) || errors.Is(statErr, syscall.ENOTDIR) {
 		if dirs.track(fullDir) {
 			s.addCleanup(removeDirIfEmptyCleanup(fullDir))
 		}
+	}
+
+	return nil
+}
+
+// backupBlockingFiles walks path components of subDir relative to baseDir and
+// backs up any regular file that would block MkdirAll from creating the
+// directory tree (e.g. a ".codex" file blocking ".codex/agents/").
+func (s *LoadSession) backupBlockingFiles(baseDir, subDir string, dirs *createdDirs) error {
+	parts := strings.Split(subDir, string(filepath.Separator))
+	current := baseDir
+
+	for _, part := range parts {
+		current = filepath.Join(current, part)
+
+		if err := s.backupIfBlockingFile(current, dirs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// backupIfBlockingFile checks whether path is a regular file that would block
+// directory creation and backs it up if so.
+func (s *LoadSession) backupIfBlockingFile(path string, dirs *createdDirs) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil //nolint:nilerr // path doesn't exist yet — no conflict to resolve
+	}
+
+	if info.IsDir() {
+		return nil // already a directory — no conflict
+	}
+
+	// Regular file blocking directory creation — back it up.
+	restore, backupErr := backupIfExists(path)
+	if backupErr != nil && !errors.Is(backupErr, errNoBackupNeeded) {
+		return backupErr
+	}
+
+	if restore != nil {
+		s.addCleanup(restore)
+	}
+
+	// Track this path so the directory we create gets cleaned up.
+	if dirs.track(path) {
+		s.addCleanup(removeDirIfEmptyCleanup(path))
 	}
 
 	return nil
