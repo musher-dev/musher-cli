@@ -186,7 +186,7 @@ func (v *validateScreen) renderSinglePanel() string {
 	view.WriteString(v.renderBreadcrumb())
 	view.WriteString("\n\n")
 
-	panelW := clampMenuWidth(v.width)
+	panelW := min(max(v.width-4, 30), validationPanelMax)
 	body := v.renderBody()
 
 	view.WriteString(renderPanel(v.styles, "Bundle Validation", body, panelW, true))

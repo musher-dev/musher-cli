@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"strconv"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 )
 
@@ -21,9 +22,10 @@ const (
 	menuLabelOffset    = 12 // cursor(2) + badge(3) + padding + border
 	twoPanelGap        = 3  // gap between panels in two-panel mode
 
-	searchMaxVisibleMin = 5  // minimum visible results in sliding window
-	searchMaxVisibleMax = 8  // maximum visible results on tall terminals
-	searchPanelMax      = 80 // max width for search/detail panels
+	searchMaxVisibleMin = 5   // minimum visible results in sliding window
+	searchMaxVisibleMax = 8   // maximum visible results on tall terminals
+	searchPanelMax      = 80  // max width for search/detail panels
+	validationPanelMax  = 100 // max width for validation panel
 
 	// Publisher trust tier values.
 	trustTierVerified = "verified"
@@ -180,6 +182,14 @@ func formatBytes(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
+}
+
+// applyInputStyles sets the placeholder style on a textinput to match the TUI palette.
+func (s *styles) applyInputStyles(input *textinput.Model) {
+	st := input.Styles()
+	st.Focused.Placeholder = s.placeholder
+	st.Blurred.Placeholder = s.placeholder
+	input.SetStyles(st)
 }
 
 func newStyles(isDark bool) styles {

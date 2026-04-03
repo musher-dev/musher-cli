@@ -113,6 +113,8 @@ func newSearchScreen(
 	searchInput.Prompt = "/ "
 	searchInput.Placeholder = "Search bundles..."
 
+	sty.applyInputStyles(&searchInput)
+
 	inputStyles := searchInput.Styles()
 	inputStyles.Focused.Prompt = sty.accent
 	inputStyles.Blurred.Prompt = sty.accent
@@ -161,6 +163,7 @@ func (s *searchScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		s.width = msg.Width
 		s.height = msg.Height
+		s.updateInputWidth()
 
 		return s, nil
 
@@ -497,6 +500,16 @@ func (s *searchScreen) panelWidth() int {
 		return min(max(s.width-4, 30), searchPanelMax)
 	default:
 		return max(s.width-2, 20)
+	}
+}
+
+// updateInputWidth sizes the text input to fit the current panel width.
+func (s *searchScreen) updateInputWidth() {
+	pw := s.panelWidth()
+	inputWidth := pw - panelContentOffset - lipgloss.Width(s.input.Prompt)
+
+	if inputWidth > 0 {
+		s.input.SetWidth(inputWidth)
 	}
 }
 
