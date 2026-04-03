@@ -318,6 +318,12 @@ func (s *LoadSession) registerCwdCleanup(baseDir, subDir, filename string, dirs 
 	fullDir := filepath.Join(baseDir, subDir)
 	fullPath := filepath.Join(fullDir, filename)
 
+	// If any intermediate path component is a regular file (not a directory),
+	// it would block MkdirAll. Back it up so directory creation can proceed.
+	if err := s.backupBlockingFiles(baseDir, subDir, dirs); err != nil {
+		return err
+	}
+
 	// Back up existing file if present.
 	restore, err := backupIfExists(fullPath)
 
@@ -338,6 +344,54 @@ func (s *LoadSession) registerCwdCleanup(baseDir, subDir, filename string, dirs 
 		if dirs.track(fullDir) {
 			s.addCleanup(removeDirIfEmptyCleanup(fullDir))
 		}
+	}
+
+	return nil
+}
+
+// backupBlockingFiles walks path components of subDir relative to baseDir and
+// backs up any regular file that would block MkdirAll from creating the
+// directory tree (e.g. a ".codex" file blocking ".codex/agents/").
+func (s *LoadSession) backupBlockingFiles(baseDir, subDir string, dirs *createdDirs) error {
+	parts := strings.Split(subDir, string(filepath.Separator))
+	current := baseDir
+
+	for _, part := range parts {
+		current = filepath.Join(current, part)
+
+		if err := s.backupIfBlockingFile(current, dirs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// backupIfBlockingFile checks whether path is a regular file that would block
+// directory creation and backs it up if so.
+func (s *LoadSession) backupIfBlockingFile(path string, dirs *createdDirs) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil //nolint:nilerr // path doesn't exist yet — no conflict to resolve
+	}
+
+	if info.IsDir() {
+		return nil // already a directory — no conflict
+	}
+
+	// Regular file blocking directory creation — back it up.
+	restore, backupErr := backupIfExists(path)
+	if backupErr != nil && !errors.Is(backupErr, errNoBackupNeeded) {
+		return backupErr
+	}
+
+	if restore != nil {
+		s.addCleanup(restore)
+	}
+
+	// Track this path so the directory we create gets cleaned up.
+	if dirs.track(path) {
+		s.addCleanup(removeDirIfEmptyCleanup(path))
 	}
 
 	return nil
