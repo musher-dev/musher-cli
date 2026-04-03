@@ -22,6 +22,7 @@ mcp:
 
 cli:
   mcpConfigFlag: "--mcp-config"
+  agentsFlag: "--agents"
 
 status:
   versionArgs: ["--version"]

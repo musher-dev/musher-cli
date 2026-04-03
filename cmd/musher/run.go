@@ -247,6 +247,7 @@ func buildHarnessArgs(s *session.LoadSession, spec *harness.Spec) []string {
 
 	args = append(args, s.HarnessDirArgs(spec.BundleDir.Flag)...)
 	args = append(args, s.ToolConfigArgs()...)
+	args = append(args, s.AgentArgs()...)
 
 	return args
 }

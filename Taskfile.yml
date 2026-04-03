@@ -123,6 +123,7 @@ tasks:
     cmds:
       - task: check:compile
       - task: check:contracts
+      - task: check:script
       - task: check:install
 
   check:repo-policy:
@@ -300,7 +301,7 @@ tasks:
       - rm -f ./{{.CONTRACTS_BIN}}
 
   check:install:
-    desc: Validate install scripts
+    desc: Validate install scripts and run installer integration tests
     cmds:
       - |
         if [ -f install.sh ]; then
@@ -308,8 +309,19 @@ tasks:
           sh -n install.sh
         fi
         if [ -f install.ps1 ]; then
-          echo "install.ps1 exists (manual review required for PowerShell)"
+          echo "install.ps1 exists"
         fi
+      - go test -v ./test/install/...
+
+  check:script:
+    desc: Run real-binary CLI script tests
+    cmds:
+      - go test -v ./test/script/...
+
+  check:canary:
+    desc: Run live golden-path canary checks (requires canary env vars)
+    cmds:
+      - go test -v ./test/canary -run '^TestGoldenPathCanary|TestCanaryHealthProbeBudget$'
 
   check:test:
     desc: Run tests with race detection

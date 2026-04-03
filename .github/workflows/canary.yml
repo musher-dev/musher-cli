@@ -1,0 +1,37 @@
+name: Golden Path Canary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Synthetic Golden Path
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run canary tests
+        env:
+          MUSHER_CANARY_API_URL: ${{ secrets.MUSHER_CANARY_API_URL }}
+          MUSHER_CANARY_API_KEY: ${{ secrets.MUSHER_CANARY_API_KEY }}
+          MUSHER_CANARY_PUBLIC_BUNDLE_REF: ${{ secrets.MUSHER_CANARY_PUBLIC_BUNDLE_REF }}
+          MUSHER_CANARY_EXPECTED_NAMESPACE: ${{ secrets.MUSHER_CANARY_EXPECTED_NAMESPACE }}
+          MUSHER_NETWORK_CA_CERT_FILE: ${{ secrets.MUSHER_CANARY_CA_CERT_FILE }}
+        run: |
+          if [ -z "${MUSHER_CANARY_API_URL:-}" ] || [ -z "${MUSHER_CANARY_API_KEY:-}" ] || [ -z "${MUSHER_CANARY_PUBLIC_BUNDLE_REF:-}" ] || [ -z "${MUSHER_CANARY_EXPECTED_NAMESPACE:-}" ]; then
+            echo "Canary secrets not configured; skipping."
+            exit 0
+          fi
+          go test -v ./test/canary -run '^TestGoldenPathCanary|TestCanaryHealthProbeBudget$'

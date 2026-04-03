@@ -1,0 +1,2 @@
+# documented root help command stays valid
+exec $MUSHER_BIN --no-color --no-input --help

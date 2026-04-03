@@ -41,6 +41,13 @@ type LoadSession struct {
 	// mcpConfigFlag is the CLI flag name for passing MCP config (e.g. "--mcp-config").
 	mcpConfigFlag string
 
+	// agentsFlag is the CLI flag name for inline agent injection (e.g. "--agents").
+	agentsFlag string
+
+	// agents collects raw agent file content keyed by filename.
+	// Populated when agentsFlag is set, instead of writing agents to disk.
+	agents map[string][]byte
+
 	cleanups []CleanupFunc
 	once     sync.Once
 }
@@ -65,7 +72,7 @@ func PrepareLoadSession(
 		mode = ModeCwd
 	}
 
-	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag)
+	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag, spec.CLI.AgentsFlag)
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +87,11 @@ func PrepareLoadSession(
 }
 
 // initSession creates a LoadSession and determines the base directory for assets.
-func initSession(mode, projectDir, mcpConfigFlag string) (*LoadSession, string, error) {
+func initSession(mode, projectDir, mcpConfigFlag, agentsFlag string) (*LoadSession, string, error) {
 	sess := &LoadSession{
 		WorkingDir:    projectDir,
 		mcpConfigFlag: mcpConfigFlag,
+		agentsFlag:    agentsFlag,
 	}
 
 	switch mode {
@@ -167,6 +175,19 @@ func materializeLayer(
 			if err != nil {
 				return repoerrors.Errorf("transform agent %s for %s: %w", filename, spec.Name, err)
 			}
+		}
+
+		// When the harness supports inline agent injection (e.g. Claude's
+		// --agents flag), collect content instead of writing to disk.
+		// --add-dir directories are not scanned for agents.
+		if sess.agentsFlag != "" {
+			if sess.agents == nil {
+				sess.agents = make(map[string][]byte)
+			}
+
+			sess.agents[filename] = content
+
+			return nil
 		}
 
 		return sess.materializeWithCleanup(mode, baseDir, filepath.Join(spec.Assets.AgentDir, filepath.Dir(relPath)), filename, content, dirs)

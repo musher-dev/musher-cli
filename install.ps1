@@ -20,6 +20,17 @@ $ErrorActionPreference = "Stop"
 $Repo = "musher-dev/musher-cli"
 $Binary = "musher"
 $BaseUrl = "https://github.com/$Repo"
+if ($env:MUSHER_INSTALL_BASE_URL) {
+    $BaseUrl = $env:MUSHER_INSTALL_BASE_URL
+}
+$IwrExtra = @{}
+if ($env:MUSHER_INSTALL_INSECURE -eq "1") {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    # PowerShell 7+ Invoke-WebRequest ignores ServicePointManager; use -SkipCertificateCheck.
+    if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey('SkipCertificateCheck')) {
+        $IwrExtra['SkipCertificateCheck'] = $true
+    }
+}
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,7 +97,7 @@ function Resolve-LatestVersion {
         $response = Invoke-WebRequest -Uri "$BaseUrl/releases/latest" `
             -MaximumRedirection 0 `
             -ErrorAction SilentlyContinue `
-            -UseBasicParsing 2>$null
+            -UseBasicParsing @IwrExtra 2>$null
     } catch {
         $response = $_.Exception.Response
     }
@@ -105,7 +116,7 @@ function Resolve-LatestVersion {
         # PowerShell 5.1: try the final URL from a followed redirect
         try {
             $followed = Invoke-WebRequest -Uri "$BaseUrl/releases/latest" `
-                -UseBasicParsing -ErrorAction Stop
+                -UseBasicParsing @IwrExtra -ErrorAction Stop
             $location = $followed.BaseResponse.ResponseUri.AbsoluteUri
             if (-not $location) {
                 $location = $followed.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
@@ -228,10 +239,10 @@ function Main {
 
     try {
         Write-Host "Downloading $ArchiveName..."
-        Invoke-WebRequest -Uri $ArchiveUrl -OutFile (Join-Path $TmpDir $ArchiveName) -UseBasicParsing
+        Invoke-WebRequest -Uri $ArchiveUrl -OutFile (Join-Path $TmpDir $ArchiveName) -UseBasicParsing @IwrExtra
 
         Write-Host "Downloading checksums..."
-        Invoke-WebRequest -Uri $ChecksumsUrl -OutFile (Join-Path $TmpDir "checksums.txt") -UseBasicParsing
+        Invoke-WebRequest -Uri $ChecksumsUrl -OutFile (Join-Path $TmpDir "checksums.txt") -UseBasicParsing @IwrExtra
 
         Write-Host "Verifying checksum..."
         Test-Checksum -File (Join-Path $TmpDir $ArchiveName) `

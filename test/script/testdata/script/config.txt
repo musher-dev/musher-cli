@@ -1,0 +1,8 @@
+# config commands persist and read settings through the real binary
+exec $MUSHER_BIN --no-color --no-input config set network.ca_cert_file /tmp/test-ca.pem
+stderr 'Set network.ca_cert_file = /tmp/test-ca.pem'
+
+exec $MUSHER_BIN --no-color --no-input config get network.ca_cert_file
+stdout '/tmp/test-ca.pem'
+
+exists $MUSHER_CONFIG_HOME/config.yaml
