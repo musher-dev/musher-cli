@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.9](https://github.com/musher-dev/musher-cli/compare/v0.3.8...v0.3.9) (2026-04-03)
+
+
+### Features
+
+* add agent injection support and test infrastructure ([78a854a](https://github.com/musher-dev/musher-cli/commit/78a854a12f05b25dd685f4dd69b51e43d71cfbf6))
+* add agent injection support and test infrastructure ([44d5d72](https://github.com/musher-dev/musher-cli/commit/44d5d72c756215c0b6934d94731c54ca7caccd79))
+
+
+### Bug Fixes
+
+* pass -SkipCertificateCheck to Invoke-WebRequest on PowerShell 7+ ([a67636a](https://github.com/musher-dev/musher-cli/commit/a67636a3cc4651fac7ad4b9c46cf4527816ff7ed))
+* use context.WithTimeout instead of nonexistent time.WithTimeout ([de27039](https://github.com/musher-dev/musher-cli/commit/de2703942e610018e01fdce1534ce40fe69e091a))
+
 ## [0.3.8](https://github.com/musher-dev/musher-cli/compare/v0.3.7...v0.3.8) (2026-04-02)
 
 
