@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/harness"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func TestSplitFrontmatter_MD(t *testing.T) {
@@ -230,5 +232,165 @@ func TestTransformToolsToRecord_SingleTool(t *testing.T) {
 	s := string(result)
 	if !strings.Contains(s, "Read: true") {
 		t.Errorf("expected Read: true, got:\n%s", s)
+	}
+}
+
+// --- TransformAgentToTOML tests ---
+
+// tomlRole is the subset of Codex agent role fields we validate.
+type tomlRole struct {
+	Name                  string `toml:"name"`
+	Description           string `toml:"description"`
+	Model                 string `toml:"model"`
+	DeveloperInstructions string `toml:"developer_instructions"`
+}
+
+func TestTransformAgentToTOML_FullAgent(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("---\ndescription: Reviews code for quality\ntools: Read, Grep\nmodel: gpt-4\nmaxTurns: 10\n---\nYou are a code review assistant.\n\nFocus on bugs and best practices.\n")
+
+	result, err := harness.TransformAgentToTOML(content, "reviewer.md")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Name != "reviewer" {
+		t.Errorf("name = %q, want %q", role.Name, "reviewer")
+	}
+
+	if role.Description != "Reviews code for quality" {
+		t.Errorf("description = %q, want %q", role.Description, "Reviews code for quality")
+	}
+
+	if role.Model != "gpt-4" {
+		t.Errorf("model = %q, want %q", role.Model, "gpt-4")
+	}
+
+	if !strings.Contains(role.DeveloperInstructions, "code review assistant") {
+		t.Errorf("developer_instructions should contain prompt, got:\n%s", role.DeveloperInstructions)
+	}
+
+	if !strings.Contains(role.DeveloperInstructions, "bugs and best practices") {
+		t.Errorf("developer_instructions should contain full body, got:\n%s", role.DeveloperInstructions)
+	}
+
+	// Unsupported fields should NOT appear in output.
+	s := string(result)
+	if strings.Contains(s, "tools") {
+		t.Errorf("TOML output should not contain tools field:\n%s", s)
+	}
+
+	if strings.Contains(s, "maxTurns") {
+		t.Errorf("TOML output should not contain maxTurns field:\n%s", s)
+	}
+}
+
+func TestTransformAgentToTOML_MinimalAgent(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("---\ndescription: Simple agent\n---\nDo the thing.\n")
+
+	result, err := harness.TransformAgentToTOML(content, "helper.md")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Name != "helper" {
+		t.Errorf("name = %q, want %q", role.Name, "helper")
+	}
+
+	if role.Description != "Simple agent" {
+		t.Errorf("description = %q, want %q", role.Description, "Simple agent")
+	}
+
+	if role.DeveloperInstructions != "Do the thing." {
+		t.Errorf("developer_instructions = %q, want %q", role.DeveloperInstructions, "Do the thing.")
+	}
+}
+
+func TestTransformAgentToTOML_NoFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("Just a plain markdown agent.\n")
+
+	result, err := harness.TransformAgentToTOML(content, "plain.md")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Name != "plain" {
+		t.Errorf("name = %q, want %q", role.Name, "plain")
+	}
+
+	if !strings.Contains(role.DeveloperInstructions, "plain markdown agent") {
+		t.Errorf("developer_instructions should contain body, got: %q", role.DeveloperInstructions)
+	}
+}
+
+func TestTransformAgentToTOML_YAMLFile(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("description: YAML agent\nmodel: o1\n")
+
+	result, err := harness.TransformAgentToTOML(content, "agent.yaml")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Name != "agent" {
+		t.Errorf("name = %q, want %q", role.Name, "agent")
+	}
+
+	if role.Description != "YAML agent" {
+		t.Errorf("description = %q, want %q", role.Description, "YAML agent")
+	}
+
+	if role.Model != "o1" {
+		t.Errorf("model = %q, want %q", role.Model, "o1")
+	}
+}
+
+func TestTransformAgentToTOML_SpecialCharacters(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("---\ndescription: Agent with \"quotes\" and \\backslash\n---\nUse `code` and \"strings\".\n")
+
+	result, err := harness.TransformAgentToTOML(content, "special.md")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if !strings.Contains(role.Description, `"quotes"`) {
+		t.Errorf("description should preserve quotes, got: %q", role.Description)
+	}
+
+	if !strings.Contains(role.DeveloperInstructions, `"strings"`) {
+		t.Errorf("developer_instructions should preserve quotes, got: %q", role.DeveloperInstructions)
 	}
 }

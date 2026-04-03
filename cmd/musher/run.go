@@ -94,7 +94,7 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 	spin := out.Spinner("Preparing " + versionRef + " for " + prov.Spec.DisplayName)
 	spin.Start()
 
-	loadSession, err := session.PrepareLoadSession(store, prov.Spec, prov.AgentTransform, manifest, projectDir)
+	loadSession, err := session.PrepareLoadSession(store, prov.Spec, prov.AgentTransform, prov.AgentFileExt, manifest, projectDir)
 	if err != nil {
 		spin.StopWithFailure("Preparation failed")
 
@@ -324,7 +324,7 @@ func runBundleFromTUIResult(ctx context.Context, out *output.Writer, result *tui
 	spin := out.Spinner("Preparing " + versionRef + " for " + prov.Spec.DisplayName)
 	spin.Start()
 
-	loadSession, err := session.PrepareLoadSession(store, prov.Spec, prov.AgentTransform, manifest, projectDir)
+	loadSession, err := session.PrepareLoadSession(store, prov.Spec, prov.AgentTransform, prov.AgentFileExt, manifest, projectDir)
 	if err != nil {
 		spin.StopWithFailure("Preparation failed")
 

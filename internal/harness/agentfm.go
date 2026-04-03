@@ -2,6 +2,8 @@ package harness
 
 import (
 	"bytes"
+	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -149,4 +151,70 @@ func TransformToolsToRecord(content []byte, filename string) ([]byte, error) {
 	out := bytes.TrimSuffix(buf.Bytes(), []byte("...\n"))
 
 	return JoinFrontmatter(out, body, filename), nil
+}
+
+// codexSupportedFields lists agent frontmatter fields that map to Codex TOML.
+var codexSupportedFields = map[string]bool{
+	"description": true,
+	"model":       true,
+}
+
+// TransformAgentToTOML converts agent markdown (YAML frontmatter + body) into
+// the TOML format expected by Codex CLI agent role files. The markdown body
+// becomes the developer_instructions field. Unsupported frontmatter fields are
+// dropped with a logged warning.
+func TransformAgentToTOML(content []byte, filename string) ([]byte, error) {
+	frontmatter, body, hasFM := SplitFrontmatter(content, filename)
+
+	name := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+
+	var fields map[string]any
+	if hasFM && len(frontmatter) > 0 {
+		if err := yaml.Unmarshal(frontmatter, &fields); err != nil {
+			return nil, repoerrors.Errorf("parse agent frontmatter for TOML conversion: %w", err)
+		}
+	}
+
+	var buf bytes.Buffer
+
+	// name is always derived from the filename.
+	writeTOMLString(&buf, "name", name)
+
+	if fields != nil {
+		if desc, ok := fields["description"].(string); ok && desc != "" {
+			writeTOMLString(&buf, "description", desc)
+		}
+
+		if model, ok := fields["model"].(string); ok && model != "" {
+			writeTOMLString(&buf, "model", model)
+		}
+
+		// Warn about dropped fields.
+		for key := range fields {
+			if !codexSupportedFields[key] {
+				slog.Warn("agent field not supported by harness",
+					"agent", name, "field", key, "harness", "codex")
+			}
+		}
+	}
+
+	// The markdown body becomes developer_instructions.
+	instructions := strings.TrimSpace(string(body))
+	if instructions != "" {
+		writeTOMLMultilineString(&buf, "developer_instructions", instructions)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// writeTOMLString writes a key = "value" line. Go's %q verb handles escaping.
+func writeTOMLString(buf *bytes.Buffer, key, value string) {
+	fmt.Fprintf(buf, "%s = %q\n", key, value)
+}
+
+// writeTOMLMultilineString writes a key with a triple-quoted multiline value.
+// The closing """ is placed immediately after the content (no trailing newline
+// inside the value) per the TOML spec.
+func writeTOMLMultilineString(buf *bytes.Buffer, key, value string) {
+	fmt.Fprintf(buf, "%s = \"\"\"\n%s\"\"\"\n", key, value)
 }

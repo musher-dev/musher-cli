@@ -136,6 +136,29 @@ func TestBackupIfExists(t *testing.T) {
 			t.Error("expected nil restore func")
 		}
 	})
+
+	t.Run("intermediate path is a file", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Create a regular file where a directory is expected.
+		filePath := filepath.Join(dir, ".codex")
+		if writeErr := os.WriteFile(filePath, []byte{}, 0o644); writeErr != nil {
+			t.Fatalf("WriteFile() error = %v", writeErr)
+		}
+
+		// Try to backup a path through the file — should be treated as "not exist".
+		path := filepath.Join(dir, ".codex", "agents", "reviewer.toml")
+
+		restore, backupErr := backupIfExists(path)
+		if !errors.Is(backupErr, errNoBackupNeeded) {
+			t.Errorf("expected errNoBackupNeeded for ENOTDIR, got %v", backupErr)
+		}
+
+		if restore != nil {
+			t.Error("expected nil restore func")
+		}
+	})
 }
 
 func TestCleanupLIFOOrder(t *testing.T) {

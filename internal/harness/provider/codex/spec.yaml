@@ -8,8 +8,7 @@ directories:
   user: "~/.codex"
 
 bundleDir:
-  mode: add_dir
-  flag: "--add-dir"
+  mode: cwd
 
 assets:
   skillDir: ".agents/skills"

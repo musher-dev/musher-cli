@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -44,6 +45,10 @@ type LoadSession struct {
 	// agentsFlag is the CLI flag name for inline agent injection (e.g. "--agents").
 	agentsFlag string
 
+	// agentFileExt, when non-empty, replaces the file extension of agent
+	// assets (e.g. ".toml" causes "reviewer.md" → "reviewer.toml").
+	agentFileExt string
+
 	// agents collects raw agent file content keyed by filename.
 	// Populated when agentsFlag is set, instead of writing agents to disk.
 	agents map[string][]byte
@@ -64,6 +69,7 @@ func PrepareLoadSession(
 	store *cache.Store,
 	spec *harness.Spec,
 	agentTransform AgentTransformFunc,
+	agentFileExt string,
 	manifest *cache.BundleManifest,
 	projectDir string,
 ) (*LoadSession, error) {
@@ -72,7 +78,7 @@ func PrepareLoadSession(
 		mode = ModeCwd
 	}
 
-	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag, spec.CLI.AgentsFlag)
+	sess, baseDir, err := initSession(mode, projectDir, spec.CLI.MCPConfigFlag, spec.CLI.AgentsFlag, agentFileExt)
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +93,12 @@ func PrepareLoadSession(
 }
 
 // initSession creates a LoadSession and determines the base directory for assets.
-func initSession(mode, projectDir, mcpConfigFlag, agentsFlag string) (*LoadSession, string, error) {
+func initSession(mode, projectDir, mcpConfigFlag, agentsFlag, agentFileExt string) (*LoadSession, string, error) {
 	sess := &LoadSession{
 		WorkingDir:    projectDir,
 		mcpConfigFlag: mcpConfigFlag,
 		agentsFlag:    agentsFlag,
+		agentFileExt:  agentFileExt,
 	}
 
 	switch mode {
@@ -175,6 +182,12 @@ func materializeLayer(
 			if err != nil {
 				return repoerrors.Errorf("transform agent %s for %s: %w", filename, spec.Name, err)
 			}
+		}
+
+		// Replace agent file extension if the harness requires a different format
+		// (e.g. Codex expects .toml instead of .md).
+		if sess.agentFileExt != "" {
+			filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + sess.agentFileExt
 		}
 
 		// When the harness supports inline agent injection (e.g. Claude's
@@ -319,7 +332,9 @@ func (s *LoadSession) registerCwdCleanup(baseDir, subDir, filename string, dirs 
 	}
 
 	// Track directory for cleanup (only if we created it).
-	if _, statErr := os.Stat(fullDir); os.IsNotExist(statErr) {
+	// Also treat ENOTDIR (intermediate path is a regular file) as non-existent,
+	// since MkdirAll will need to create the directory.
+	if _, statErr := os.Stat(fullDir); os.IsNotExist(statErr) || errors.Is(statErr, syscall.ENOTDIR) {
 		if dirs.track(fullDir) {
 			s.addCleanup(removeDirIfEmptyCleanup(fullDir))
 		}
