@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.10](https://github.com/musher-dev/musher-cli/compare/v0.3.9...v0.3.10) (2026-04-03)
+
+
+### Bug Fixes
+
+* correct Codex harness skill and agent discovery ([56302bb](https://github.com/musher-dev/musher-cli/commit/56302bb2885aeb36bb0d8b2097ad40571d52ed49))
+* correct Codex harness skill and agent discovery ([042b165](https://github.com/musher-dev/musher-cli/commit/042b1653b98778b94f5c75110728c6e24fe20204))
+* handle JSON agents and ensure required Codex TOML fields ([2a89f6b](https://github.com/musher-dev/musher-cli/commit/2a89f6b51c33e6a70b08ef7e005c7bd02c6bfc58))
+* handle regular file blocking directory creation in cwd mode ([bd69376](https://github.com/musher-dev/musher-cli/commit/bd693765753ae62418468a09fc3791adb02121ab))
+
 ## [0.3.9](https://github.com/musher-dev/musher-cli/compare/v0.3.8...v0.3.9) (2026-04-03)
 
 
