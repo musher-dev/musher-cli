@@ -371,6 +371,112 @@ func TestTransformAgentToTOML_YAMLFile(t *testing.T) {
 	}
 }
 
+func TestTransformAgentToTOML_JSONAgent(t *testing.T) {
+	t.Parallel()
+
+	content := []byte(`{
+  "name": "code-reviewer",
+  "description": "Review code for quality and correctness",
+  "model": "gpt-4",
+  "prompt": "You are a code review assistant.\n\nFocus on bugs.",
+  "skills": ["summarizing-changes"],
+  "permissions": {"file_read": true}
+}`)
+
+	result, err := harness.TransformAgentToTOML(content, "code-reviewer.json")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Name != "code-reviewer" {
+		t.Errorf("name = %q, want %q", role.Name, "code-reviewer")
+	}
+
+	if role.Description != "Review code for quality and correctness" {
+		t.Errorf("description = %q, want %q", role.Description, "Review code for quality and correctness")
+	}
+
+	if role.Model != "gpt-4" {
+		t.Errorf("model = %q, want %q", role.Model, "gpt-4")
+	}
+
+	if !strings.Contains(role.DeveloperInstructions, "code review assistant") {
+		t.Errorf("developer_instructions should contain prompt, got: %q", role.DeveloperInstructions)
+	}
+
+	// Unsupported fields should not appear.
+	s := string(result)
+	if strings.Contains(s, "skills") {
+		t.Errorf("TOML output should not contain skills field:\n%s", s)
+	}
+
+	if strings.Contains(s, "permissions") {
+		t.Errorf("TOML output should not contain permissions field:\n%s", s)
+	}
+}
+
+func TestTransformAgentToTOML_JSONWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	// Real-world case: JSON agent with no prompt field.
+	content := []byte(`{
+  "name": "code-reviewer",
+  "description": "Review code for quality, correctness, security.",
+  "model": "gpt-4",
+  "temperature": 0.2,
+  "skills": ["summarizing-changes"]
+}`)
+
+	result, err := harness.TransformAgentToTOML(content, "code-reviewer.json")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	if role.Description != "Review code for quality, correctness, security." {
+		t.Errorf("description = %q, want the original", role.Description)
+	}
+
+	// developer_instructions should fall back to description when no prompt.
+	if role.DeveloperInstructions == "" {
+		t.Error("developer_instructions should not be empty (should fall back to description)")
+	}
+
+	if role.DeveloperInstructions != role.Description {
+		t.Errorf("developer_instructions = %q, want %q (should match description fallback)", role.DeveloperInstructions, role.Description)
+	}
+}
+
+func TestTransformAgentToTOML_NoDescription(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("---\nmodel: gpt-4\n---\nDo the thing.\n")
+
+	result, err := harness.TransformAgentToTOML(content, "helper.md")
+	if err != nil {
+		t.Fatalf("TransformAgentToTOML: %v", err)
+	}
+
+	var role tomlRole
+	if err := toml.Unmarshal(result, &role); err != nil {
+		t.Fatalf("TOML unmarshal: %v\noutput:\n%s", err, result)
+	}
+
+	// Should use name as fallback description since Codex requires it.
+	if role.Description != "helper" {
+		t.Errorf("description = %q, want fallback %q", role.Description, "helper")
+	}
+}
+
 func TestTransformAgentToTOML_SpecialCharacters(t *testing.T) {
 	t.Parallel()
 
