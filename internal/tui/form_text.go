@@ -67,6 +67,8 @@ func NewTextField(label string, sty *styles, opts ...TextFieldOption) *TextField
 		opt(textField)
 	}
 
+	sty.applyInputStyles(&textField.input)
+
 	return textField
 }
 

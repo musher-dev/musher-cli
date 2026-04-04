@@ -64,6 +64,7 @@ func newAuthScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMa
 	keyInput.Placeholder = "mshk_..."
 	keyInput.EchoMode = textinput.EchoPassword
 	keyInput.CharLimit = 256
+	sty.applyInputStyles(&keyInput)
 
 	return &authScreen{
 		ctx:         ctx,
@@ -87,6 +88,7 @@ func (a *authScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
+		a.updateInputWidth()
 
 		return a, nil
 
@@ -452,6 +454,16 @@ func (a *authScreen) renderAuthContent() string {
 	}
 
 	return buf.String()
+}
+
+// updateInputWidth sizes the API key input to fit the current panel width.
+func (a *authScreen) updateInputWidth() {
+	pw := clampMenuWidth(a.width)
+	inputWidth := pw - panelContentOffset - lipgloss.Width(a.apiKeyInput.Prompt)
+
+	if inputWidth > 0 {
+		a.apiKeyInput.SetWidth(inputWidth)
+	}
 }
 
 func (a *authScreen) renderLoginContent() string {

@@ -97,6 +97,7 @@ type refInputScreen struct {
 func newRefInputScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMap) *refInputScreen {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "namespace/slug or namespace/slug:version"
+	sty.applyInputStyles(&searchInput)
 	searchInput.Focus()
 
 	spin := spinner.New()

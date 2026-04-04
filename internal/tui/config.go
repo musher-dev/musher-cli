@@ -95,6 +95,7 @@ func newConfigScreen(config ConfigManager, apiURL string, sty *styles, keys *key
 
 	editField := textinput.New()
 	editField.CharLimit = 256
+	sty.applyInputStyles(&editField)
 
 	return &configScreen{
 		config:    config,
@@ -118,6 +119,7 @@ func (c *configScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		c.width = msg.Width
 		c.height = msg.Height
+		c.updateInputWidth()
 
 		return c, nil
 
@@ -394,6 +396,16 @@ func (c *configScreen) renderItemList() string {
 	}
 
 	return buf.String()
+}
+
+// updateInputWidth sizes the edit input to fit the current panel width.
+func (c *configScreen) updateInputWidth() {
+	pw := clampMenuWidth(c.width)
+	inputWidth := pw - panelContentOffset - lipgloss.Width(c.editInput.Prompt)
+
+	if inputWidth > 0 {
+		c.editInput.SetWidth(inputWidth)
+	}
 }
 
 func (c *configScreen) renderEditItem(buf *strings.Builder, item *configItem) {
