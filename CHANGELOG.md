@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.11](https://github.com/musher-dev/musher-cli/compare/v0.3.10...v0.3.11) (2026-04-04)
+
+
+### Features
+
+* **tui:** polish input styling and add test coverage ([3524519](https://github.com/musher-dev/musher-cli/commit/352451997b9db183fa270f20291bbfa0742de097))
+* **tui:** polish input styling and add test coverage ([b003848](https://github.com/musher-dev/musher-cli/commit/b003848700fae42039db2ad9f66e32189bb29b3c))
+
 ## [0.3.10](https://github.com/musher-dev/musher-cli/compare/v0.3.9...v0.3.10) (2026-04-03)
 
 
