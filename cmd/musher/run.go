@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -14,9 +13,12 @@ import (
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/bundle/session"
+	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
+	"github.com/musher-dev/musher-cli/internal/harness/runtime"
 	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/prompt"
 	"github.com/musher-dev/musher-cli/internal/tui"
 )
@@ -26,6 +28,7 @@ func newRunCmd() *cobra.Command {
 		harnessName string
 		force       bool
 		projectDir  string
+		noWatch     bool
 	)
 
 	cmd := &cobra.Command{
@@ -45,30 +48,28 @@ If --harness is omitted in an interactive terminal, prompts for selection.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 
-			return runBundleRun(cmd.Context(), out, args[0], harnessName, projectDir, force)
+			return runBundleRun(cmd.Context(), out, args[0], harnessName, projectDir, force, noWatch)
 		},
 	}
 
 	cmd.Flags().StringVar(&harnessName, "harness", "", "Target harness (e.g. claude, cursor, codex)")
 	cmd.Flags().BoolVar(&force, "force", false, "Re-download even if already cached")
 	cmd.Flags().StringVar(&projectDir, "project-dir", ".", "Project working directory for the harness")
+	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable status header (direct stdio passthrough)")
 
 	return cmd
 }
 
-func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, projectDir string, force bool) error {
-	namespace, slug, bundleVersion, err := parseBundleRefOptionalVersion(ref)
-	if err != nil {
-		return err
-	}
-
+func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, projectDir string, force, noWatch bool) error {
 	// Resolve project directory to absolute path.
+	var err error
+
 	projectDir, err = filepath.Abs(projectDir)
 	if err != nil {
 		return clierrors.Wrap(clierrors.ExitConfig, "Failed to resolve project directory", err)
 	}
 
-	// Resolve harness.
+	// Resolve harness (done once — stays the same across swaps).
 	reg := newHarnessRegistry()
 
 	prov, err := resolveHarness(ctx, out, reg, harnessName)
@@ -76,10 +77,80 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 		return err
 	}
 
+	// Pre-flight: warn about non-critical harness issues (missing config, auth).
+	if harnessName != "" {
+		preflightHealthCheck(ctx, out, prov)
+	}
+
+	// Resolve cache root for the swap picker.
+	cacheRoot, err := paths.CacheRoot()
+	if err != nil {
+		return clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
+	}
+
+	for {
+		exitCode, runErr := runSingleSession(ctx, out, ref, prov, projectDir, force, noWatch)
+
+		if errors.Is(runErr, runtime.ErrSwapRequested) {
+			apiURL := config.Load().APIURL()
+			searcher := newPublicAPIClient(apiURL)
+
+			swapResult, pickerErr := tui.RunSwapPicker(ctx, searcher, cacheRoot, ref)
+			if pickerErr != nil {
+				return clierrors.Errorf("swap picker: %w", pickerErr)
+			}
+
+			if swapResult == nil {
+				// User canceled the swap picker.
+				out.Success("Session complete — cleaned up bundle assets")
+
+				return nil
+			}
+
+			ref = swapResult.Namespace + "/" + swapResult.Slug + ":" + swapResult.Version
+			force = false
+
+			out.Info("Swapping to %s...", ref)
+
+			continue
+		}
+
+		if runErr != nil {
+			return runErr
+		}
+
+		if exitCode != 0 {
+			return &clierrors.CLIError{
+				Message: prov.Spec.DisplayName + " exited with an error",
+				Code:    exitCode,
+			}
+		}
+
+		out.Success("Session complete — cleaned up bundle assets")
+
+		return nil
+	}
+}
+
+// runSingleSession pulls, materializes, and runs a single bundle session.
+// It always cleans up injected assets before returning.
+func runSingleSession(
+	ctx context.Context,
+	out *output.Writer,
+	ref string,
+	prov *harness.Provider,
+	projectDir string,
+	force, noWatch bool,
+) (int, error) {
+	namespace, slug, bundleVersion, err := parseBundleRefOptionalVersion(ref)
+	if err != nil {
+		return 0, err
+	}
+
 	// Pull bundle to cache.
 	result, err := pullToCache(ctx, out, namespace, slug, bundleVersion, force)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	versionRef := result.Namespace + "/" + result.Slug + ":" + result.Version
@@ -87,7 +158,7 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 	// Load manifest from cache.
 	store, manifest, err := loadManifestFromCache(result)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Materialize assets.
@@ -98,9 +169,11 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 	if err != nil {
 		spin.StopWithFailure("Preparation failed")
 
-		return clierrors.Wrap(clierrors.ExitExecution,
+		return 0, clierrors.Wrap(clierrors.ExitExecution,
 			"Failed to prepare bundle for "+prov.Spec.DisplayName, err)
 	}
+
+	defer loadSession.Cleanup()
 
 	spin.StopWithSuccess("Ready")
 
@@ -117,26 +190,23 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Launch harness as subprocess.
-	exitCode, err := launchHarness(ctx, prov.Spec.Binary, args, projectDir)
+	// Select and launch executor.
+	cfg := &runtime.Config{
+		Binary:      prov.Spec.Binary,
+		Args:        args,
+		WorkDir:     projectDir,
+		BundleRef:   versionRef,
+		HarnessName: prov.Spec.DisplayName,
+	}
 
-	// Clean up injected bundle assets before reporting status.
-	loadSession.Cleanup()
+	executor := runtime.Select(out.Terminal().IsTTY, noWatch)
 
+	exitCode, err := executor.Run(ctx, cfg)
 	if err != nil {
-		return clierrors.HarnessExecFailed(prov.Spec.DisplayName, err)
+		return exitCode, clierrors.Errorf("harness execution: %w", err)
 	}
 
-	if exitCode != 0 {
-		return &clierrors.CLIError{
-			Message: prov.Spec.DisplayName + " exited with an error",
-			Code:    exitCode,
-		}
-	}
-
-	out.Success("Session complete — cleaned up bundle assets")
-
-	return nil
+	return exitCode, nil
 }
 
 // resolveHarness gets the harness provider, either from the flag or interactive selection.
@@ -159,6 +229,18 @@ func resolveHarnessByName(reg *harness.Registry, name string) (*harness.Provider
 	}
 
 	return prov, nil
+}
+
+// preflightHealthCheck runs harness health checks and prints warnings.
+// It returns an error only if a critical check (binary missing) fails.
+func preflightHealthCheck(ctx context.Context, out *output.Writer, prov *harness.Provider) {
+	report := harness.CheckHealth(ctx, prov)
+
+	for _, check := range report.Checks {
+		if check.Status == harness.CheckWarn {
+			out.Warning("%s: %s", check.Name, check.Message)
+		}
+	}
 }
 
 func resolveHarnessInteractive(ctx context.Context, out *output.Writer, reg *harness.Registry) (*harness.Provider, error) {
@@ -252,66 +334,13 @@ func buildHarnessArgs(s *session.LoadSession, spec *harness.Spec) []string {
 	return args
 }
 
-// launchHarness starts the harness binary as a subprocess and waits for it to exit.
-// Returns the exit code and any launch error.
-func launchHarness(ctx context.Context, binary string, args []string, workDir string) (int, error) {
-	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec // binary name from trusted harness spec
-	cmd.Dir = workDir
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return 0, clierrors.Wrap(clierrors.ExitHarness, "Failed to start harness", err)
-	}
-
-	// Forward signals to the child process.
-	go func() {
-		<-ctx.Done()
-
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(os.Interrupt) //nolint:errcheck // best-effort signal forwarding
-		}
-	}()
-
-	waitErr := cmd.Wait()
-	if waitErr == nil {
-		return 0, nil
-	}
-
-	var exitErr *exec.ExitError
-	if errors.As(waitErr, &exitErr) {
-		return exitErr.ExitCode(), nil
-	}
-
-	// Context cancellation (signal) — process was killed.
-	if ctx.Err() != nil {
-		return 130, nil //nolint:nilerr // exit code 130 is the conventional SIGINT code
-	}
-
-	return 0, clierrors.Wrap(clierrors.ExitHarness, "Harness process failed", waitErr)
-}
-
 // runBundleFromTUIResult launches a harness with the bundle selected in the TUI.
 // The TUI has already pulled the bundle to cache; this function materializes
-// assets and launches the harness subprocess.
+// assets and launches the harness subprocess. Supports bundle swapping via Ctrl+\.
 func runBundleFromTUIResult(ctx context.Context, out *output.Writer, result *tui.Result) error {
 	reg := newHarnessRegistry()
 
 	prov, err := resolveHarnessByName(reg, result.Harness)
-	if err != nil {
-		return err
-	}
-
-	// Pull to cache — should be a cache hit since TUI already downloaded.
-	pullResult, err := pullToCache(ctx, out, result.Namespace, result.Slug, result.Version, false)
-	if err != nil {
-		return err
-	}
-
-	versionRef := pullResult.Namespace + "/" + pullResult.Slug + ":" + pullResult.Version
-
-	store, manifest, err := loadManifestFromCache(pullResult)
 	if err != nil {
 		return err
 	}
@@ -321,47 +350,52 @@ func runBundleFromTUIResult(ctx context.Context, out *output.Writer, result *tui
 		return clierrors.Wrap(clierrors.ExitConfig, "Failed to resolve working directory", err)
 	}
 
-	spin := out.Spinner("Preparing " + versionRef + " for " + prov.Spec.DisplayName)
-	spin.Start()
-
-	loadSession, err := session.PrepareLoadSession(store, prov.Spec, prov.AgentTransform, prov.AgentFileExt, manifest, projectDir)
+	cacheRoot, err := paths.CacheRoot()
 	if err != nil {
-		spin.StopWithFailure("Preparation failed")
-
-		return clierrors.Wrap(clierrors.ExitExecution,
-			"Failed to prepare bundle for "+prov.Spec.DisplayName, err)
+		return clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
 	}
 
-	spin.StopWithSuccess("Ready")
+	ref := result.Namespace + "/" + result.Slug + ":" + result.Version
 
-	args := buildHarnessArgs(loadSession, prov.Spec)
+	for {
+		// TUI results always show the status header (user was in interactive mode).
+		exitCode, runErr := runSingleSession(ctx, out, ref, prov, projectDir, false, false)
 
-	out.Info("Launching %s...", prov.Spec.DisplayName)
+		if errors.Is(runErr, runtime.ErrSwapRequested) {
+			apiURL := config.Load().APIURL()
+			searcher := newPublicAPIClient(apiURL)
 
-	if !out.Quiet {
-		out.Muted("  %s %s", prov.Spec.Binary, strings.Join(args, " "))
-	}
+			swapResult, pickerErr := tui.RunSwapPicker(ctx, searcher, cacheRoot, ref)
+			if pickerErr != nil {
+				return clierrors.Errorf("swap picker: %w", pickerErr)
+			}
 
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
+			if swapResult == nil {
+				out.Success("Session complete — cleaned up bundle assets")
 
-	exitCode, err := launchHarness(ctx, prov.Spec.Binary, args, projectDir)
+				return nil
+			}
 
-	// Clean up injected bundle assets before reporting status.
-	loadSession.Cleanup()
+			ref = swapResult.Namespace + "/" + swapResult.Slug + ":" + swapResult.Version
 
-	if err != nil {
-		return clierrors.HarnessExecFailed(prov.Spec.DisplayName, err)
-	}
+			out.Info("Swapping to %s...", ref)
 
-	if exitCode != 0 {
-		return &clierrors.CLIError{
-			Message: prov.Spec.DisplayName + " exited with an error",
-			Code:    exitCode,
+			continue
 		}
+
+		if runErr != nil {
+			return clierrors.HarnessExecFailed(prov.Spec.DisplayName, runErr)
+		}
+
+		if exitCode != 0 {
+			return &clierrors.CLIError{
+				Message: prov.Spec.DisplayName + " exited with an error",
+				Code:    exitCode,
+			}
+		}
+
+		out.Success("Session complete — cleaned up bundle assets")
+
+		return nil
 	}
-
-	out.Success("Session complete — cleaned up bundle assets")
-
-	return nil
 }
