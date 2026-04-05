@@ -249,3 +249,288 @@ func TestSwapModel_CachedEntryWithTime(t *testing.T) {
 		t.Error("view should render cached entries with time")
 	}
 }
+
+func TestSwapModel_TabSwitchesFocus(t *testing.T) {
+	t.Parallel()
+
+	entries := []swapEntry{
+		{Namespace: "acme", Slug: "bundle-a", Version: "1.0.0"},
+	}
+
+	m := newTestSwapModel(entries)
+	m.focusArea = swapFocusCached
+
+	// Tab from cached should go to input.
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusInput {
+		t.Errorf("after Tab from cached: focus = %d, want swapFocusInput", m.focusArea)
+	}
+
+	// Tab from input should go to cached.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusCached {
+		t.Errorf("after Tab from input: focus = %d, want swapFocusCached", m.focusArea)
+	}
+}
+
+func TestSwapModel_SearchNavigation(t *testing.T) {
+	t.Parallel()
+
+	cached := []swapEntry{
+		{Namespace: "acme", Slug: "cached-a", Version: "1.0.0"},
+	}
+
+	m := newTestSwapModel(cached)
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true},
+		{Namespace: "pub", Slug: "result-b", Version: "2.0.0", IsSearch: true},
+	}
+	m.focusArea = swapFocusSearch
+	m.searchCursor = 0
+
+	// Move down in search.
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(*swapModel)
+
+	if m.searchCursor != 1 {
+		t.Errorf("after down in search: cursor = %d, want 1", m.searchCursor)
+	}
+
+	// Move up past top of search should go to cached.
+	m.searchCursor = 0
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusCached {
+		t.Errorf("after up past search top: focus = %d, want swapFocusCached", m.focusArea)
+	}
+}
+
+func TestSwapModel_SearchSelect(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true},
+	}
+	m.focusArea = swapFocusSearch
+	m.searchCursor = 0
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*swapModel)
+
+	if m.result == nil {
+		t.Fatal("expected result after Enter in search")
+	}
+
+	if m.result.Slug != "result-a" {
+		t.Errorf("result slug = %q, want result-a", m.result.Slug)
+	}
+
+	if cmd == nil {
+		t.Error("expected quit command")
+	}
+}
+
+func TestSwapModel_CachedDownToSearch(t *testing.T) {
+	t.Parallel()
+
+	cached := []swapEntry{
+		{Namespace: "acme", Slug: "cached-a", Version: "1.0.0"},
+	}
+
+	m := newTestSwapModel(cached)
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true},
+	}
+	m.focusArea = swapFocusCached
+	m.cachedCursor = 0
+
+	// Move down past last cached should go to search results.
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusSearch {
+		t.Errorf("after down past cached: focus = %d, want swapFocusSearch", m.focusArea)
+	}
+}
+
+func TestSwapModel_SearchTabToInput(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true},
+	}
+	m.focusArea = swapFocusSearch
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusInput {
+		t.Errorf("after Tab from search: focus = %d, want swapFocusInput", m.focusArea)
+	}
+}
+
+func TestSwapModel_InputEnterToCached(t *testing.T) {
+	t.Parallel()
+
+	entries := []swapEntry{
+		{Namespace: "acme", Slug: "bundle-a", Version: "1.0.0"},
+	}
+
+	m := newTestSwapModel(entries)
+	m.focusArea = swapFocusInput
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusCached {
+		t.Errorf("after Enter from input with cached: focus = %d, want swapFocusCached", m.focusArea)
+	}
+}
+
+func TestSwapModel_InputEnterToSearch(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil) // no cached
+	m.focusArea = swapFocusInput
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true},
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*swapModel)
+
+	if m.focusArea != swapFocusSearch {
+		t.Errorf("after Enter from input with search: focus = %d, want swapFocusSearch", m.focusArea)
+	}
+}
+
+func TestSwapModel_SearchError(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.searchID = 1
+	m.searchLoading = true
+
+	updated, _ := m.Update(swapSearchErrorMsg{id: 1, err: errUnexpectedModel})
+	m = updated.(*swapModel)
+
+	if m.searchLoading {
+		t.Error("searchLoading should be false after error")
+	}
+
+	if m.searchErr == nil {
+		t.Error("searchErr should be set")
+	}
+}
+
+func TestSwapModel_CachedMsg(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+
+	entries := []swapEntry{
+		{Namespace: "acme", Slug: "cached-a", Version: "1.0.0"},
+		{Namespace: "acme", Slug: "cached-b", Version: "2.0.0"},
+	}
+
+	updated, _ := m.Update(swapCachedMsg{entries: entries})
+	m = updated.(*swapModel)
+
+	if len(m.cached) != 2 {
+		t.Errorf("cached = %d, want 2", len(m.cached))
+	}
+}
+
+func TestSwapModel_ViewWithSearchResults(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.searchResults = []swapEntry{
+		{Namespace: "pub", Slug: "result-a", Version: "1.0.0", IsSearch: true, Summary: "A great bundle"},
+	}
+	m.focusArea = swapFocusSearch
+	m.lastQuery = "result"
+
+	view := m.View()
+
+	if view.Content == "" {
+		t.Error("view should render search results")
+	}
+}
+
+func TestSwapModel_DebounceTickStale(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.debounceID = 5
+
+	// Stale debounce tick (wrong ID) should be ignored.
+	updated, cmd := m.Update(swapDebounceTickMsg{id: 3, query: "old"})
+	m = updated.(*swapModel)
+
+	if cmd != nil {
+		t.Error("stale debounce tick should not produce a command")
+	}
+
+	_ = m // avoid unused
+}
+
+func TestSwapModel_WindowSizeMsg(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(*swapModel)
+
+	if m.width != 120 || m.height != 40 {
+		t.Errorf("size = %dx%d, want 120x40", m.width, m.height)
+	}
+}
+
+func TestSwapModel_AdjustSearchScroll(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+	m.searchResults = make([]swapEntry, 20)
+	m.searchCursor = 15
+	m.height = 10
+
+	m.adjustSearchScroll()
+
+	if m.searchScroll == 0 {
+		t.Error("searchScroll should have been adjusted for cursor past visible area")
+	}
+}
+
+func TestSwapModel_SwitchFocusFunctions(t *testing.T) {
+	t.Parallel()
+
+	m := newTestSwapModel(nil)
+
+	m.switchToInputFocus()
+
+	if m.focusArea != swapFocusInput {
+		t.Errorf("switchToInputFocus: focus = %d, want swapFocusInput", m.focusArea)
+	}
+
+	m.switchToCachedFocus()
+
+	if m.focusArea != swapFocusCached {
+		t.Errorf("switchToCachedFocus: focus = %d, want swapFocusCached", m.focusArea)
+	}
+
+	m.switchToSearchFocus()
+
+	if m.focusArea != swapFocusSearch {
+		t.Errorf("switchToSearchFocus: focus = %d, want swapFocusSearch", m.focusArea)
+	}
+}

@@ -246,3 +246,70 @@ func TestConvertVT10xColor_256(t *testing.T) {
 		t.Errorf("convertVT10xColor(200) = %v, want PaletteColor(200)", c)
 	}
 }
+
+func TestStatusLabel_Unknown(t *testing.T) {
+	t.Parallel()
+
+	label, color := statusLabel(statusInfo{state: 99})
+
+	if label != "Unknown" {
+		t.Errorf("statusLabel(99) = %q, want Unknown", label)
+	}
+
+	if color != barFG {
+		t.Error("statusLabel(unknown) color should be barFG")
+	}
+}
+
+func TestDrawSegment_Overflow(t *testing.T) {
+	t.Parallel()
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	defer sim.Fini()
+
+	sim.SetSize(5, 1)
+
+	seg := &segment{
+		text:  "Hello, World!",
+		style: tcell.StyleDefault,
+	}
+
+	endCol := drawSegment(sim, 0, 0, seg, 5)
+	sim.Show()
+
+	if endCol > 5 {
+		t.Errorf("drawSegment overflowed: endCol = %d, maxCol = 5", endCol)
+	}
+
+	row := extractRow(sim, 0, 5)
+	if row != "Hello" {
+		t.Errorf("drawSegment truncated row = %q, want %q", row, "Hello")
+	}
+}
+
+func TestConvertVT10xColor_DefaultBG(t *testing.T) {
+	t.Parallel()
+
+	// DefaultBG sentinel = (1 << 24) + 1.
+	c := convertVT10xColor(1<<24+1, tcell.ColorDefault)
+	if c != tcell.ColorDefault {
+		t.Errorf("convertVT10xColor(DefaultBG) = %v, want ColorDefault", c)
+	}
+}
+
+func TestConvertVT10xColor_RGB(t *testing.T) {
+	t.Parallel()
+
+	// 24-bit RGB: 0xFF8040 = R=255, G=128, B=64.
+	colorVal := uint32(0xFF8040)
+	c := convertVT10xColor(colorVal, tcell.ColorDefault)
+	expected := tcell.NewRGBColor(255, 128, 64)
+
+	if c != expected {
+		t.Errorf("convertVT10xColor(0xFF8040) = %v, want %v", c, expected)
+	}
+}
