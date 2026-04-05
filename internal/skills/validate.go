@@ -35,7 +35,7 @@ func ParseFrontmatter(path string) (name, description string, err error) {
 		return "", "", repoerrors.Errorf("read skill file: %w", err)
 	}
 
-	raw := string(data)
+	raw := strings.ReplaceAll(string(data), "\r\n", "\n")
 	if !strings.HasPrefix(raw, "---\n") {
 		return "", "", errors.New("missing YAML frontmatter; SKILL.md must begin with:\n---\nname: <skill-name>\ndescription: <what this skill does>\n---")
 	}
@@ -68,7 +68,7 @@ func ValidateFile(path string) error {
 		return repoerrors.Errorf("read skill file: %w", err)
 	}
 
-	raw := string(data)
+	raw := strings.ReplaceAll(string(data), "\r\n", "\n")
 	if !strings.HasPrefix(raw, "---\n") {
 		return errors.New("missing YAML frontmatter; SKILL.md must begin with:\n---\nname: <skill-name>\ndescription: <what this skill does>\n---")
 	}

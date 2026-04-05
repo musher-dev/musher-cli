@@ -1,0 +1,7 @@
+# bundle yank and unyank require authentication
+
+! exec $MUSHER_BIN --no-color --no-input bundle yank acme/test:1.0.0 --yes
+stderr 'Not authenticated'
+
+! exec $MUSHER_BIN --no-color --no-input bundle unyank acme/test:1.0.0 --yes
+stderr 'Not authenticated'

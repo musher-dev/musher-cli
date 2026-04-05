@@ -28,10 +28,12 @@ jobs:
           MUSHER_CANARY_API_KEY: ${{ secrets.MUSHER_CANARY_API_KEY }}
           MUSHER_CANARY_PUBLIC_BUNDLE_REF: ${{ secrets.MUSHER_CANARY_PUBLIC_BUNDLE_REF }}
           MUSHER_CANARY_EXPECTED_NAMESPACE: ${{ secrets.MUSHER_CANARY_EXPECTED_NAMESPACE }}
+          MUSHER_CANARY_PUSH_NAMESPACE: ${{ secrets.MUSHER_CANARY_PUSH_NAMESPACE }}
+          MUSHER_CANARY_PUSH_SLUG: ${{ secrets.MUSHER_CANARY_PUSH_SLUG }}
           MUSHER_NETWORK_CA_CERT_FILE: ${{ secrets.MUSHER_CANARY_CA_CERT_FILE }}
         run: |
           if [ -z "${MUSHER_CANARY_API_URL:-}" ] || [ -z "${MUSHER_CANARY_API_KEY:-}" ] || [ -z "${MUSHER_CANARY_PUBLIC_BUNDLE_REF:-}" ] || [ -z "${MUSHER_CANARY_EXPECTED_NAMESPACE:-}" ]; then
             echo "Canary secrets not configured; skipping."
             exit 0
           fi
-          go test -v ./test/canary -run '^TestGoldenPathCanary|TestCanaryHealthProbeBudget$'
+          go test -v ./test/canary/...

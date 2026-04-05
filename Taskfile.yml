@@ -124,6 +124,7 @@ tasks:
       - task: check:compile
       - task: check:contracts
       - task: check:script
+      - task: check:docs-snippets
       - task: check:install
 
   check:repo-policy:
@@ -318,10 +319,15 @@ tasks:
     cmds:
       - go test -v ./test/script/...
 
+  check:docs-snippets:
+    desc: Validate CLI examples from documentation still work
+    cmds:
+      - go test -v ./test/script/ -run '^TestDocs$'
+
   check:canary:
     desc: Run live golden-path canary checks (requires canary env vars)
     cmds:
-      - go test -v ./test/canary -run '^TestGoldenPathCanary|TestCanaryHealthProbeBudget$'
+      - go test -v ./test/canary/...
 
   check:test:
     desc: Run tests with race detection

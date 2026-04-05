@@ -1,0 +1,12 @@
+# documented global flags (README Global Flags table)
+
+# --json flag
+exec $MUSHER_BIN --no-color --no-input --json version
+stdout '"version"'
+
+# --quiet flag
+exec $MUSHER_BIN --no-color --no-input --quiet version
+
+# --no-color and --no-input flags (already used above, but validate explicitly)
+exec $MUSHER_BIN --no-color --no-input --help
+stdout 'Discover, load, publish, and manage agent bundles'

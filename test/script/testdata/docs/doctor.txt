@@ -1,0 +1,3 @@
+# documented doctor command (README Maintenance table)
+exec $MUSHER_BIN --no-color --no-input doctor
+stdout 'Musher Doctor'

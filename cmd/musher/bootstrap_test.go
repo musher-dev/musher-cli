@@ -175,6 +175,11 @@ func TestConfigureRootRuntimeWithFlags(t *testing.T) {
 		t.Fatalf("configureRootRuntime() error = %v", err)
 	}
 
+	// Ensure logger file handle is closed so t.TempDir cleanup succeeds on Windows.
+	if cmd.PostRunE != nil {
+		t.Cleanup(func() { _ = cmd.PostRunE(cmd, nil) })
+	}
+
 	if !out.JSON {
 		t.Error("expected JSON=true")
 	}

@@ -1,0 +1,26 @@
+# documented "Existing project" workflow (README Quick Start)
+mkdir project
+cd project
+
+# musher bundle init --empty creates musher.yaml only
+exec $MUSHER_BIN --no-color --no-input bundle init --empty --yes
+stderr 'Created musher.yaml'
+exists musher.yaml
+! exists skills
+
+# place a conventional skill asset so add --all discovers it
+mkdir skills/my-skill
+cp $WORK/skill.md skills/my-skill/SKILL.md
+
+exec $MUSHER_BIN --no-color --no-input bundle add --all --yes
+stderr 'Added'
+
+exec $MUSHER_BIN --no-color --no-input bundle validate
+
+-- skill.md --
+---
+name: my-skill
+description: A test skill
+---
+
+This is a test skill.

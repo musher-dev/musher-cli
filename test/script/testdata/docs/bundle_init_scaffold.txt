@@ -1,0 +1,9 @@
+# documented "New bundle project" workflow (README Quick Start)
+mkdir project
+cd project
+
+exec $MUSHER_BIN --no-color --no-input bundle init --yes
+stderr 'Created musher.yaml'
+exists musher.yaml
+
+exec $MUSHER_BIN --no-color --no-input bundle validate

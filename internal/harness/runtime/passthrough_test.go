@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -62,12 +63,22 @@ func TestPassthrough_Run_BinaryNotFound(t *testing.T) {
 func TestPassthrough_Run_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
+	// Use a cross-platform long-running command. On Windows "sleep" does not
+	// exist, so use "ping" with a high count which is available everywhere.
+	binary := "sleep"
+	args := []string{"10"}
+
+	if runtime.GOOS == "windows" {
+		binary = "ping"
+		args = []string{"-n", "100", "127.0.0.1"}
+	}
+
 	ctx, cancel := context.WithCancel(t.Context())
 
 	p := &Passthrough{}
 	cfg := &Config{
-		Binary:  "sleep",
-		Args:    []string{"10"},
+		Binary:  binary,
+		Args:    args,
 		WorkDir: t.TempDir(),
 	}
 
@@ -75,8 +86,13 @@ func TestPassthrough_Run_ContextCancellation(t *testing.T) {
 	go func() {
 		// Give exec.CommandContext time to start the process before
 		// the context is canceled.
-		//nolint:mnd // 50ms is sufficient for process start
-		time.Sleep(50 * time.Millisecond)
+		//nolint:mnd // 50ms is sufficient for process start on Unix; Windows needs more
+		delay := 50 * time.Millisecond
+		if runtime.GOOS == "windows" {
+			delay = 2 * time.Second //nolint:mnd // ping needs longer to start on Windows CI
+		}
+
+		time.Sleep(delay)
 		cancel()
 	}()
 
@@ -85,7 +101,7 @@ func TestPassthrough_Run_ContextCancellation(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	// Should get 130 (SIGINT convention) or similar non-zero exit.
+	// Should get non-zero exit (130 SIGINT on Unix, 1 on Windows).
 	if exitCode == 0 {
 		t.Error("Run() exitCode = 0 after cancellation, expected non-zero")
 	}
