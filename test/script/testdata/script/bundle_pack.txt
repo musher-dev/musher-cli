@@ -1,0 +1,9 @@
+# bundle pack stores a validated bundle in the local cache
+mkdir project
+cd project
+
+exec $MUSHER_BIN --no-color --no-input bundle init --yes
+stderr 'Created musher.yaml'
+
+exec $MUSHER_BIN --no-color --no-input bundle pack
+stderr 'Packed'

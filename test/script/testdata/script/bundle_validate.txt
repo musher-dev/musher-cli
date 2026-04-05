@@ -1,0 +1,14 @@
+# bundle validate confirms a scaffolded bundle is valid
+mkdir project
+cd project
+
+exec $MUSHER_BIN --no-color --no-input bundle init --yes
+stderr 'Created musher.yaml'
+
+exec $MUSHER_BIN --no-color --no-input bundle validate
+stderr 'Bundle is valid'
+
+# JSON mode returns structured output
+exec $MUSHER_BIN --no-color --no-input --json bundle validate
+stdout '"valid"'
+stdout '"assetCount"'

@@ -1,0 +1,9 @@
+# bundle push fails when not authenticated
+mkdir project
+cd project
+
+exec $MUSHER_BIN --no-color --no-input bundle init --yes
+stderr 'Created musher.yaml'
+
+! exec $MUSHER_BIN --no-color --no-input bundle push --yes
+stderr 'Not authenticated'

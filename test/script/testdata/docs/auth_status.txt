@@ -1,0 +1,4 @@
+# documented auth status command runs (README Quick Start)
+# exits non-zero without credentials but proves the command exists
+! exec $MUSHER_BIN --no-color --no-input auth status
+stderr 'Not authenticated'

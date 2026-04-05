@@ -1,0 +1,8 @@
+# run validates arguments and requires a harness in non-interactive mode
+
+# no arguments produces a usage error
+! exec $MUSHER_BIN --no-color --no-input run
+
+# missing --harness in non-interactive mode reports a clear error
+! exec $MUSHER_BIN --no-color --no-input run acme/test:1.0.0
+stderr 'No harness'
