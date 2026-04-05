@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.12](https://github.com/musher-dev/musher-cli/compare/v0.3.11...v0.3.12) (2026-04-05)
+
+
+### Features
+
+* add harness runtime executors, health checks, and bundle swap UI ([1ab1376](https://github.com/musher-dev/musher-cli/commit/1ab137659f152fbdbbaaa36ddc1ba7c16f90be24))
+* add harness runtime executors, health checks, and bundle swap UI ([f1e8785](https://github.com/musher-dev/musher-cli/commit/f1e87859d34997bfc614205b1463a09bc5a392ce)), closes [#52](https://github.com/musher-dev/musher-cli/issues/52) [#56](https://github.com/musher-dev/musher-cli/issues/56)
+
+
+### Bug Fixes
+
+* normalize CRLF in skill frontmatter and close logger in test ([5fd2e29](https://github.com/musher-dev/musher-cli/commit/5fd2e293558cc32784ac1dd7e9c472eceedd59b6))
+* use cross-platform binary in passthrough cancellation test ([fa6f4f9](https://github.com/musher-dev/musher-cli/commit/fa6f4f9734eb435398eba2e9b38ace2878d734ce))
+
 ## [0.3.11](https://github.com/musher-dev/musher-cli/compare/v0.3.10...v0.3.11) (2026-04-04)
 
 
