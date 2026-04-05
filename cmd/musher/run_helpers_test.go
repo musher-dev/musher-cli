@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/harness"
+	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/terminal"
 )
 
 func TestResolveHarnessByName_Found(t *testing.T) {
@@ -63,5 +67,61 @@ func TestResolveHarness_WithName(t *testing.T) {
 
 	if prov.Spec.Name != "claude" {
 		t.Errorf("provider name = %q, want %q", prov.Spec.Name, "claude")
+	}
+}
+
+func TestPreflightHealthCheck_PrintsWarnings(t *testing.T) {
+	t.Parallel()
+
+	prov := &harness.Provider{
+		Spec: &harness.Spec{
+			Name:        "gotest",
+			DisplayName: "Go Test",
+			Binary:      "go",
+			Status: harness.StatusSpec{
+				AuthCheck: harness.AuthCheck{
+					Path:        "/nonexistent/credentials.json",
+					Description: "test credentials",
+				},
+			},
+		},
+		Available: func() bool { return true },
+	}
+
+	var stdout, stderr bytes.Buffer
+
+	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
+
+	preflightHealthCheck(t.Context(), out, prov)
+
+	combined := stderr.String() + stdout.String()
+	if !strings.Contains(combined, "not found") {
+		t.Errorf("expected warning about missing auth; got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestPreflightHealthCheck_SilentWhenHealthy(t *testing.T) {
+	t.Parallel()
+
+	prov := &harness.Provider{
+		Spec: &harness.Spec{
+			Name:        "gotest",
+			DisplayName: "Go Test",
+			Binary:      "go",
+			Status: harness.StatusSpec{
+				VersionArgs: []string{"version"},
+			},
+		},
+		Available: func() bool { return true },
+	}
+
+	var stdout, stderr bytes.Buffer
+
+	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
+
+	preflightHealthCheck(t.Context(), out, prov)
+
+	if stdout.Len() > 0 || stderr.Len() > 0 {
+		t.Errorf("expected no output for healthy harness; got stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }

@@ -11,6 +11,7 @@ func newBundleRunCmd() *cobra.Command {
 		harnessName string
 		force       bool
 		projectDir  string
+		noWatch     bool
 	)
 
 	cmd := &cobra.Command{
@@ -24,13 +25,14 @@ This is an alias for 'musher run'. See 'musher run --help' for details.`,
 		Args: requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			return runBundleRun(cmd.Context(), out, args[0], harnessName, projectDir, force)
+			return runBundleRun(cmd.Context(), out, args[0], harnessName, projectDir, force, noWatch)
 		},
 	}
 
 	cmd.Flags().StringVar(&harnessName, "harness", "", "Target harness (e.g. claude, cursor, codex)")
 	cmd.Flags().BoolVar(&force, "force", false, "Re-download even if already cached")
 	cmd.Flags().StringVar(&projectDir, "project-dir", ".", "Project working directory for the harness")
+	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable status header (direct stdio passthrough)")
 
 	return cmd
 }
