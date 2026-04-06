@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -744,6 +745,10 @@ func TestGetBlobNonNotFoundError(t *testing.T) {
 func TestStoreBlobWriteError(t *testing.T) {
 	t.Parallel()
 
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod read-only semantics differ on Windows")
+	}
+
 	store := newTestStore(t)
 
 	// Make the blobs directory read-only to force a write error.
@@ -764,6 +769,10 @@ func TestStoreBlobWriteError(t *testing.T) {
 
 func TestStoreManifestWriteError(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod read-only semantics differ on Windows")
+	}
 
 	store := newTestStore(t)
 
@@ -788,6 +797,10 @@ func TestStoreManifestWriteError(t *testing.T) {
 func TestStoreManifestMetaWriteError(t *testing.T) {
 	t.Parallel()
 
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod read-only semantics differ on Windows")
+	}
+
 	store := newTestStore(t)
 
 	// Make manifests dir read-only so MkdirAll fails.
@@ -810,6 +823,10 @@ func TestStoreManifestMetaWriteError(t *testing.T) {
 
 func TestUpdateRefWriteError(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod read-only semantics differ on Windows")
+	}
 
 	store := newTestStore(t)
 

@@ -569,6 +569,10 @@ func TestCheckDirectoryStructureParentIsFile(t *testing.T) {
 }
 
 func TestCheckDirectoryStructureNotWritable(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("Unix permission test")
+	}
+
 	if os.Getuid() == 0 {
 		t.Skip("skipping as root (always has write permission)")
 	}
