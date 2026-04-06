@@ -48,7 +48,7 @@ type authStatusNamespace struct {
 }
 
 func runAuthStatus(cmd *cobra.Command, out *output.Writer) error {
-	source, c, err := newAPIClient()
+	source, c, err := newAPIClientFromContext(cmd.Context())
 	if err != nil {
 		return err
 	}

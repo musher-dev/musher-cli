@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,7 +95,7 @@ func TestRenderValidationChecks_AllPending(t *testing.T) {
 	sty := newStyles(true)
 	spin := spinner.New()
 
-	result := renderValidationChecks(checks, &sty, &spin)
+	result := renderValidationChecks(checks, &sty, &spin, 0)
 
 	if result == "" {
 		t.Error("expected non-empty render")
@@ -122,10 +124,63 @@ func TestRenderValidationChecks_WithFailure(t *testing.T) {
 	sty := newStyles(true)
 	spin := spinner.New()
 
-	result := renderValidationChecks(checks, &sty, &spin)
+	result := renderValidationChecks(checks, &sty, &spin, 0)
 
 	if !containsPlainText(result, "schema error") {
 		t.Error("expected render to contain error detail")
+	}
+}
+
+func TestRenderValidationChecks_Truncation(t *testing.T) {
+	t.Parallel()
+
+	checks := newValidationChecks()
+	checks[0].status = checkFailed
+
+	// Build a 20-line error detail.
+	var lines []string
+	for i := range 20 {
+		lines = append(lines, fmt.Sprintf("error line %d", i+1))
+	}
+
+	checks[0].detail = strings.Join(lines, "\n")
+
+	sty := newStyles(true)
+	spin := spinner.New()
+
+	result := renderValidationChecks(checks, &sty, &spin, 5)
+
+	if !containsPlainText(result, "error line 5") {
+		t.Error("expected render to contain last visible error line")
+	}
+
+	if containsPlainText(result, "error line 6") {
+		t.Error("expected render NOT to contain truncated error line")
+	}
+
+	if !containsPlainText(result, "15 more lines") {
+		t.Error("expected render to contain truncation indicator")
+	}
+}
+
+func TestRenderValidationChecks_NoTruncationUnderLimit(t *testing.T) {
+	t.Parallel()
+
+	checks := newValidationChecks()
+	checks[0].status = checkFailed
+	checks[0].detail = "line 1\nline 2\nline 3"
+
+	sty := newStyles(true)
+	spin := spinner.New()
+
+	result := renderValidationChecks(checks, &sty, &spin, 10)
+
+	if !containsPlainText(result, "line 3") {
+		t.Error("expected render to contain all error lines")
+	}
+
+	if containsPlainText(result, "more lines") {
+		t.Error("expected render NOT to contain truncation indicator when under limit")
 	}
 }
 

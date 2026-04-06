@@ -2,10 +2,17 @@ package doctor
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/musher-dev/musher-cli/internal/buildinfo"
 )
 
 func TestNew(t *testing.T) {
@@ -562,6 +569,10 @@ func TestCheckDirectoryStructureParentIsFile(t *testing.T) {
 }
 
 func TestCheckDirectoryStructureNotWritable(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("Unix permission test")
+	}
+
 	if os.Getuid() == 0 {
 		t.Skip("skipping as root (always has write permission)")
 	}
@@ -645,5 +656,456 @@ func TestRenderResults(t *testing.T) {
 
 	if mutedCalls != 1 {
 		t.Errorf("mutedFn called %d times, want 1 (for detail)", mutedCalls)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// checkCredentialsFile — additional coverage
+// ---------------------------------------------------------------------------
+
+func TestCheckCredentialsFile_ExistsWithCorrectPerms(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("Unix permission test")
+	}
+
+	root := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(root, "data"))
+	// Use default API URL so HostIDFromURL succeeds.
+	t.Setenv("MUSHER_API_URL", "https://api.musher.dev")
+
+	// Create the credential file at the expected path:
+	// <data>/credentials/<hostID>/api-key
+	credDir := filepath.Join(root, "data", "credentials", "api.musher.dev")
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	credFile := filepath.Join(credDir, "api-key")
+	if err := os.WriteFile(credFile, []byte("test-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkCredentialsFile(t.Context())
+
+	// Should pass with the file path in the message.
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+
+	if result.Message != credFile {
+		t.Errorf("message = %q, want credential path %q", result.Message, credFile)
+	}
+}
+
+func TestCheckCredentialsFile_TooPermissive(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("Unix permission test")
+	}
+
+	if os.Getuid() == 0 {
+		t.Skip("skipping as root")
+	}
+
+	root := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("MUSHER_API_URL", "https://api.musher.dev")
+
+	credDir := filepath.Join(root, "data", "credentials", "api.musher.dev")
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	credFile := filepath.Join(credDir, "api-key")
+	// Write with overly permissive mode (world-readable).
+	if err := os.WriteFile(credFile, []byte("test-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkCredentialsFile(t.Context())
+
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn for permissive cred file; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+
+	if result.Detail == "" {
+		t.Error("expected detail with chmod guidance")
+	}
+}
+
+func TestCheckCredentialsFile_StatError(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("Unix permission test")
+	}
+
+	if os.Getuid() == 0 {
+		t.Skip("skipping as root")
+	}
+
+	root := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("MUSHER_API_URL", "https://api.musher.dev")
+
+	// Create the credential directory but make it inaccessible so Stat fails
+	// with a permission error rather than not-exist.
+	credDir := filepath.Join(root, "data", "credentials", "api.musher.dev")
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	credFile := filepath.Join(credDir, "api-key")
+	if err := os.WriteFile(credFile, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove execute permission on parent so Stat(credFile) fails with EACCES.
+	if err := os.Chmod(credDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.Chmod(credDir, 0o700) })
+
+	result := checkCredentialsFile(t.Context())
+
+	if result.Status != StatusFail {
+		t.Errorf("status = %d, want Fail for inaccessible cred file; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+func TestCheckCredentialsFile_WindowsSkipsPermCheck(t *testing.T) {
+	if runtime.GOOS != osWindows {
+		t.Skip("Windows-only test")
+	}
+
+	root := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("MUSHER_API_URL", "https://api.musher.dev")
+
+	credDir := filepath.Join(root, "data", "credentials", "api.musher.dev")
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	credFile := filepath.Join(credDir, "api-key")
+	if err := os.WriteFile(credFile, []byte("test-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkCredentialsFile(t.Context())
+
+	// On Windows, permission check is skipped so should be Pass.
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass on Windows; message = %q", result.Status, result.Message)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// checkAuthentication — additional coverage
+// ---------------------------------------------------------------------------
+
+func TestCheckAuthentication_InvalidCredentials(t *testing.T) {
+	// Spin up a mock API that returns 401 for /v1/publisher/me.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(dir, "data"))
+	t.Setenv("MUSHER_API_URL", srv.URL)
+	t.Setenv("MUSHER_API_KEY", "bad-key")
+
+	result := checkAuthentication(t.Context())
+
+	if result.Status != StatusFail {
+		t.Errorf("status = %d, want Fail for invalid creds; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+func TestCheckAuthentication_ValidCredentials(t *testing.T) {
+	// Mock API returns a valid publisher identity.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"credentialType":"api_key","credentialId":"id1","credentialName":"my-key","user":null,"organization":null,"namespaces":[]}`)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(dir, "data"))
+	t.Setenv("MUSHER_API_URL", srv.URL)
+	t.Setenv("MUSHER_API_KEY", "good-key")
+
+	result := checkAuthentication(t.Context())
+
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass for valid creds; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+
+	if result.Message == "" {
+		t.Error("expected non-empty message with credential name")
+	}
+}
+
+func TestCheckAuthentication_ServerError(t *testing.T) {
+	// Mock API returns 500 to cover the generic error branch.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(dir, "data"))
+	t.Setenv("MUSHER_API_URL", srv.URL)
+	t.Setenv("MUSHER_API_KEY", "some-key")
+
+	result := checkAuthentication(t.Context())
+
+	if result.Status != StatusFail {
+		t.Errorf("status = %d, want Fail for server error; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// checkClockSkew — additional coverage
+// ---------------------------------------------------------------------------
+
+func TestCheckClockSkew_WithinTolerance(t *testing.T) {
+	// Mock API that returns a Date header close to now.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", dir)
+
+	configContent := fmt.Sprintf("api:\n  url: %s\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(configContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkClockSkew(t.Context())
+
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass when clock is within tolerance; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+func TestCheckClockSkew_SkewDetected(t *testing.T) {
+	// Mock API that returns a Date header 5 minutes in the past.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		skewed := time.Now().Add(-5 * time.Minute).UTC()
+		w.Header().Set("Date", skewed.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", dir)
+
+	configContent := fmt.Sprintf("api:\n  url: %s\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(configContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkClockSkew(t.Context())
+
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn for clock skew; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+func TestCheckClockSkew_UnparseableDateHeader(t *testing.T) {
+	// Mock API that returns a garbage Date header so ServerTime is nil.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set an unparseable Date header before WriteHeader to prevent
+		// Go's default from being applied.
+		w.Header().Set("Date", "not-a-date")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", dir)
+
+	configContent := fmt.Sprintf("api:\n  url: %s\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(configContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkClockSkew(t.Context())
+
+	// Should warn because ServerTime is nil (unparseable Date header).
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn when Date header unparseable; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// checkCLIVersion — additional coverage
+// ---------------------------------------------------------------------------
+
+func TestCheckCLIVersion_DevBuild(t *testing.T) {
+	orig := buildinfo.Version
+	buildinfo.Version = "dev"
+
+	t.Cleanup(func() { buildinfo.Version = orig })
+
+	result := checkCLIVersion(t.Context())
+
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn for dev build; message = %q", result.Status, result.Message)
+	}
+
+	if result.Message != "Development build (version check skipped)" {
+		t.Errorf("unexpected message: %q", result.Message)
+	}
+}
+
+func TestCheckCLIVersion_UpdateDisabled(t *testing.T) {
+	orig := buildinfo.Version
+	buildinfo.Version = "1.0.0"
+
+	t.Cleanup(func() { buildinfo.Version = orig })
+	t.Setenv("MUSHER_UPDATE_DISABLED", "true")
+
+	result := checkCLIVersion(t.Context())
+
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass when updates disabled; message = %q", result.Status, result.Message)
+	}
+
+	if result.Message != "v1.0.0 (update checks disabled)" {
+		t.Errorf("unexpected message: %q", result.Message)
+	}
+}
+
+func TestCheckCLIVersion_UpdateCheckError(t *testing.T) {
+	// Use a non-dev version so it actually tries to check.
+	orig := buildinfo.Version
+	buildinfo.Version = "0.0.1"
+
+	t.Cleanup(func() { buildinfo.Version = orig })
+
+	// Make sure updates are not disabled.
+	t.Setenv("MUSHER_UPDATE_DISABLED", "")
+
+	// Use a very short timeout so the check fails quickly.
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Millisecond)
+	defer cancel()
+
+	result := checkCLIVersion(ctx)
+
+	// Should be warn because the update check failed (timeout or network error).
+	if result.Status != StatusWarn && result.Status != StatusPass {
+		t.Errorf("status = %d, want Warn or Pass; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// checkAPIConnectivity — additional coverage (reachable server)
+// ---------------------------------------------------------------------------
+
+func TestCheckAPIConnectivity_Reachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", dir)
+
+	configContent := fmt.Sprintf("api:\n  url: %s\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(configContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := checkAPIConnectivity(t.Context())
+
+	if result.Status != StatusPass {
+		t.Errorf("status = %d, want Pass for reachable API; message = %q, detail = %q",
+			result.Status, result.Message, result.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// findFileBlockingPath — unit tests
+// ---------------------------------------------------------------------------
+
+func TestFindFileBlockingPath_NoBlocker(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	got := findFileBlockingPath(dir)
+	if got != "" {
+		t.Errorf("findFileBlockingPath(%q) = %q, want empty", dir, got)
+	}
+}
+
+func TestFindFileBlockingPath_FileBlocks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	blocker := filepath.Join(root, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ask about a child path under the file.
+	child := filepath.Join(blocker, "subdir")
+
+	got := findFileBlockingPath(child)
+	if got != blocker {
+		t.Errorf("findFileBlockingPath(%q) = %q, want %q", child, got, blocker)
+	}
+}
+
+func TestFindFileBlockingPath_NonexistentParent(t *testing.T) {
+	t.Parallel()
+
+	// Deep nonexistent path — should walk up and find nothing blocking.
+	got := findFileBlockingPath("/nonexistent/deep/path/here")
+	if got != "" {
+		t.Errorf("findFileBlockingPath for nonexistent path = %q, want empty", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isNotDirError — unit tests
+// ---------------------------------------------------------------------------
+
+func TestIsNotDirError_NonPathError(t *testing.T) {
+	t.Parallel()
+
+	if isNotDirError(errors.New("some error")) {
+		t.Error("isNotDirError returned true for a plain error")
+	}
+}
+
+func TestIsNotDirError_Nil(t *testing.T) {
+	t.Parallel()
+
+	if isNotDirError(nil) {
+		t.Error("isNotDirError returned true for nil")
 	}
 }

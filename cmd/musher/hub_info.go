@@ -30,9 +30,9 @@ func runHubInfo(cmd *cobra.Command, out *output.Writer, ref string) error {
 		return err
 	}
 
-	_, c, clientErr := newAPIClient()
+	_, c, clientErr := newAPIClientFromContext(cmd.Context())
 	if clientErr != nil {
-		cfg := configForPublicClient()
+		cfg := configForPublicClient(cmd.Context())
 		c = newPublicAPIClient(cfg)
 	}
 

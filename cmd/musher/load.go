@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundle/discovery"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/tui"
@@ -53,8 +54,13 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 	}
 
 	// Build API client (public for consumer operations).
-	apiURL := configForPublicClient()
+	apiURL := configForPublicClient(cmd.Context())
 	apiClient := newPublicAPIClient(apiURL)
+
+	// Wrap with fallback: try hub endpoints first, fall back to resolve+OCI
+	// for bundles that exist in the registry but lack a hub listing.
+	searcher := &discovery.FallbackSearcher{HubClient: apiClient}
+	puller := &discovery.FallbackPuller{HubClient: apiClient, OCIPullFunc: pullFromOCI}
 
 	// Build harness registry with all built-in providers.
 	harnessReg := newHarnessRegistry()
@@ -62,8 +68,8 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 
 	result, err := tui.RunLoad(
 		cmd.Context(),
-		apiClient,
-		apiClient,
+		searcher,
+		puller,
 		harnessReg,
 		healthChecker,
 		namespace, slug, bundleVersion,

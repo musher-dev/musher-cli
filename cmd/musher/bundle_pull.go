@@ -80,9 +80,9 @@ func runPull(cmd *cobra.Command, out *output.Writer, ref, outputDir string, forc
 		// This is a trade-off: the pull_shared function is cache-focused.
 		// For the extract case, we need the raw API response.
 		// TODO(consumer): optimize by passing content through pullToCache. #1
-		_, apiClient, authErr := newAPIClient()
+		_, apiClient, authErr := newAPIClientFromContext(cmd.Context())
 		if authErr != nil {
-			apiURL := configForPublicClient()
+			apiURL := configForPublicClient(cmd.Context())
 			apiClient = newPublicAPIClient(apiURL)
 		}
 

@@ -7,6 +7,10 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 10
+    groups:
+      go-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -15,3 +19,7 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

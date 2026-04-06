@@ -35,7 +35,7 @@ func runUnyank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) err
 		return err
 	}
 
-	c, authErr := requireAuth()
+	c, authErr := requireAuthFromContext(cmd.Context())
 	if authErr != nil {
 		return authErr
 	}

@@ -37,8 +37,13 @@ assets:
 
 	out := testWriter()
 
-	if err := runValidate(out); err != nil {
+	bundle, err := runValidate(out)
+	if err != nil {
 		t.Fatalf("runValidate() error = %v", err)
+	}
+
+	if bundle == nil {
+		t.Fatal("runValidate() returned nil bundle on success")
 	}
 }
 
@@ -48,7 +53,7 @@ func TestRunValidateNoMusherYAML(t *testing.T) {
 
 	out := testWriter()
 
-	err := runValidate(out)
+	_, err := runValidate(out)
 	if err == nil {
 		t.Fatal("expected error when musher.yaml doesn't exist")
 	}
@@ -78,7 +83,7 @@ assets:
 	// Don't create the referenced asset.
 	out := testWriter()
 
-	err := runValidate(out)
+	_, err := runValidate(out)
 	if err == nil {
 		t.Fatal("expected error when asset file is missing")
 	}
@@ -103,7 +108,7 @@ name: `
 
 	out := testWriter()
 
-	err := runValidate(out)
+	_, err := runValidate(out)
 	if err == nil {
 		t.Fatal("expected error for malformed musher.yaml")
 	}
@@ -123,7 +128,7 @@ func TestRunValidateSchemaViolation(t *testing.T) {
 
 	out := testWriter()
 
-	err := runValidate(out)
+	_, err := runValidate(out)
 	if err == nil {
 		t.Fatal("expected error for schema violation")
 	}

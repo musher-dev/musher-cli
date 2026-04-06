@@ -288,6 +288,149 @@ func TestLoadStateCorruptedFile(t *testing.T) {
 	}
 }
 
+func TestSaveStateCreatesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(dir, "deep", "nested", "state"))
+
+	state := &State{
+		LastCheckedAt:  time.Now().Truncate(time.Second).UTC(),
+		LatestVersion:  "1.0.0",
+		CurrentVersion: "0.9.0",
+	}
+
+	if err := SaveState(state); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+
+	// Verify file exists in the nested path.
+	stateFile := filepath.Join(dir, "deep", "nested", "state", stateFileName)
+
+	data, readErr := os.ReadFile(stateFile)
+	if readErr != nil {
+		t.Fatalf("state file not created at nested path: %v", readErr)
+	}
+
+	var loaded State
+	if unmarshalErr := json.Unmarshal(data, &loaded); unmarshalErr != nil {
+		t.Fatalf("unmarshal: %v", unmarshalErr)
+	}
+
+	if loaded.LatestVersion != "1.0.0" {
+		t.Errorf("LatestVersion = %q, want %q", loaded.LatestVersion, "1.0.0")
+	}
+}
+
+func TestSaveStateOverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(dir, "state"))
+
+	first := &State{
+		LatestVersion:  "1.0.0",
+		CurrentVersion: "0.9.0",
+	}
+
+	if err := SaveState(first); err != nil {
+		t.Fatalf("SaveState (first): %v", err)
+	}
+
+	second := &State{
+		LatestVersion:  "2.0.0",
+		CurrentVersion: "1.0.0",
+		ReleaseURL:     "https://example.com/v2",
+	}
+
+	if err := SaveState(second); err != nil {
+		t.Fatalf("SaveState (second): %v", err)
+	}
+
+	loaded, loadErr := LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+
+	if loaded.LatestVersion != "2.0.0" {
+		t.Errorf("LatestVersion = %q, want %q", loaded.LatestVersion, "2.0.0")
+	}
+
+	if loaded.ReleaseURL != "https://example.com/v2" {
+		t.Errorf("ReleaseURL = %q, want %q", loaded.ReleaseURL, "https://example.com/v2")
+	}
+}
+
+func TestSaveStateStagedFields(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(dir, "state"))
+
+	stagedAt := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
+	applyAt := time.Date(2025, 6, 1, 12, 5, 0, 0, time.UTC)
+
+	state := &State{
+		LatestVersion:          "3.0.0",
+		StagedVersion:          "3.0.0",
+		StagedAt:               stagedAt,
+		LastApplyAttemptAt:     applyAt,
+		LastApplyError:         "binary busy",
+		AutoApplyBlockedReason: "managed_install",
+	}
+
+	if err := SaveState(state); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+
+	loaded, loadErr := LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+
+	if loaded.StagedVersion != "3.0.0" {
+		t.Errorf("StagedVersion = %q, want %q", loaded.StagedVersion, "3.0.0")
+	}
+
+	if loaded.LastApplyError != "binary busy" {
+		t.Errorf("LastApplyError = %q, want %q", loaded.LastApplyError, "binary busy")
+	}
+
+	if loaded.AutoApplyBlockedReason != "managed_install" {
+		t.Errorf("AutoApplyBlockedReason = %q, want %q", loaded.AutoApplyBlockedReason, "managed_install")
+	}
+}
+
+func TestStatePathOrEmpty(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(dir, "state"))
+
+	path, ok := statePathOrEmpty()
+	if !ok {
+		t.Fatal("statePathOrEmpty returned ok=false with valid env")
+	}
+
+	if path == "" {
+		t.Error("expected non-empty path")
+	}
+
+	if !filepath.IsAbs(path) {
+		t.Errorf("path should be absolute, got %q", path)
+	}
+}
+
+func TestStatePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MUSHER_STATE_HOME", filepath.Join(dir, "state"))
+
+	path, err := statePath()
+	if err != nil {
+		t.Fatalf("statePath: %v", err)
+	}
+
+	if !filepath.IsAbs(path) {
+		t.Errorf("expected absolute path, got %q", path)
+	}
+
+	if filepath.Base(path) != stateFileName {
+		t.Errorf("expected filename %q, got %q", stateFileName, filepath.Base(path))
+	}
+}
+
 func TestStateJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 

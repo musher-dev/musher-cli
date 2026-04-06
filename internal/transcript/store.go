@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"os"
@@ -91,6 +92,57 @@ func (s *Store) Prune(olderThan time.Duration) (int, error) {
 	}
 
 	return pruned, nil
+}
+
+// ReadEvents reads all events from a session's events.jsonl file.
+// Returns an empty slice if the events file does not exist.
+func (s *Store) ReadEvents(sessionID string) ([]Event, error) {
+	eventsPath := filepath.Join(s.dir, sessionID, "events.jsonl")
+
+	f, err := os.Open(eventsPath) //nolint:gosec // path derived from trusted session ID
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+
+		return nil, repoerrors.Errorf("open events file: %w", err)
+	}
+	defer f.Close() //nolint:errcheck // read-only file, close error is not actionable
+
+	var events []Event
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var ev Event
+		if jsonErr := json.Unmarshal(scanner.Bytes(), &ev); jsonErr != nil {
+			continue // skip corrupt lines
+		}
+
+		events = append(events, ev)
+	}
+
+	if scanErr := scanner.Err(); scanErr != nil {
+		return events, repoerrors.Errorf("read events file: %w", scanErr)
+	}
+
+	return events, nil
+}
+
+// Close stamps the session's CloseTime in meta.json.
+func (s *Store) Close(sessionID string) error {
+	sess, err := s.readMeta(sessionID)
+	if err != nil {
+		return err
+	}
+
+	sess.CloseTime = time.Now().UTC()
+
+	return s.writeMeta(sess)
+}
+
+// Get returns a single session by ID.
+func (s *Store) Get(sessionID string) (*Session, error) {
+	return s.readMeta(sessionID)
 }
 
 func (s *Store) writeMeta(sess *Session) error {

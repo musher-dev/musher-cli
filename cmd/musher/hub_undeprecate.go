@@ -29,7 +29,7 @@ func runHubUndeprecate(cmd *cobra.Command, out *output.Writer, ref string) error
 		return err
 	}
 
-	c, authErr := requireAuth()
+	c, authErr := requireAuthFromContext(cmd.Context())
 	if authErr != nil {
 		return authErr
 	}

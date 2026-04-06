@@ -23,6 +23,7 @@ via MUSHER_* environment variables.`,
 		newConfigListCmd(),
 		newConfigGetCmd(),
 		newConfigSetCmd(),
+		newConfigProfileCmd(),
 	)
 
 	return cmd

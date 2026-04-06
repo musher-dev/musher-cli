@@ -68,6 +68,38 @@ func TestSplitFrontmatter_EmptyYAML(t *testing.T) {
 	}
 }
 
+func TestSplitFrontmatter_ClosingDelimAtEOF(t *testing.T) {
+	t.Parallel()
+
+	// Frontmatter with closing "---" at EOF without trailing newline.
+	content := []byte("---\nname: test\n---")
+
+	fm, body, hasFM := harness.SplitFrontmatter(content, "agent.md")
+	if !hasFM {
+		t.Fatal("expected frontmatter with closing --- at EOF")
+	}
+
+	if !strings.Contains(string(fm), "name: test") {
+		t.Errorf("frontmatter = %q", fm)
+	}
+
+	if len(body) != 0 {
+		t.Errorf("body should be empty, got %q", body)
+	}
+}
+
+func TestSplitFrontmatter_UnclosedDelimiter(t *testing.T) {
+	t.Parallel()
+
+	// Frontmatter opened but never closed — should return no frontmatter.
+	content := []byte("---\nname: test\nSome text without closing delimiter.\n")
+
+	_, _, hasFM := harness.SplitFrontmatter(content, "agent.md")
+	if hasFM {
+		t.Fatal("expected no frontmatter for unclosed delimiter")
+	}
+}
+
 func TestJoinFrontmatter_MD(t *testing.T) {
 	t.Parallel()
 

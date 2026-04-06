@@ -61,7 +61,7 @@ func newAuthScreen(ctx context.Context, deps *HomeDeps, sty *styles, keys *keyMa
 	spin := spinner.New()
 
 	keyInput := textinput.New()
-	keyInput.Placeholder = "mshk_..."
+	keyInput.Placeholder = "mush_..."
 	keyInput.EchoMode = textinput.EchoPassword
 	keyInput.CharLimit = 256
 	sty.applyInputStyles(&keyInput)

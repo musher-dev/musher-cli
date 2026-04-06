@@ -46,7 +46,7 @@ func runYank(cmd *cobra.Command, out *output.Writer, ref string, yes bool) error
 
 	reason, _ := cmd.Flags().GetString("reason") //nolint:errcheck // flag registered by AddCommand, cannot fail
 
-	c, authErr := requireAuth()
+	c, authErr := requireAuthFromContext(cmd.Context())
 	if authErr != nil {
 		return authErr
 	}

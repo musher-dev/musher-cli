@@ -11,9 +11,32 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/transcript"
 )
 
 var errUnexpectedModel = errors.New("unexpected model type from TUI program")
+
+// runScreen wraps a screen in an App, runs the BubbleTea program, and extracts the result.
+func runScreen(screen Screen) (*Result, error) {
+	app := NewApp(screen)
+	p := tea.NewProgram(app)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, repoerrors.Errorf("TUI error: %w", err)
+	}
+
+	finalApp, ok := finalModel.(*App)
+	if !ok {
+		return nil, errUnexpectedModel
+	}
+
+	if finalApp.Err() != nil {
+		return nil, finalApp.Err()
+	}
+
+	return finalApp.Result(), nil
+}
 
 // Mode describes the TUI operating mode.
 type Mode int
@@ -42,26 +65,8 @@ func ShouldEnable(isTerminal, noTUIFlag, quietFlag, jsonFlag bool) Mode {
 func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newHomeScreen(ctx, deps, &sty, &keys)
-	app := NewApp(screen)
 
-	p := tea.NewProgram(app)
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return nil, repoerrors.Errorf("TUI error: %w", err)
-	}
-
-	finalApp, ok := finalModel.(*App)
-	if !ok {
-		return nil, errUnexpectedModel
-	}
-
-	if finalApp.Err() != nil {
-		return nil, finalApp.Err()
-	}
-
-	return finalApp.Result(), nil
+	return runScreen(newHomeScreen(ctx, deps, &sty, &keys))
 }
 
 // RunSearch launches the TUI in search mode and returns the user's selection.
@@ -76,26 +81,8 @@ func RunSearch(
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys)
-	app := NewApp(screen)
 
-	p := tea.NewProgram(app)
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return nil, repoerrors.Errorf("TUI error: %w", err)
-	}
-
-	finalApp, ok := finalModel.(*App)
-	if !ok {
-		return nil, errUnexpectedModel
-	}
-
-	if finalApp.Err() != nil {
-		return nil, finalApp.Err()
-	}
-
-	return finalApp.Result(), nil
+	return runScreen(newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys))
 }
 
 // RunNewBundle launches the TUI in new bundle creation mode.
@@ -103,26 +90,8 @@ func RunSearch(
 func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newNewBundleScreen(ctx, deps, workDir, &sty, &keys)
-	app := NewApp(screen)
 
-	p := tea.NewProgram(app)
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return nil, repoerrors.Errorf("TUI error: %w", err)
-	}
-
-	finalApp, ok := finalModel.(*App)
-	if !ok {
-		return nil, errUnexpectedModel
-	}
-
-	if finalApp.Err() != nil {
-		return nil, finalApp.Err()
-	}
-
-	return finalApp.Result(), nil
+	return runScreen(newNewBundleScreen(ctx, deps, workDir, &sty, &keys))
 }
 
 // RunPack launches the TUI in pack mode for the bundle in the working directory.
@@ -130,26 +99,26 @@ func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result,
 func RunPack(ctx context.Context, deps *HomeDeps) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newPackScreen(ctx, deps, deps.Packer, &sty, &keys)
-	app := NewApp(screen)
 
-	p := tea.NewProgram(app)
+	return runScreen(newPackScreen(ctx, deps, deps.Packer, &sty, &keys))
+}
 
-	finalModel, err := p.Run()
-	if err != nil {
-		return nil, repoerrors.Errorf("TUI error: %w", err)
-	}
+// RunHistory launches the TUI for browsing session history.
+// Returns nil result if the user quit without taking an action.
+func RunHistory(ctx context.Context, store SessionLister) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
 
-	finalApp, ok := finalModel.(*App)
-	if !ok {
-		return nil, errUnexpectedModel
-	}
+	return runScreen(newHistoryScreen(ctx, store, &sty, &keys))
+}
 
-	if finalApp.Err() != nil {
-		return nil, finalApp.Err()
-	}
+// RunHistoryDetail launches the TUI for viewing a single session's events.
+// Returns nil result when the user navigates back.
+func RunHistoryDetail(ctx context.Context, session *transcript.Session, events []transcript.Event) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
 
-	return finalApp.Result(), nil
+	return runScreen(newHistoryDetailScreen(ctx, session, events, &sty, &keys))
 }
 
 // RunLoad launches the TUI in load mode for a specific bundle.
@@ -164,24 +133,6 @@ func RunLoad(
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
-	screen := newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys)
-	app := NewApp(screen)
 
-	program := tea.NewProgram(app)
-
-	finalModel, err := program.Run()
-	if err != nil {
-		return nil, repoerrors.Errorf("TUI error: %w", err)
-	}
-
-	finalApp, ok := finalModel.(*App)
-	if !ok {
-		return nil, errUnexpectedModel
-	}
-
-	if finalApp.Err() != nil {
-		return nil, finalApp.Err()
-	}
-
-	return finalApp.Result(), nil
+	return runScreen(newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys))
 }

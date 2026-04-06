@@ -14,10 +14,10 @@ import (
 	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
-// newAPIClient creates an authenticated API client using stored credentials.
-// Config is loaded first to determine the API URL, then credentials are resolved.
-func newAPIClient() (auth.CredentialSource, *client.Client, error) {
-	cfg := config.Load()
+// newAPIClientFromContext creates an authenticated API client using stored credentials.
+// Config is retrieved from context to determine the API URL, then credentials are resolved.
+func newAPIClientFromContext(ctx context.Context) (auth.CredentialSource, *client.Client, error) {
+	cfg := config.FromContext(ctx)
 	apiURL := cfg.APIURL()
 
 	source, apiKey := auth.GetCredentials(apiURL)
@@ -34,15 +34,15 @@ func newAPIClient() (auth.CredentialSource, *client.Client, error) {
 	return source, client.NewWithHTTPClient(apiURL, apiKey, httpClient), nil
 }
 
-// requireAuth returns an authenticated API client or a CLIError.
-func requireAuth() (*client.Client, error) {
-	_, c, err := newAPIClient()
+// requireAuthFromContext returns an authenticated API client or a CLIError.
+func requireAuthFromContext(ctx context.Context) (*client.Client, error) {
+	_, c, err := newAPIClientFromContext(ctx)
 	return c, err
 }
 
 // configForPublicClient returns the API URL from config (no auth needed).
-func configForPublicClient() string {
-	return config.Load().APIURL()
+func configForPublicClient(ctx context.Context) string {
+	return config.FromContext(ctx).APIURL()
 }
 
 // newPublicAPIClient creates an unauthenticated client for public endpoints.
@@ -83,7 +83,7 @@ func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
 	spin := out.Spinner("Validating credentials")
 	spin.Start()
 
-	cfg := config.Load()
+	cfg := config.FromContext(context.Background())
 
 	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
 	if err != nil {

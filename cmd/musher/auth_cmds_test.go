@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestNewAuthLoginCmdPath(t *testing.T) {
@@ -48,8 +50,10 @@ func TestRunAuthStatusNoAuth(t *testing.T) {
 	t.Setenv("MUSHER_API_KEY", "")
 
 	out := testWriter()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
 
-	err := runAuthStatus(nil, out)
+	err := runAuthStatus(cmd, out)
 	if err == nil {
 		t.Fatal("expected auth error when no credentials are available")
 	}

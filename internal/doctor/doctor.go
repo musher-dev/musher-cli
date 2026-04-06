@@ -44,6 +44,8 @@ const (
 	StatusFail
 )
 
+const osWindows = "windows"
+
 // Result holds the outcome of a single check.
 type Result struct {
 	Name    string
@@ -291,7 +293,7 @@ func checkCredentialsFile(context.Context) Result {
 	}
 
 	// Skip permission check on non-Unix platforms
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return Result{
 			Status:  StatusPass,
 			Message: credPath,

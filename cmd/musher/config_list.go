@@ -18,7 +18,7 @@ func newConfigListCmd() *cobra.Command {
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := output.FromContext(cmd.Context())
-			cfg := config.Load()
+			cfg := config.FromContext(cmd.Context())
 			settings := cfg.All()
 
 			if out.JSON {

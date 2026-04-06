@@ -149,6 +149,52 @@ func TestBuildProbeTLSConfigInvalidPEM(t *testing.T) {
 	}
 }
 
+func TestResponseTraceID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{"nil response returns empty", nil, ""},
+		{"X-Trace-Id header", map[string]string{"X-Trace-Id": "abc123"}, "abc123"},
+		{"X-Trace-Id trimmed", map[string]string{"X-Trace-Id": "  abc123  "}, "abc123"},
+		{"traceparent extracts trace-id", map[string]string{"Traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}, "4bf92f3577b34da6a3ce929d0e0e4736"},
+		{"traceparent too few parts", map[string]string{"Traceparent": "00-incomplete"}, ""},
+		{"no trace headers", map[string]string{"Content-Type": "application/json"}, ""},
+		{"empty headers", map[string]string{}, ""},
+		{"X-Trace-Id takes priority", map[string]string{"X-Trace-Id": "direct", "Traceparent": "00-fallback-span-01"}, "direct"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if tt.headers == nil {
+				got := responseTraceID(nil)
+				if got != tt.want {
+					t.Errorf("responseTraceID(nil) = %q, want %q", got, tt.want)
+				}
+
+				return
+			}
+
+			header := make(http.Header)
+			for k, v := range tt.headers {
+				header.Set(k, v)
+			}
+
+			resp := &http.Response{Header: header}
+
+			got := responseTraceID(resp)
+			if got != tt.want {
+				t.Errorf("responseTraceID() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {

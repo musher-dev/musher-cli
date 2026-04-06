@@ -28,7 +28,7 @@ func TestRunInitCreatesBundleThatValidates(t *testing.T) {
 		t.Fatalf("runInit() error = %v", err)
 	}
 
-	if err := runValidate(out); err != nil {
+	if _, err := runValidate(out); err != nil {
 		t.Fatalf("runValidate() error = %v", err)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -22,7 +24,10 @@ func TestRunHubPublishMismatchedRef(t *testing.T) {
 
 	out := testWriter()
 
-	err := runHubPublish(nil, out, "bob/bar")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubPublish(cmd, out, "bob/bar")
 	if err == nil {
 		t.Fatal("expected error for mismatched ref, got nil")
 	}
@@ -61,7 +66,10 @@ func TestRunHubPublishMatchingRefValidatesHubReadiness(t *testing.T) {
 
 	out := testWriter()
 
-	err := runHubPublish(nil, out, "acme/widget")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubPublish(cmd, out, "acme/widget")
 	if err == nil {
 		t.Fatal("expected hub-readiness error, got nil")
 	}
@@ -79,7 +87,10 @@ func TestRunHubPublishNoLocalDefSkipsValidation(t *testing.T) {
 	out := testWriter()
 
 	// No musher.yaml in dir — should skip local validation and hit auth error.
-	err := runHubPublish(nil, out, "acme/widget")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubPublish(cmd, out, "acme/widget")
 	if err == nil {
 		t.Fatal("expected auth error, got nil")
 	}

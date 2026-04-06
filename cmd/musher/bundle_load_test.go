@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/pull"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/terminal"
 )
@@ -49,7 +50,7 @@ func TestPrintBundleSummary(t *testing.T) {
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
 
-	result := &pullCacheResult{
+	result := &pull.Result{
 		Namespace:   "acme",
 		Slug:        "my-bundle",
 		Version:     "1.0.0",
@@ -76,7 +77,7 @@ func TestPrintBundleLoadJSON(t *testing.T) {
 	out := output.NewWriter(&stdout, &bytes.Buffer{}, &terminal.Info{})
 	out.JSON = true
 
-	result := &pullCacheResult{
+	result := &pull.Result{
 		Namespace:   "acme",
 		Slug:        "my-bundle",
 		Version:     "1.0.0",
@@ -105,7 +106,7 @@ func TestPrintHarnessCommandKnownHarness(t *testing.T) {
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
 
-	result := &pullCacheResult{
+	result := &pull.Result{
 		Namespace: "acme",
 		Slug:      "my-bundle",
 		Version:   "1.0.0",
@@ -126,7 +127,7 @@ func TestPrintHarnessCommandUnknownHarness(t *testing.T) {
 
 	out := output.NewWriter(&stdout, &stderr, &terminal.Info{})
 
-	result := &pullCacheResult{
+	result := &pull.Result{
 		Namespace: "acme",
 		Slug:      "my-bundle",
 		Version:   "1.0.0",

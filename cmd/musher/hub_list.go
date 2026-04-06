@@ -29,9 +29,9 @@ func newHubListCmd() *cobra.Command {
 }
 
 func runHubList(cmd *cobra.Command, out *output.Writer, namespace string, limit int) error {
-	_, c, err := newAPIClient()
+	_, c, err := newAPIClientFromContext(cmd.Context())
 	if err != nil {
-		cfg := configForPublicClient()
+		cfg := configForPublicClient(cmd.Context())
 		c = newPublicAPIClient(cfg)
 	}
 

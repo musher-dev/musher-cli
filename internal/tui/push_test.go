@@ -573,3 +573,94 @@ func TestIsVisibilityError(t *testing.T) {
 		}
 	}
 }
+
+func TestPushScreen_RenderPushSuccess_Private(t *testing.T) {
+	t.Parallel()
+
+	bundle := testBundle()
+	bundle.Visibility = "private"
+
+	screen := newTestPushScreen(&mockPusherImpl{}, &mockValidator{}, bundle)
+	screen.state = pushStatePushSuccess
+
+	got := screen.renderPushSuccess()
+
+	assertContains(t, got, "Pushed "+bundle.VersionRef())
+	assertContains(t, got, "Run it:")
+	assertContains(t, got, "musher run "+bundle.VersionRef()+" --harness <name>")
+	assertContains(t, got, "Pull on another machine:")
+	assertContains(t, got, "musher bundle pull "+bundle.VersionRef())
+	assertNotContains(t, got, "Publish to Hub:")
+	assertNotContains(t, got, "Published to Hub")
+}
+
+func TestPushScreen_RenderPushSuccess_PublicNoHub(t *testing.T) {
+	t.Parallel()
+
+	bundle := testBundle()
+	bundle.Visibility = "public"
+
+	screen := newTestPushScreen(&mockPusherImpl{}, &mockValidator{}, bundle)
+	screen.state = pushStatePushSuccess
+
+	got := screen.renderPushSuccess()
+
+	assertContains(t, got, "Run it:")
+	assertContains(t, got, "Publish to Hub:")
+	assertContains(t, got, "musher hub publish "+bundle.Ref())
+	assertNotContains(t, got, "Pull on another machine:")
+	assertNotContains(t, got, "Published to Hub")
+}
+
+func TestPushScreen_RenderPushSuccess_HubPublished(t *testing.T) {
+	t.Parallel()
+
+	bundle := testBundle()
+	bundle.Visibility = "public"
+
+	screen := newTestPushScreen(&mockPusherImpl{}, &mockValidator{}, bundle)
+	screen.state = pushStatePushSuccess
+	screen.hubToggle = true
+
+	got := screen.renderPushSuccess()
+
+	assertContains(t, got, "Published to Hub")
+	assertContains(t, got, "Run it:")
+	assertNotContains(t, got, "Publish to Hub:")
+	assertNotContains(t, got, "Pull on another machine:")
+}
+
+func TestPushScreen_RenderPushSuccess_HubError(t *testing.T) {
+	t.Parallel()
+
+	bundle := testBundle()
+	bundle.Visibility = "public"
+
+	screen := newTestPushScreen(&mockPusherImpl{}, &mockValidator{}, bundle)
+	screen.state = pushStatePushSuccess
+	screen.hubToggle = true
+	screen.hubError = "server error"
+
+	got := screen.renderPushSuccess()
+
+	assertContains(t, got, "Hub listing failed: server error")
+	assertContains(t, got, "musher hub publish "+bundle.Ref())
+	assertContains(t, got, "Run it:")
+	assertNotContains(t, got, "Published to Hub")
+}
+
+func assertContains(t *testing.T, s, substr string) {
+	t.Helper()
+
+	if !containsString(s, substr) {
+		t.Errorf("expected output to contain %q, got:\n%s", substr, s)
+	}
+}
+
+func assertNotContains(t *testing.T, s, substr string) {
+	t.Helper()
+
+	if containsString(s, substr) {
+		t.Errorf("expected output NOT to contain %q, got:\n%s", substr, s)
+	}
+}

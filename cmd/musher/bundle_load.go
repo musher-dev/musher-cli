@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/bundle/pull"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/harness/provider"
@@ -20,9 +21,12 @@ func newBundleLoadCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "load <namespace/slug[:version]>",
-		Short: "Download a bundle and prepare it for use",
+		Use:    "load <namespace/slug[:version]>",
+		Short:  "Download a bundle and prepare it for use",
+		Hidden: true,
 		Long: `Download a bundle from the registry and prepare it for use with a harness.
+
+This is a fully-qualified alias for 'musher load'. Prefer the top-level command.
 
 In an interactive terminal, prompts for the next action (run or install).
 In non-interactive environments, prints a summary and hints.
@@ -111,7 +115,7 @@ func runBundleLoad(ctx context.Context, out *output.Writer, ref, harnessName str
 	return promptForAction(out, p, result, versionRef)
 }
 
-func printBundleSummary(out *output.Writer, result *pullCacheResult, versionRef string) {
+func printBundleSummary(out *output.Writer, result *pull.Result, versionRef string) {
 	if result.Cached {
 		out.Success("Already cached: %s", versionRef)
 	}
@@ -127,7 +131,7 @@ func printBundleSummary(out *output.Writer, result *pullCacheResult, versionRef 
 	out.Muted("  %s", formatAssetSummary(result.Layers))
 }
 
-func printBundleLoadJSON(out *output.Writer, result *pullCacheResult, harnessName string) error {
+func printBundleLoadJSON(out *output.Writer, result *pull.Result, harnessName string) error {
 	assets := make([]bundleLoadAsset, 0, len(result.Layers))
 	for _, layer := range result.Layers {
 		assets = append(assets, bundleLoadAsset{
@@ -157,7 +161,7 @@ func printBundleLoadJSON(out *output.Writer, result *pullCacheResult, harnessNam
 	return nil
 }
 
-func printHarnessCommand(out *output.Writer, result *pullCacheResult, harnessName, versionRef string) error {
+func printHarnessCommand(out *output.Writer, result *pull.Result, harnessName, versionRef string) error {
 	reg := newHarnessRegistry()
 
 	prov, ok := reg.Get(harnessName)
@@ -185,7 +189,7 @@ func printHarnessCommand(out *output.Writer, result *pullCacheResult, harnessNam
 	return nil
 }
 
-func promptForAction(out *output.Writer, p *prompt.Prompter, result *pullCacheResult, versionRef string) error {
+func promptForAction(out *output.Writer, p *prompt.Prompter, result *pull.Result, versionRef string) error {
 	reg := newHarnessRegistry()
 	available := reg.Available()
 
@@ -209,7 +213,7 @@ func promptForAction(out *output.Writer, p *prompt.Prompter, result *pullCacheRe
 	return nil
 }
 
-func selectAndPrintHarness(out *output.Writer, p *prompt.Prompter, reg *harness.Registry, result *pullCacheResult, versionRef string) error {
+func selectAndPrintHarness(out *output.Writer, p *prompt.Prompter, reg *harness.Registry, result *pull.Result, versionRef string) error {
 	available := reg.Available()
 	if len(available) == 1 {
 		return printHarnessCommand(out, result, available[0].Spec.Name, versionRef)

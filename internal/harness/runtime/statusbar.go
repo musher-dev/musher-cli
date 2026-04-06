@@ -101,6 +101,43 @@ func renderStatusBar(screen tcell.Screen, cols int, cfg *Config, info statusInfo
 	drawSegment(screen, col, 0, hint, cols)
 }
 
+// renderStatusBarWithScroll draws the status bar with a scroll-back indicator.
+// This variant replaces the right-side hint with a "scrolled" message and
+// instructions to return to the bottom.
+func renderStatusBarWithScroll(screen tcell.Screen, cols int, cfg *Config, info statusInfo) {
+	label, statusColor := statusLabel(info)
+	statusStyle := tcell.StyleDefault.Background(barBG).Foreground(statusColor)
+
+	left := []segment{
+		{text: " musher ", style: logoStyle},
+		{text: " ", style: barStyle},
+		{text: cfg.BundleRef, style: barStyle},
+		{text: " \u00b7 ", style: barStyle},
+		{text: cfg.HarnessName, style: barStyle},
+		{text: "  ", style: barStyle},
+		{text: "\u25cf ", style: statusStyle},
+		{text: label, style: statusStyle},
+	}
+
+	scrollHint := &segment{
+		text:  " \u2191 scrolled \u2014 PgDn/End to return ",
+		style: tcell.StyleDefault.Background(barBG).Foreground(tcell.PaletteColor(214)).Bold(true), // orange
+	}
+	hintWidth := runewidth.StringWidth(scrollHint.text)
+
+	col := 0
+	for idx := range left {
+		col = drawSegment(screen, col, 0, &left[idx], cols-hintWidth)
+	}
+
+	for col < cols-hintWidth {
+		screen.SetContent(col, 0, ' ', nil, barStyle)
+		col++
+	}
+
+	drawSegment(screen, col, 0, scrollHint, cols)
+}
+
 // drawSegment renders a text segment starting at (col, row) and returns the
 // column position after the last character. maxCol prevents drawing beyond
 // the given column.

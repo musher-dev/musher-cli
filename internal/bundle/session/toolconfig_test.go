@@ -226,6 +226,272 @@ func TestPrepareToolConfigMergeIntoExisting(t *testing.T) {
 	}
 }
 
+func TestMergeToolConfigsMultipleJSON(t *testing.T) {
+	t.Parallel()
+
+	a := []byte(`{"mcpServers": {"server-a": {"url": "http://a"}}}`)
+	b := []byte(`{"mcpServers": {"server-b": {"url": "http://b"}}}`)
+
+	result, err := mergeToolConfigs([][]byte{a, b}, "json")
+	if err != nil {
+		t.Fatalf("mergeToolConfigs() error = %v", err)
+	}
+
+	var parsed map[string]any
+	if unmarshalErr := json.Unmarshal(result, &parsed); unmarshalErr != nil {
+		t.Fatalf("unmarshal result: %v", unmarshalErr)
+	}
+
+	servers := parsed["mcpServers"].(map[string]any)
+	if len(servers) != 2 {
+		t.Errorf("expected 2 servers, got %d", len(servers))
+	}
+}
+
+func TestMergeToolConfigsMultipleTOML(t *testing.T) {
+	t.Parallel()
+
+	a := []byte("[a]\nkey = 1\n")
+	b := []byte("[b]\nkey = 2\n")
+
+	result, err := mergeToolConfigs([][]byte{a, b}, "toml")
+	if err != nil {
+		t.Fatalf("mergeToolConfigs() error = %v", err)
+	}
+
+	expected := "[a]\nkey = 1\n\n[b]\nkey = 2\n"
+	if string(result) != expected {
+		t.Errorf("result = %q, want %q", string(result), expected)
+	}
+}
+
+func TestMergeIntoExistingJSON(t *testing.T) {
+	t.Parallel()
+
+	existing := []byte(`{"mcpServers": {"old": {"url": "http://old"}}, "setting": "keep"}`)
+	bundle := []byte(`{"mcpServers": {"new": {"url": "http://new"}}}`)
+
+	result, err := mergeIntoExisting(existing, bundle, "json")
+	if err != nil {
+		t.Fatalf("mergeIntoExisting() error = %v", err)
+	}
+
+	var parsed map[string]any
+	if unmarshalErr := json.Unmarshal(result, &parsed); unmarshalErr != nil {
+		t.Fatalf("unmarshal: %v", unmarshalErr)
+	}
+
+	servers := parsed["mcpServers"].(map[string]any)
+	if _, hasOld := servers["old"]; !hasOld {
+		t.Error("expected 'old' server preserved")
+	}
+
+	if _, hasNew := servers["new"]; !hasNew {
+		t.Error("expected 'new' server added")
+	}
+
+	if parsed["setting"] != "keep" {
+		t.Errorf("setting = %v, want 'keep'", parsed["setting"])
+	}
+}
+
+func TestMergeIntoExistingTOML(t *testing.T) {
+	t.Parallel()
+
+	existing := []byte("[existing]\nval = 1\n")
+	bundle := []byte("[bundle]\nval = 2\n")
+
+	result, err := mergeIntoExisting(existing, bundle, "toml")
+	if err != nil {
+		t.Fatalf("mergeIntoExisting() error = %v", err)
+	}
+
+	expected := "[existing]\nval = 1\n\n[bundle]\nval = 2\n"
+	if string(result) != expected {
+		t.Errorf("result = %q, want %q", string(result), expected)
+	}
+}
+
+func TestMergeJSONConfigsInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	_, err := mergeJSONConfigs([][]byte{[]byte("{invalid")})
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestDeepMergeNestedOverride(t *testing.T) {
+	t.Parallel()
+
+	dst := map[string]any{
+		"top": map[string]any{
+			"nested": map[string]any{
+				"a": 1,
+				"b": 2,
+			},
+			"scalar": "old",
+		},
+	}
+
+	src := map[string]any{
+		"top": map[string]any{
+			"nested": map[string]any{
+				"b": 99,
+				"c": 3,
+			},
+			"scalar": "new",
+		},
+		"extra": "added",
+	}
+
+	deepMerge(dst, src)
+
+	top := dst["top"].(map[string]any)
+
+	nested := top["nested"].(map[string]any)
+	if nested["a"] != 1 {
+		t.Errorf("nested.a = %v, want 1", nested["a"])
+	}
+
+	if nested["b"] != 99 {
+		t.Errorf("nested.b = %v, want 99", nested["b"])
+	}
+
+	if nested["c"] != 3 {
+		t.Errorf("nested.c = %v, want 3", nested["c"])
+	}
+
+	if top["scalar"] != "new" {
+		t.Errorf("scalar = %v, want 'new'", top["scalar"])
+	}
+
+	if dst["extra"] != "added" {
+		t.Errorf("extra = %v, want 'added'", dst["extra"])
+	}
+}
+
+func TestDeepMergeMapOverNonMap(t *testing.T) {
+	t.Parallel()
+
+	dst := map[string]any{
+		"key": "string-value",
+	}
+
+	src := map[string]any{
+		"key": map[string]any{"nested": true},
+	}
+
+	deepMerge(dst, src)
+
+	// src map should override the string value.
+	result, ok := dst["key"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T", dst["key"])
+	}
+
+	if result["nested"] != true {
+		t.Errorf("nested = %v, want true", result["nested"])
+	}
+}
+
+func TestPrepareToolConfigStandaloneUsesSessionDir(t *testing.T) {
+	t.Parallel()
+
+	sessionDir := t.TempDir()
+	content := []byte(`{"mcpServers": {"s": {}}}`)
+
+	configPath, _, err := prepareToolConfig(
+		"--mcp-config",
+		"config.json",
+		"json",
+		[][]byte{content},
+		sessionDir,
+		"/project",
+	)
+	if err != nil {
+		t.Fatalf("prepareToolConfig() error = %v", err)
+	}
+
+	// Should use sessionDir, not projectDir.
+	if filepath.Dir(configPath) != sessionDir {
+		t.Errorf("config written in %q, want %q", filepath.Dir(configPath), sessionDir)
+	}
+}
+
+func TestPrepareToolConfigStandaloneFallsBackToProjectDir(t *testing.T) {
+	t.Parallel()
+
+	projectDir := t.TempDir()
+	content := []byte(`{"mcpServers": {"s": {}}}`)
+
+	configPath, _, err := prepareToolConfig(
+		"--mcp-config",
+		"config.json",
+		"json",
+		[][]byte{content},
+		"", // empty sessionDir
+		projectDir,
+	)
+	if err != nil {
+		t.Fatalf("prepareToolConfig() error = %v", err)
+	}
+
+	if filepath.Dir(configPath) != projectDir {
+		t.Errorf("config written in %q, want %q", filepath.Dir(configPath), projectDir)
+	}
+}
+
+func TestPrepareToolConfigMergeNewFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// No existing file — should create new and register remove cleanup.
+	bundle := []byte(`{"mcpServers": {"new-server": {"url": "http://new"}}}`)
+
+	configPath, cleanups, err := prepareToolConfig(
+		"",
+		"mcp-config.json",
+		"json",
+		[][]byte{bundle},
+		"",
+		dir,
+	)
+	if err != nil {
+		t.Fatalf("prepareToolConfig() error = %v", err)
+	}
+
+	expectedPath := filepath.Join(dir, "mcp-config.json")
+	if configPath != expectedPath {
+		t.Errorf("configPath = %q, want %q", configPath, expectedPath)
+	}
+
+	// Should have a cleanup to remove the newly created file.
+	if len(cleanups) == 0 {
+		t.Fatal("expected at least 1 cleanup for new file creation")
+	}
+
+	// Verify file was written.
+	got, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile() error = %v", readErr)
+	}
+
+	if !bytes.Equal(got, bundle) {
+		t.Errorf("content = %q, want %q", string(got), string(bundle))
+	}
+
+	// Run cleanup — should remove the file.
+	for _, c := range cleanups {
+		_ = c()
+	}
+
+	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
+		t.Error("expected file to be removed after cleanup")
+	}
+}
+
 func TestPrepareToolConfigEmpty(t *testing.T) {
 	t.Parallel()
 

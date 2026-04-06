@@ -86,7 +86,7 @@ func shouldProbeHealth(cliErr *clierrors.CLIError, out *output.Writer) bool {
 
 // renderHealthProbe runs a connectivity check against the API and renders the result.
 func renderHealthProbe(out *output.Writer, cliErr *clierrors.CLIError) {
-	cfg := config.Load()
+	cfg := config.Load() // No command context available in error handler; load fresh.
 	result := client.ProbeHealth(context.Background(), cfg.APIURL(), cfg.CACertFile())
 
 	if result.Reachable {

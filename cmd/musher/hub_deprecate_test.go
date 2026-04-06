@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestNewHubDeprecateCmdFlags(t *testing.T) {
@@ -41,7 +43,10 @@ func TestNewHubUndeprecateCmdPath(t *testing.T) {
 func TestRunHubDeprecateBadRef(t *testing.T) {
 	out := testWriter()
 
-	err := runHubDeprecate(nil, out, "invalid", "reason")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubDeprecate(cmd, out, "invalid", "reason")
 	if err == nil {
 		t.Fatal("expected error for invalid ref")
 	}
@@ -53,7 +58,10 @@ func TestRunHubDeprecateNoAuth(t *testing.T) {
 
 	out := testWriter()
 
-	err := runHubDeprecate(nil, out, "acme/test", "reason")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubDeprecate(cmd, out, "acme/test", "reason")
 	if err == nil {
 		t.Fatal("expected auth error")
 	}
@@ -62,7 +70,10 @@ func TestRunHubDeprecateNoAuth(t *testing.T) {
 func TestRunHubUndeprecateBadRef(t *testing.T) {
 	out := testWriter()
 
-	err := runHubUndeprecate(nil, out, "invalid")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubUndeprecate(cmd, out, "invalid")
 	if err == nil {
 		t.Fatal("expected error for invalid ref")
 	}
@@ -74,7 +85,10 @@ func TestRunHubUndeprecateNoAuth(t *testing.T) {
 
 	out := testWriter()
 
-	err := runHubUndeprecate(nil, out, "acme/test")
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(t.Context())
+
+	err := runHubUndeprecate(cmd, out, "acme/test")
 	if err == nil {
 		t.Fatal("expected auth error")
 	}

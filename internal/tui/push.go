@@ -28,6 +28,30 @@ const (
 	visibilityPublic  = "public"
 )
 
+// Push review display constants.
+const pushMaxAssetsPerKind = 10
+
+// pushKindOrder defines the display order for grouped asset kinds.
+var pushKindOrder = []string{"skill", "agent", "prompt", "tool", "config"}
+
+// kindPluralLabel returns the plural display label for an asset kind.
+func kindPluralLabel(kind string) string {
+	switch kind {
+	case "skill":
+		return "Skills"
+	case "agent":
+		return "Agents"
+	case "prompt":
+		return "Prompts"
+	case "tool":
+		return "Tools"
+	case "config":
+		return "Configs"
+	default:
+		return "Other"
+	}
+}
+
 // pushState enumerates the push screen states.
 type pushState int
 
@@ -786,13 +810,20 @@ func (p *pushScreen) View() string {
 	return lipgloss.Place(p.width, p.height, lipgloss.Center, lipgloss.Center, content)
 }
 
+func (p *pushScreen) validationMaxDetailLines() int {
+	// Reserve lines for: breadcrumb(1) + gaps(4) + 4 check lines + panel chrome(4) + footer(1) + extra status(2) + padding(2) = ~18
+	const pushChrome = 18
+
+	return max(p.height-pushChrome, 3)
+}
+
 func (p *pushScreen) renderSinglePanel() string {
 	var view strings.Builder
 
 	view.WriteString(p.renderBreadcrumb())
 	view.WriteString("\n\n")
 
-	panelW := clampMenuWidth(p.width)
+	panelW := min(max(p.width-4, 30), pushPanelMax)
 	body := p.renderBody()
 
 	view.WriteString(renderPanel(p.styles, "Push to Registry", body, panelW, true))
@@ -846,10 +877,10 @@ func (p *pushScreen) renderBody() string {
 		return p.renderAuthRequired()
 
 	case pushStateValidating, pushStateValidateFailed:
-		return renderValidationChecks(p.checks, p.styles, &p.spinner)
+		return renderValidationChecks(p.checks, p.styles, &p.spinner, p.validationMaxDetailLines())
 
 	case pushStatePreCheck:
-		body := renderValidationChecks(p.checks, p.styles, &p.spinner)
+		body := renderValidationChecks(p.checks, p.styles, &p.spinner, p.validationMaxDetailLines())
 		body += "\n\n" + p.spinner.View() + " " + p.styles.muted.Render("Checking version availability...")
 
 		return body
@@ -943,13 +974,31 @@ func (p *pushScreen) renderReview() string {
 	buf.WriteString(p.styles.muted.Render("  Assets:     ") + strconv.Itoa(len(p.bundle.Assets)))
 	buf.WriteString("\n")
 
+	// Group assets by kind for a cleaner display.
+	grouped := make(map[string][]string)
+
 	for _, asset := range p.bundle.Assets {
 		kind := asset.Kind
 		if kind == "" {
 			kind = bundledef.InferKind(asset.Src)
 		}
 
-		buf.WriteString(p.styles.muted.Render("    "+asset.Src+" ("+kind+")") + "\n")
+		grouped[kind] = append(grouped[kind], bundledef.InferID(asset.Src))
+	}
+
+	for _, kind := range pushKindOrder {
+		names, ok := grouped[kind]
+		if !ok {
+			continue
+		}
+
+		delete(grouped, kind)
+		p.renderAssetKindGroup(&buf, kind, names)
+	}
+
+	// Render any unknown kinds last.
+	for kind, names := range grouped {
+		p.renderAssetKindGroup(&buf, kind, names)
 	}
 
 	buf.WriteString("\n")
@@ -1006,17 +1055,67 @@ func (p *pushScreen) renderReview() string {
 	return buf.String()
 }
 
+func (p *pushScreen) renderAssetKindGroup(buf *strings.Builder, kind string, names []string) {
+	header := kindPluralLabel(kind) + " " + fmt.Sprintf("(%d)", len(names))
+	buf.WriteString("\n  " + p.styles.sectionHeader.Render(header) + "\n")
+
+	showCount := min(pushMaxAssetsPerKind, len(names))
+	for _, name := range names[:showCount] {
+		buf.WriteString("    " + p.styles.muted.Render("\u25CF "+name) + "\n")
+	}
+
+	if len(names) > pushMaxAssetsPerKind {
+		buf.WriteString("    " + p.styles.muted.Render(fmt.Sprintf("+%d more", len(names)-pushMaxAssetsPerKind)) + "\n")
+	}
+}
+
 func (p *pushScreen) renderPushSuccess() string {
 	var buf strings.Builder
 
+	// Success header.
 	buf.WriteString(p.styles.success.Render(checkIconPassed) + " " +
 		p.styles.title.Render("Pushed "+p.bundle.VersionRef()))
 
+	// Hub publish confirmation.
+	hubPublished := p.hubToggle && p.hubError == ""
+	if hubPublished {
+		buf.WriteString("\n")
+		buf.WriteString(p.styles.success.Render(checkIconPassed) + " " +
+			p.styles.muted.Render("Published to Hub"))
+	}
+
+	// Hub error (existing behavior).
 	if p.hubError != "" {
 		buf.WriteString("\n\n")
 		buf.WriteString(p.styles.warning.Render("Hub listing failed: " + p.hubError))
 		buf.WriteString("\n")
 		buf.WriteString(p.styles.muted.Render("Run 'musher hub publish " + p.bundle.Ref() + "' to retry."))
+	}
+
+	// Run command hint (always shown).
+	buf.WriteString("\n\n")
+	buf.WriteString(p.styles.muted.Render("Run it:"))
+	buf.WriteString("\n")
+	buf.WriteString("  " + p.styles.accent.Render("musher run "+p.bundle.VersionRef()+" --harness <name>"))
+
+	// Contextual second action.
+	if !hubPublished && p.hubError == "" {
+		visibility := p.bundle.Visibility
+		if visibility == "" {
+			visibility = visibilityPrivate
+		}
+
+		if visibility == visibilityPublic {
+			buf.WriteString("\n\n")
+			buf.WriteString(p.styles.muted.Render("Publish to Hub:"))
+			buf.WriteString("\n")
+			buf.WriteString("  " + p.styles.accent.Render("musher hub publish "+p.bundle.Ref()))
+		} else {
+			buf.WriteString("\n\n")
+			buf.WriteString(p.styles.muted.Render("Pull on another machine:"))
+			buf.WriteString("\n")
+			buf.WriteString("  " + p.styles.accent.Render("musher bundle pull "+p.bundle.VersionRef()))
+		}
 	}
 
 	return buf.String()

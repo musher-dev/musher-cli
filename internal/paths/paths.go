@@ -285,3 +285,21 @@ func isDefaultPort(scheme, port string) bool {
 	return (strings.EqualFold(scheme, "https") && port == "443") ||
 		(strings.EqualFold(scheme, "http") && port == "80")
 }
+
+// ExpandTilde replaces a leading "~/" with the user's home directory.
+func ExpandTilde(path string) (string, error) {
+	if !strings.HasPrefix(path, "~/") && path != "~" {
+		return path, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", repoerrors.Errorf("expand home directory: %w", err)
+	}
+
+	if path == "~" {
+		return home, nil
+	}
+
+	return filepath.Join(home, path[2:]), nil
+}
