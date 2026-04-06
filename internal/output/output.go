@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -16,6 +17,10 @@ import (
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/terminal"
 )
+
+// noColorOnce ensures the global color.NoColor flag is only set once,
+// preventing data races between concurrent newWriter calls (e.g. in parallel tests).
+var noColorOnce sync.Once
 
 type contextKey struct{}
 
@@ -60,7 +65,13 @@ func newWriter(out, errW io.Writer, term *terminal.Info) *Writer {
 	w.mutedColor = color.New(color.FgHiBlack)
 
 	if !term.ColorEnabled() {
-		color.NoColor = true
+		w.successColor.DisableColor()
+		w.errorColor.DisableColor()
+		w.warningColor.DisableColor()
+		w.infoColor.DisableColor()
+		w.mutedColor.DisableColor()
+
+		noColorOnce.Do(func() { color.NoColor = true })
 	}
 
 	return w
