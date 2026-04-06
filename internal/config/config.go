@@ -39,18 +39,24 @@ const (
 	DefaultUpdateCheckInterval = "24h"
 	// DefaultOCIRegistryURL is the default OCI registry for bundle artifacts.
 	DefaultOCIRegistryURL = "bundles.musher.dev"
+	// DefaultHarnessScrollbackLines is the default embedded runtime history size.
+	DefaultHarnessScrollbackLines = 10000
 )
 
-const minIntervalDuration = 1 * time.Second
+const (
+	minIntervalDuration       = 1 * time.Second
+	minHarnessScrollbackLines = 100
+)
 
 // knownKeys is the set of recognized configuration keys.
 var knownKeys = map[string]bool{
-	"api.url":               true,
-	"network.ca_cert_file":  true,
-	"update.auto_apply":     true,
-	"update.check_interval": true,
-	"experimental":          true,
-	"oci.registry_url":      true,
+	"api.url":                  true,
+	"network.ca_cert_file":     true,
+	"update.auto_apply":        true,
+	"update.check_interval":    true,
+	"experimental":             true,
+	"oci.registry_url":         true,
+	"harness.scrollback_lines": true,
 }
 
 // IsKnownKey reports whether key is a recognized configuration key.
@@ -74,6 +80,7 @@ func Load() *Config {
 	v.SetDefault("update.check_interval", DefaultUpdateCheckInterval)
 	v.SetDefault("experimental", false)
 	v.SetDefault("oci.registry_url", DefaultOCIRegistryURL)
+	v.SetDefault("harness.scrollback_lines", DefaultHarnessScrollbackLines)
 
 	configDir, err := paths.ConfigRoot()
 	if err == nil {
@@ -166,6 +173,16 @@ func (c *Config) UpdateAutoApply() bool {
 // UpdateCheckInterval returns the configured background update check interval.
 func (c *Config) UpdateCheckInterval() time.Duration {
 	return c.parseDuration("update.check_interval", 24*time.Hour)
+}
+
+// HarnessScrollbackLines returns the configured number of scrollback lines.
+func (c *Config) HarnessScrollbackLines() int {
+	raw := c.GetInt("harness.scrollback_lines")
+	if raw < minHarnessScrollbackLines {
+		return DefaultHarnessScrollbackLines
+	}
+
+	return raw
 }
 
 func (c *Config) parseDuration(key string, fallback time.Duration) time.Duration {

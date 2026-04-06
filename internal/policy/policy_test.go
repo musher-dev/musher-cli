@@ -41,6 +41,7 @@ var (
 		moduleRoot + "/internal/transcript":    true,
 		moduleRoot + "/internal/update":        true,
 		moduleRoot + "/internal/validate":      true,
+		moduleRoot + "/internal/workflow":      true,
 		moduleRoot + "/internal/policy":        true,
 	}
 

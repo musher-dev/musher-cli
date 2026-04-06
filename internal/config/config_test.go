@@ -207,3 +207,86 @@ func TestCACertFile_Trimmed(t *testing.T) {
 		t.Errorf("CACertFile() = %q, want %q", got, "/path/to/cert.pem")
 	}
 }
+
+func TestHarnessScrollbackLines_Parsing(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{"valid", "25000", 25000},
+		{"empty falls back", "", DefaultHarnessScrollbackLines},
+		{"invalid falls back", "not-a-number", DefaultHarnessScrollbackLines},
+		{"too small falls back", "50", DefaultHarnessScrollbackLines},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("MUSHER_CONFIG_HOME", tmp)
+			t.Setenv("MUSHER_HARNESS_SCROLLBACK_LINES", tt.value)
+			t.Setenv("MUSHER_API_URL", "")
+
+			cfg := Load()
+
+			if got := cfg.HarnessScrollbackLines(); got != tt.want {
+				t.Errorf("HarnessScrollbackLines() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithContext_FromContext(t *testing.T) {
+	cfg, _ := setupTestConfig(t)
+
+	ctx := WithContext(t.Context(), cfg)
+	got := FromContext(ctx)
+
+	if got != cfg {
+		t.Error("FromContext did not return the config stored by WithContext")
+	}
+}
+
+func TestFromContext_NilFallsBack(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+	t.Setenv("MUSHER_API_URL", "")
+
+	got := FromContext(t.Context())
+	if got == nil {
+		t.Fatal("FromContext returned nil for empty context")
+	}
+}
+
+func TestIsKnownKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{"api.url", true},
+		{"network.ca_cert_file", true},
+		{"harness.scrollback_lines", true},
+		{"unknown.key", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			t.Parallel()
+
+			if got := IsKnownKey(tt.key); got != tt.want {
+				t.Errorf("IsKnownKey(%q) = %v, want %v", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOCIRegistryURL(t *testing.T) {
+	cfg, _ := setupTestConfig(t)
+
+	if got := cfg.OCIRegistryURL(); got != DefaultOCIRegistryURL {
+		t.Errorf("OCIRegistryURL() = %q, want %q", got, DefaultOCIRegistryURL)
+	}
+}

@@ -114,7 +114,7 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 		cols:       cols,
 		rows:       subRows,
 		done:       make(chan struct{}),
-		scrollback: newScrollbackBuffer(defaultScrollbackCapacity),
+		scrollback: newScrollbackBuffer(cfg.ScrollbackLines),
 		followTail: true,
 	}
 

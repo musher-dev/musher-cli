@@ -45,6 +45,10 @@ type Config struct {
 	// Transcript optionally records harness I/O events. When nil, no
 	// transcript is recorded.
 	Transcript TranscriptWriter
+
+	// ScrollbackLines controls how many terminal rows are kept in memory for
+	// viewport scrolling while the embedded runtime is active.
+	ScrollbackLines int
 }
 
 // ErrSwapRequested is returned by Run() when the user presses the bundle-swap
