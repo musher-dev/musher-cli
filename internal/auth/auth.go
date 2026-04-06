@@ -3,6 +3,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,8 @@ func GetCredentials(apiURL string) (source CredentialSource, apiKey string) {
 	}
 
 	if key := readCredentialsFile(apiURL); key != "" {
+		slog.Debug("using credentials file (keyring unavailable)", "source", SourceFile)
+
 		return SourceFile, key
 	}
 
@@ -60,6 +63,9 @@ func StoreAPIKey(apiURL, apiKey string) error {
 	if keyErr := keyring.Set(service, keyringUser, apiKey); keyErr == nil {
 		return nil
 	}
+
+	slog.Warn("OS keyring unavailable, storing credentials in file",
+		"hint", "file permissions restricted to 0600")
 
 	return writeCredentialsFile(apiURL, apiKey)
 }
@@ -101,6 +107,14 @@ func credentialFilePath(apiURL string) string {
 func readCredentialsFile(apiURL string) string {
 	path := credentialFilePath(apiURL)
 	if path == "" {
+		return ""
+	}
+
+	// Reject if parent directory permissions are too open.
+	dir := filepath.Dir(path)
+	if err := safeio.CheckFilePermissions(dir, 0o700); err != nil {
+		slog.Debug("credentials directory permissions too open", "dir", dir, "error", err)
+
 		return ""
 	}
 

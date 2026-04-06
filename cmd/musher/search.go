@@ -45,7 +45,7 @@ falls back to batch output.`,
 			}
 
 			// Build a public API client for the TUI.
-			apiURL := configForPublicClient()
+			apiURL := configForPublicClient(cmd.Context())
 			apiClient := newPublicAPIClient(apiURL)
 
 			harnessReg := newHarnessRegistry()

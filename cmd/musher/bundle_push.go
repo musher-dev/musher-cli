@@ -49,11 +49,12 @@ Use --publish-to-hub to also create a Hub listing after pushing (public bundles 
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
 
-			if err := runValidate(out); err != nil {
+			bundle, err := runValidate(out)
+			if err != nil {
 				return err
 			}
 
-			return runPush(cmd, out, publishToHub, yes)
+			return runPush(cmd, out, bundle, publishToHub, yes)
 		},
 	}
 
@@ -66,10 +67,10 @@ Use --publish-to-hub to also create a Hub listing after pushing (public bundles 
 // maxPushAttempts limits how many times we attempt the push (original + retries after version bump).
 const maxPushAttempts = 2
 
-func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) error {
+func runPush(cmd *cobra.Command, out *output.Writer, bundle *bundledef.Def, publishToHub, yes bool) error {
 	ctx := cmd.Context()
 
-	c, err := requireAuth()
+	c, err := requireAuthFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -79,9 +80,23 @@ func runPush(cmd *cobra.Command, out *output.Writer, publishToHub, yes bool) err
 		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
-	bundle, visibility, err := loadAndValidateBundle(workDir, publishToHub)
-	if err != nil {
-		return err
+	visibility := bundle.Visibility
+	if visibility == "" {
+		visibility = visibilityPrivate
+	}
+
+	if publishToHub {
+		if visibility != visibilityPublic {
+			return &clierrors.CLIError{
+				Message: "--publish-to-hub requires visibility: public",
+				Hint:    "Set 'visibility: public' in musher.yaml or remove the --publish-to-hub flag",
+				Code:    clierrors.ExitUsage,
+			}
+		}
+
+		if hubErr := bundle.ValidateHubReadiness(); hubErr != nil {
+			return clierrors.Wrap(clierrors.ExitGeneral, "Bundle not ready for Hub publishing", hubErr)
+		}
 	}
 
 	printPushSummary(out, bundle, visibility)

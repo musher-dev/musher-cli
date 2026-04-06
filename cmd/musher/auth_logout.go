@@ -20,7 +20,7 @@ func newAuthLogoutCmd() *cobra.Command {
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			cfg := config.Load()
+			cfg := config.FromContext(cmd.Context())
 
 			if err := auth.DeleteAPIKey(cfg.APIURL()); err != nil {
 				return clierrors.Wrap(clierrors.ExitGeneral, "Failed to remove credentials", err)

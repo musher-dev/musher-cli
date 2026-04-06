@@ -22,9 +22,9 @@ func newHubCategoriesCmd() *cobra.Command {
 }
 
 func runHubCategories(cmd *cobra.Command, out *output.Writer) error {
-	_, c, err := newAPIClient()
+	_, c, err := newAPIClientFromContext(cmd.Context())
 	if err != nil {
-		cfg := configForPublicClient()
+		cfg := configForPublicClient(cmd.Context())
 		c = newPublicAPIClient(cfg)
 	}
 

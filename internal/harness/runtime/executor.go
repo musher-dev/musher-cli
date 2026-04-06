@@ -14,6 +14,15 @@ type Executor interface {
 	Run(ctx context.Context, cfg *Config) (exitCode int, err error)
 }
 
+// TranscriptWriter records harness I/O events to a session transcript.
+// This is the minimal interface needed by the runtime to avoid importing
+// the transcript package directly (which would violate the harness isolation
+// boundary).
+type TranscriptWriter interface {
+	Write(stream, text string) error
+	Close() error
+}
+
 // Config holds everything an Executor needs to launch a harness.
 type Config struct {
 	// Binary is the path or name of the harness binary (e.g. "claude").
@@ -32,6 +41,10 @@ type Config struct {
 	// HarnessName is the human-readable harness name for status display
 	// (e.g. "Claude Code").
 	HarnessName string
+
+	// Transcript optionally records harness I/O events. When nil, no
+	// transcript is recorded.
+	Transcript TranscriptWriter
 }
 
 // ErrSwapRequested is returned by Run() when the user presses the bundle-swap

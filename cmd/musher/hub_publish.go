@@ -55,7 +55,7 @@ func runHubPublish(cmd *cobra.Command, out *output.Writer, ref string) error {
 		}
 	}
 
-	c, authErr := requireAuth()
+	c, authErr := requireAuthFromContext(cmd.Context())
 	if authErr != nil {
 		return authErr
 	}

@@ -170,7 +170,9 @@ func advanceValidation(checks []validateCheck, msg validateStepResultMsg) bool {
 }
 
 // renderValidationChecks renders the checklist with status indicators.
-func renderValidationChecks(checks []validateCheck, sty *styles, spin *spinner.Model) string {
+// When maxDetailLines > 0, error detail is truncated with a "... N more lines" indicator.
+// Pass maxDetailLines <= 0 to disable truncation.
+func renderValidationChecks(checks []validateCheck, sty *styles, spin *spinner.Model, maxDetailLines int) string {
 	var buf strings.Builder
 
 	for _, c := range checks {
@@ -196,9 +198,20 @@ func renderValidationChecks(checks []validateCheck, sty *styles, spin *spinner.M
 		buf.WriteString(icon + " " + label + "\n")
 
 		if c.status == checkFailed && c.detail != "" {
-			// Indent error detail below the failed check.
-			for line := range strings.SplitSeq(c.detail, "\n") {
+			lines := strings.Split(c.detail, "\n")
+			limit := len(lines)
+
+			if maxDetailLines > 0 && limit > maxDetailLines {
+				limit = maxDetailLines
+			}
+
+			for _, line := range lines[:limit] {
 				buf.WriteString("  " + sty.errStyle.Render(line) + "\n")
+			}
+
+			if maxDetailLines > 0 && len(lines) > maxDetailLines {
+				remaining := len(lines) - maxDetailLines
+				buf.WriteString("  " + sty.muted.Render(fmt.Sprintf("... %d more lines", remaining)) + "\n")
 			}
 		}
 	}

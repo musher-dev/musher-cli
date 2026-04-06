@@ -20,7 +20,7 @@ import (
 const placeholderNamespace = "your-namespace"
 
 var fetchPublisherIdentity = func(ctx context.Context) (*client.PublisherIdentity, error) {
-	_, apiClient, err := newAPIClient()
+	_, apiClient, err := newAPIClientFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -215,10 +215,17 @@ func (v *validateScreen) renderBreadcrumb() string {
 	return v.styles.breadcrumb.Render("Validate")
 }
 
+func (v *validateScreen) validationMaxDetailLines() int {
+	// Reserve lines for: breadcrumb(1) + gaps(4) + 4 check lines + panel chrome(4) + footer(1) + success line(2) = ~16
+	const validateChrome = 16
+
+	return max(v.height-validateChrome, 3)
+}
+
 func (v *validateScreen) renderBody() string {
 	var buf strings.Builder
 
-	buf.WriteString(renderValidationChecks(v.checks, v.styles, &v.spinner))
+	buf.WriteString(renderValidationChecks(v.checks, v.styles, &v.spinner, v.validationMaxDetailLines()))
 
 	if v.state == validateStateSuccess && v.bundle != nil {
 		buf.WriteString("\n\n")

@@ -31,6 +31,9 @@ func newEmbedded() Executor {
 	return &Embedded{}
 }
 
+// scrollLinesPerTick is how many lines each mouse wheel tick scrolls.
+const scrollLinesPerTick = 3
+
 // embeddedRuntime holds all mutable state for a single embedded session.
 type embeddedRuntime struct {
 	screen  tcell.Screen
@@ -46,6 +49,11 @@ type embeddedRuntime struct {
 
 	done          chan struct{} // closed when subprocess exits
 	swapRequested bool          // true when user pressed Ctrl+\ to swap bundles
+
+	// Scrollback state (protected by uiMu).
+	scrollback  *scrollbackBuffer
+	viewportTop int  // index into combined scrollback+live space
+	followTail  bool // auto-advance to newest content
 }
 
 // Run starts the harness binary in a PTY with a status header and blocks
@@ -94,16 +102,20 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 		vt10x.WithWriter(ptyFile),
 	)
 
+	screen.EnableMouse()
+
 	runtime := &embeddedRuntime{
-		screen:  screen,
-		term:    term,
-		ptyFile: ptyFile,
-		cmd:     cmd,
-		cfg:     cfg,
-		status:  statusInfo{state: stateRunning},
-		cols:    cols,
-		rows:    subRows,
-		done:    make(chan struct{}),
+		screen:     screen,
+		term:       term,
+		ptyFile:    ptyFile,
+		cmd:        cmd,
+		cfg:        cfg,
+		status:     statusInfo{state: stateRunning},
+		cols:       cols,
+		rows:       subRows,
+		done:       make(chan struct{}),
+		scrollback: newScrollbackBuffer(defaultScrollbackCapacity),
+		followTail: true,
 	}
 
 	// Draw the initial frame.
@@ -131,6 +143,8 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 }
 
 // readPTY reads subprocess output from the PTY and feeds it to vt10x.
+// It detects lines that scroll off the top of the terminal and pushes them
+// into the scrollback buffer for later viewing.
 func (r *embeddedRuntime) readPTY() {
 	reader := bufio.NewReaderSize(r.ptyFile, 4096)
 	buf := make([]byte, 4096)
@@ -138,18 +152,137 @@ func (r *embeddedRuntime) readPTY() {
 	for {
 		count, err := reader.Read(buf)
 		if count > 0 {
+			// Snapshot the visible rows before writing, so we can detect
+			// which rows scrolled off the top.
+			r.term.Lock()
+			before := r.snapshotRows()
+			isAltScreen := r.term.Mode()&vt10x.ModeAltScreen != 0
+			r.term.Unlock()
+
 			// vt10x.Write() acquires its own internal lock, so we must NOT
 			// hold term.Lock() here — doing so would deadlock.
 			r.term.Write(buf[:count]) //nolint:errcheck // vt10x Write always returns nil error
 
-			r.uiMu.Lock()
-			r.draw()
-			r.uiMu.Unlock()
+			// Record to transcript if enabled.
+			if r.cfg.Transcript != nil {
+				r.cfg.Transcript.Write("stdout", string(buf[:count])) //nolint:errcheck // best-effort transcript
+			}
+
+			// Detect scrolled-off lines and push to scrollback (skip when
+			// alt screen is active — programs like vim manage their own scrolling).
+			if !isAltScreen {
+				r.term.Lock()
+				after := r.snapshotRows()
+				r.term.Unlock()
+
+				r.uiMu.Lock()
+				r.captureScrolledLines(before, after)
+
+				if r.followTail {
+					r.viewportTop = r.maxViewportTop()
+				}
+
+				r.draw()
+				r.uiMu.Unlock()
+			} else {
+				r.uiMu.Lock()
+				r.draw()
+				r.uiMu.Unlock()
+			}
 		}
 
 		if err != nil {
 			return
 		}
+	}
+}
+
+// snapshotRows copies the current visible rows from vt10x.
+// Must be called with term.Lock() held.
+func (r *embeddedRuntime) snapshotRows() [][]vt10x.Glyph {
+	rows := make([][]vt10x.Glyph, r.rows)
+
+	for row := range r.rows {
+		line := make([]vt10x.Glyph, r.cols)
+		for col := range r.cols {
+			line[col] = r.term.Cell(col, row)
+		}
+
+		rows[row] = line
+	}
+
+	return rows
+}
+
+// captureScrolledLines compares before/after snapshots to detect how many rows
+// scrolled off the top. Those rows are pushed into the scrollback buffer.
+// Must be called with uiMu held.
+func (r *embeddedRuntime) captureScrolledLines(before, after [][]vt10x.Glyph) {
+	if len(before) == 0 || len(after) == 0 || len(before) != len(after) {
+		return
+	}
+
+	nrows := len(before)
+
+	// Find the largest shift such that before[shift:] matches after[:nrows-shift].
+	// This tells us how many rows scrolled off the top.
+	shift := 0
+
+	for s := 1; s <= nrows; s++ {
+		if glyphRowsEqual(before[s:], after[:nrows-s]) {
+			shift = s
+		}
+	}
+
+	// Push the scrolled-off rows into the buffer.
+	for i := range shift {
+		r.scrollback.Push(before[i])
+	}
+}
+
+// glyphRowsEqual compares two slices of glyph rows for equality.
+func glyphRowsEqual(left, right [][]vt10x.Glyph) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	for i := range left {
+		if len(left[i]) != len(right[i]) {
+			return false
+		}
+
+		for j := range left[i] {
+			if left[i][j] != right[i][j] {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// maxViewportTop returns the maximum viewport top offset (i.e., the position
+// where the bottom of the viewport shows the live terminal content).
+func (r *embeddedRuntime) maxViewportTop() int {
+	return r.scrollback.Len()
+}
+
+// clampViewport ensures viewportTop is within valid bounds and re-enables
+// follow-tail if the viewport reaches the bottom.
+// Must be called with uiMu held.
+func (r *embeddedRuntime) clampViewport() {
+	maxTop := r.maxViewportTop()
+
+	if r.viewportTop < 0 {
+		r.viewportTop = 0
+	}
+
+	if r.viewportTop > maxTop {
+		r.viewportTop = maxTop
+	}
+
+	if r.viewportTop >= maxTop {
+		r.followTail = true
 	}
 }
 
@@ -174,11 +307,15 @@ func (r *embeddedRuntime) eventLoop(ctx context.Context) {
 			r.handleResize(typed)
 		case *tcell.EventKey:
 			r.handleKey(typed)
+		case *tcell.EventMouse:
+			r.handleMouse(typed)
 		}
 	}
 }
 
 // handleResize processes terminal resize events.
+// Width changes invalidate the scrollback buffer because glyph snapshots are
+// width-dependent. Height-only changes preserve scrollback.
 func (r *embeddedRuntime) handleResize(event *tcell.EventResize) {
 	newCols, newTotalRows := event.Size()
 	newSubRows := newTotalRows - TopBarHeight
@@ -197,6 +334,14 @@ func (r *embeddedRuntime) handleResize(event *tcell.EventResize) {
 	})
 
 	r.uiMu.Lock()
+
+	if newCols != r.cols {
+		// Width changed — scrollback glyph snapshots are now invalid.
+		r.scrollback.Clear()
+		r.viewportTop = 0
+		r.followTail = true
+	}
+
 	r.cols = newCols
 	r.rows = newSubRows
 	r.screen.Sync()
@@ -205,7 +350,9 @@ func (r *embeddedRuntime) handleResize(event *tcell.EventResize) {
 }
 
 // handleKey forwards keypresses to the subprocess via the PTY.
-func (r *embeddedRuntime) handleKey(event *tcell.EventKey) {
+// Scroll keys (PgUp/PgDn/Home/End) are intercepted when scrollback is
+// available; all other keys are forwarded to the child process.
+func (r *embeddedRuntime) handleKey(event *tcell.EventKey) { //nolint:cyclop // scroll + swap logic
 	// Intercept Ctrl+Y to trigger bundle swap.
 	// Ctrl+Y (0x19) is a letter-based control key that works reliably in ALL
 	// terminal environments including web-based Codespaces. Non-letter Ctrl keys
@@ -230,12 +377,133 @@ func (r *embeddedRuntime) handleKey(event *tcell.EventKey) {
 		return
 	}
 
+	// Handle scroll keys when scrollback content exists.
+	if r.handleScrollKey(event) {
+		return
+	}
+
+	// If we're scrolled back and the user types a non-scroll key,
+	// snap to bottom first, then forward the key.
+	r.uiMu.Lock()
+	if !r.followTail {
+		r.viewportTop = r.maxViewportTop()
+		r.followTail = true
+		r.draw()
+	}
+	r.uiMu.Unlock()
+
 	keyBytes := keyToBytes(event)
 	if keyBytes == nil {
 		return
 	}
 
 	r.ptyFile.Write(keyBytes) //nolint:errcheck // best-effort key forwarding
+}
+
+// handleScrollKey processes scroll-related key events. Returns true if the
+// key was consumed as a scroll action.
+func (r *embeddedRuntime) handleScrollKey(event *tcell.EventKey) bool {
+	r.uiMu.Lock()
+	defer r.uiMu.Unlock()
+
+	hasScrollback := r.scrollback.Len() > 0
+
+	switch event.Key() { //nolint:exhaustive // only scroll keys are handled
+	case tcell.KeyPgUp:
+		if !hasScrollback {
+			return false
+		}
+
+		r.followTail = false
+		r.viewportTop -= max(r.rows-1, 1)
+		r.clampViewport()
+		r.draw()
+
+		return true
+
+	case tcell.KeyPgDn:
+		if !hasScrollback {
+			return false
+		}
+
+		r.viewportTop += max(r.rows-1, 1)
+		r.clampViewport()
+		r.draw()
+
+		return true
+
+	case tcell.KeyHome:
+		if !r.followTail || !hasScrollback {
+			// Only intercept Home when there's scrollback and we haven't already
+			// scrolled back (avoids stealing Home from readline in follow-tail mode).
+			if hasScrollback && !r.followTail {
+				r.viewportTop = 0
+				r.draw()
+
+				return true
+			}
+
+			return false
+		}
+
+		return false
+
+	case tcell.KeyEnd:
+		if !r.followTail && hasScrollback {
+			r.viewportTop = r.maxViewportTop()
+			r.followTail = true
+			r.draw()
+
+			return true
+		}
+
+		return false
+	}
+
+	return false
+}
+
+// handleMouse processes mouse events for scroll wheel support.
+func (r *embeddedRuntime) handleMouse(event *tcell.EventMouse) {
+	// Check if child owns the mouse (alt screen or mouse capture mode).
+	r.term.Lock()
+	mode := r.term.Mode()
+	r.term.Unlock()
+
+	isAltScreen := mode&vt10x.ModeAltScreen != 0
+	isMouseCapture := mode&vt10x.ModeMouseMask != 0
+
+	if isAltScreen || isMouseCapture {
+		// Forward mouse events to child PTY (not implemented — requires
+		// encoding mouse events as escape sequences for the child).
+		return
+	}
+
+	r.uiMu.Lock()
+	defer r.uiMu.Unlock()
+
+	buttons := event.Buttons()
+
+	switch {
+	case buttons&tcell.WheelUp != 0:
+		if r.scrollback.Len() == 0 {
+			return
+		}
+
+		r.followTail = false
+		r.viewportTop -= scrollLinesPerTick
+		r.clampViewport()
+		r.draw()
+
+	case buttons&tcell.WheelDown != 0:
+		if r.scrollback.Len() == 0 {
+			return
+		}
+
+		r.viewportTop += scrollLinesPerTick
+		r.clampViewport()
+		r.draw()
+	}
 }
 
 // keyToBytes converts a tcell key event to the corresponding byte sequence.
@@ -249,6 +517,8 @@ func keyToBytes(event *tcell.EventKey) []byte { //nolint:cyclop // key mapping t
 		return []byte{127}
 	case tcell.KeyTab:
 		return []byte{'\t'}
+	case tcell.KeyBacktab:
+		return []byte("\033[Z")
 	case tcell.KeyEscape:
 		return []byte{27}
 	case tcell.KeyCtrlA:
@@ -377,25 +647,51 @@ func (r *embeddedRuntime) waitProcess(ctx context.Context) int {
 }
 
 // draw renders the full screen: status bar + subprocess viewport.
+// When the viewport is scrolled back, rows come from the scrollback buffer
+// and/or the live vt10x terminal. In follow-tail mode, this is equivalent to
+// rendering the live terminal directly.
 // Must be called with uiMu held.
 func (r *embeddedRuntime) draw() {
-	// 1. Render status bar at row 0.
-	renderStatusBar(r.screen, r.cols, r.cfg, r.status)
+	// 1. Render status bar at row 0, with scroll indicator if not at bottom.
+	if !r.followTail && r.scrollback.Len() > 0 {
+		renderStatusBarWithScroll(r.screen, r.cols, r.cfg, r.status)
+	} else {
+		renderStatusBar(r.screen, r.cols, r.cfg, r.status)
+	}
 
-	// 2. Copy vt10x cell state to tcell starting at row TopBarHeight.
+	// 2. Render the viewport rows.
 	r.term.Lock()
 
-	for row := range r.rows {
-		for col := range r.cols {
-			glyph := r.term.Cell(col, row)
-			style := glyphStyle(glyph)
+	scrollLen := r.scrollback.Len()
 
-			r.screen.SetContent(col, row+TopBarHeight, glyph.Char, nil, style)
+	for screenRow := range r.rows {
+		// Map screen row to the combined buffer index.
+		bufIdx := r.viewportTop + screenRow
+
+		if bufIdx < scrollLen {
+			// This row comes from the scrollback buffer.
+			line := r.scrollback.Line(bufIdx)
+			for col := range r.cols {
+				if col < len(line) {
+					style := glyphStyle(line[col])
+					r.screen.SetContent(col, screenRow+TopBarHeight, line[col].Char, nil, style)
+				} else {
+					r.screen.SetContent(col, screenRow+TopBarHeight, ' ', nil, tcell.StyleDefault)
+				}
+			}
+		} else {
+			// This row comes from the live vt10x terminal.
+			liveRow := bufIdx - scrollLen
+			for col := range r.cols {
+				glyph := r.term.Cell(col, liveRow)
+				style := glyphStyle(glyph)
+				r.screen.SetContent(col, screenRow+TopBarHeight, glyph.Char, nil, style)
+			}
 		}
 	}
 
-	// 3. Position cursor.
-	if r.term.CursorVisible() {
+	// 3. Position cursor (only visible when viewing the live terminal bottom).
+	if r.followTail && r.term.CursorVisible() {
 		cur := r.term.Cursor()
 		r.screen.ShowCursor(cur.X, cur.Y+TopBarHeight)
 	} else {

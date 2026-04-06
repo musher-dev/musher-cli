@@ -17,7 +17,7 @@ func newConfigGetCmd() *cobra.Command {
 		Args:  requireOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			cfg := config.Load()
+			cfg := config.FromContext(cmd.Context())
 			key := args[0]
 
 			val := cfg.Get(key)

@@ -7,7 +7,7 @@ import (
 func TestConfigForPublicClient(t *testing.T) {
 	t.Setenv("MUSHER_API_URL", "https://test.example.com")
 
-	got := configForPublicClient()
+	got := configForPublicClient(t.Context())
 	if got != "https://test.example.com" {
 		t.Errorf("configForPublicClient() = %q, want %q", got, "https://test.example.com")
 	}
@@ -25,7 +25,7 @@ func TestNewAPIClientNoCredentials(t *testing.T) {
 	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1")
 	t.Setenv("MUSHER_API_KEY", "")
 
-	_, _, err := newAPIClient()
+	_, _, err := newAPIClientFromContext(t.Context())
 	if err == nil {
 		t.Fatal("expected error when no credentials are available")
 	}
@@ -35,9 +35,9 @@ func TestNewAPIClientWithKey(t *testing.T) {
 	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1")
 	t.Setenv("MUSHER_API_KEY", "test-key-123")
 
-	source, c, err := newAPIClient()
+	source, c, err := newAPIClientFromContext(t.Context())
 	if err != nil {
-		t.Fatalf("newAPIClient() error = %v", err)
+		t.Fatalf("newAPIClientFromContext() error = %v", err)
 	}
 
 	if c == nil {
@@ -53,7 +53,7 @@ func TestRequireAuthNoCredentials(t *testing.T) {
 	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1")
 	t.Setenv("MUSHER_API_KEY", "")
 
-	_, err := requireAuth()
+	_, err := requireAuthFromContext(t.Context())
 	if err == nil {
 		t.Fatal("expected error when no credentials are available")
 	}
@@ -63,9 +63,9 @@ func TestRequireAuthWithKey(t *testing.T) {
 	t.Setenv("MUSHER_API_URL", "http://127.0.0.1:1")
 	t.Setenv("MUSHER_API_KEY", "test-key-123")
 
-	c, err := requireAuth()
+	c, err := requireAuthFromContext(t.Context())
 	if err != nil {
-		t.Fatalf("requireAuth() error = %v", err)
+		t.Fatalf("requireAuthFromContext() error = %v", err)
 	}
 
 	if c == nil {

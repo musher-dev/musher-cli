@@ -380,13 +380,19 @@ func (pk *packScreen) renderBreadcrumb() string {
 	return trail
 }
 
+func (pk *packScreen) validationMaxDetailLines() int {
+	const packChrome = 16
+
+	return max(pk.height-packChrome, 3)
+}
+
 func (pk *packScreen) renderBody() string {
 	switch pk.state {
 	case packStateValidating, packStateValidateFailed:
-		return renderValidationChecks(pk.checks, pk.styles, &pk.spinner)
+		return renderValidationChecks(pk.checks, pk.styles, &pk.spinner, pk.validationMaxDetailLines())
 
 	case packStatePacking:
-		body := renderValidationChecks(pk.checks, pk.styles, &pk.spinner)
+		body := renderValidationChecks(pk.checks, pk.styles, &pk.spinner, pk.validationMaxDetailLines())
 		body += "\n\n" + pk.spinner.View() + " " + pk.styles.muted.Render("Packing assets to local cache...")
 
 		return body
@@ -405,7 +411,7 @@ func (pk *packScreen) renderBody() string {
 func (pk *packScreen) renderSuccess() string {
 	var buf strings.Builder
 
-	buf.WriteString(renderValidationChecks(pk.checks, pk.styles, &pk.spinner))
+	buf.WriteString(renderValidationChecks(pk.checks, pk.styles, &pk.spinner, pk.validationMaxDetailLines()))
 	buf.WriteString("\n\n")
 
 	buf.WriteString(pk.styles.success.Render(checkIconPassed) + " " +
@@ -427,7 +433,7 @@ func (pk *packScreen) renderSuccess() string {
 func (pk *packScreen) renderFailed() string {
 	var buf strings.Builder
 
-	buf.WriteString(renderValidationChecks(pk.checks, pk.styles, &pk.spinner))
+	buf.WriteString(renderValidationChecks(pk.checks, pk.styles, &pk.spinner, pk.validationMaxDetailLines()))
 	buf.WriteString("\n\n")
 
 	buf.WriteString(pk.styles.errStyle.Render(checkIconFailed) + " " +

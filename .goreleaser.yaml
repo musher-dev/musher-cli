@@ -8,6 +8,10 @@ project_name: musher
 before:
   hooks:
     - go mod tidy
+    - mkdir -p completions
+    - sh -c "go run ./cmd/musher completion bash > completions/musher.bash"
+    - sh -c "go run ./cmd/musher completion zsh > completions/_musher"
+    - sh -c "go run ./cmd/musher completion fish > completions/musher.fish"
 
 builds:
   - id: musher
@@ -38,6 +42,7 @@ archives:
     files:
       - README.md
       - LICENSE*
+      - completions/*
 
 checksum:
   name_template: "checksums.txt"

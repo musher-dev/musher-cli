@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/pathutil"
+	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
@@ -65,7 +65,7 @@ func backupIfExists(path string) (CleanupFunc, error) {
 
 // expandTilde replaces a leading "~/" with the user's home directory.
 func expandTilde(path string) (string, error) {
-	expanded, err := pathutil.ExpandTilde(path)
+	expanded, err := paths.ExpandTilde(path)
 	if err != nil {
 		return "", repoerrors.Errorf("expand tilde: %w", err)
 	}

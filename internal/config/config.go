@@ -2,6 +2,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -15,6 +16,22 @@ import (
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
 
+type contextKey struct{}
+
+// WithContext stores the Config in the given context.
+func WithContext(ctx context.Context, cfg *Config) context.Context {
+	return context.WithValue(ctx, contextKey{}, cfg)
+}
+
+// FromContext retrieves the Config from context, or returns a freshly loaded one.
+func FromContext(ctx context.Context) *Config {
+	if cfg, ok := ctx.Value(contextKey{}).(*Config); ok {
+		return cfg
+	}
+
+	return Load()
+}
+
 const (
 	// DefaultAPIURL is the default Musher API endpoint.
 	DefaultAPIURL = "https://api.musher.dev"
@@ -26,9 +43,25 @@ const (
 
 const minIntervalDuration = 1 * time.Second
 
+// knownKeys is the set of recognized configuration keys.
+var knownKeys = map[string]bool{
+	"api.url":               true,
+	"network.ca_cert_file":  true,
+	"update.auto_apply":     true,
+	"update.check_interval": true,
+	"experimental":          true,
+	"oci.registry_url":      true,
+}
+
+// IsKnownKey reports whether key is a recognized configuration key.
+func IsKnownKey(key string) bool {
+	return knownKeys[key]
+}
+
 // Config holds the Musher configuration.
 type Config struct {
-	v *viper.Viper
+	v       *viper.Viper
+	profile string // Active profile name ("" for default).
 }
 
 // Load reads configuration from all sources.

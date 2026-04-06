@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/pull"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -19,23 +17,10 @@ import (
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
 
-// pullCacheResult holds the outcome of pulling a bundle into the local cache.
-type pullCacheResult struct {
-	Namespace   string
-	Slug        string
-	Version     string
-	Name        string
-	Description string
-	CacheRoot   string
-	HostID      string // Host ID that holds this manifest (_local or registry-derived).
-	Cached      bool
-	Layers      []cache.ManifestLayer
-}
-
 // pullToCache resolves, downloads, and caches a bundle version.  If the bundle
 // is already cached and fresh, the cached manifest is returned without a
 // network call (unless force is true).
-func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, version string, force bool) (*pullCacheResult, error) {
+func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, version string, force bool) (*pull.Result, error) {
 	cacheRoot, err := paths.CacheRoot()
 	if err != nil {
 		return nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to determine cache directory", err)
@@ -53,7 +38,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		}
 	}
 
-	cfg := config.Load()
+	cfg := config.FromContext(ctx)
 
 	hostID, err := paths.HostIDFromURL(cfg.APIURL())
 	if err != nil {
@@ -86,7 +71,7 @@ func pullToCache(ctx context.Context, out *output.Writer, namespace, slug, versi
 		return nil, err
 	}
 
-	return &pullCacheResult{
+	return &pull.Result{
 		Namespace:   namespace,
 		Slug:        slug,
 		Version:     version,
@@ -124,47 +109,12 @@ func resolveVersion(
 	return resolved, true, nil
 }
 
-func checkCacheFreshness(store *cache.Store, hostID, namespace, slug, version, cacheRoot string) *pullCacheResult {
-	manifest, loadErr := store.LoadManifest(hostID, namespace, slug, version)
-	if loadErr != nil {
-		return nil
-	}
-
-	if !store.IsManifestFresh(hostID, namespace, slug, version) || !store.HasAllBlobs(manifest) {
-		return nil
-	}
-
-	return &pullCacheResult{
-		Namespace:   namespace,
-		Slug:        slug,
-		Version:     version,
-		Name:        manifest.Name,
-		Description: manifest.Description,
-		CacheRoot:   cacheRoot,
-		Cached:      true,
-		Layers:      manifest.Layers,
-	}
+func checkCacheFreshness(store *cache.Store, hostID, namespace, slug, version, cacheRoot string) *pull.Result {
+	return pull.CheckCacheFreshness(store, hostID, namespace, slug, version, cacheRoot)
 }
 
-// checkLocalPack checks whether a locally packed bundle exists in the _local
-// host partition.  When version is empty it resolves the latest local ref.
-func checkLocalPack(store *cache.Store, namespace, slug, version, cacheRoot string) *pullCacheResult {
-	// If no version given, try the local "latest" ref.
-	if version == "" {
-		ref, err := store.ReadRef(cache.LocalHostID, namespace, slug)
-		if err != nil {
-			return nil
-		}
-
-		version = ref.Version
-	}
-
-	result := checkCacheFreshness(store, cache.LocalHostID, namespace, slug, version, cacheRoot)
-	if result != nil {
-		result.HostID = cache.LocalHostID
-	}
-
-	return result
+func checkLocalPack(store *cache.Store, namespace, slug, version, cacheRoot string) *pull.Result {
+	return pull.CheckLocalPack(store, namespace, slug, version, cacheRoot)
 }
 
 func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, version string) (*client.PullBundleResponse, error) {
@@ -201,12 +151,12 @@ func pullFromAPI(ctx context.Context, out *output.Writer, namespace, slug, versi
 // pullFromOCI attempts to pull a bundle via the OCI registry using the resolve
 // endpoint to obtain the OCI reference and layer metadata.
 func pullFromOCI(ctx context.Context, namespace, slug, version string) (*client.PullBundleResponse, error) {
-	cfg := config.Load()
+	cfg := config.FromContext(ctx)
 
 	// Resolve the bundle to get OCI reference metadata.
-	_, apiClient, authErr := newAPIClient()
+	_, apiClient, authErr := newAPIClientFromContext(ctx)
 	if authErr != nil {
-		apiURL := configForPublicClient()
+		apiURL := configForPublicClient(ctx)
 		apiClient = newPublicAPIClient(apiURL)
 	}
 
@@ -246,11 +196,11 @@ func pullFromOCI(ctx context.Context, namespace, slug, version string) (*client.
 
 // pullFromJSONAPI pulls a bundle using the existing JSON REST API endpoints.
 func pullFromJSONAPI(ctx context.Context, namespace, slug, version string) (*client.PullBundleResponse, error) {
-	_, apiClient, authErr := newAPIClient()
+	_, apiClient, authErr := newAPIClientFromContext(ctx)
 	usePublic := authErr != nil
 
 	if usePublic {
-		apiURL := configForPublicClient()
+		apiURL := configForPublicClient(ctx)
 		apiClient = newPublicAPIClient(apiURL)
 	}
 
@@ -279,7 +229,7 @@ func pullBundleWithFallback(
 
 	var httpErr *client.HTTPStatusError
 	if errors.As(err, &httpErr) && httpErr.Status == http.StatusForbidden {
-		apiURL := configForPublicClient()
+		apiURL := configForPublicClient(ctx)
 		pubClient := newPublicAPIClient(apiURL)
 
 		fallbackBundle, fallbackErr := pubClient.PullPublicBundleVersion(ctx, namespace, slug, version)
@@ -294,30 +244,9 @@ func pullBundleWithFallback(
 }
 
 func cacheBundle(store *cache.Store, bundle *client.PullBundleResponse) (*cache.BundleManifest, error) {
-	manifest := &cache.BundleManifest{
-		Namespace:   bundle.Namespace,
-		Slug:        bundle.Slug,
-		Version:     bundle.Version,
-		Name:        bundle.Name,
-		Description: bundle.Description,
-	}
-
-	for _, asset := range bundle.Assets {
-		data := []byte(asset.ContentText)
-
-		digest, storeErr := store.StoreBlob(data)
-		if storeErr != nil {
-			return nil, clierrors.Wrap(clierrors.ExitGeneral,
-				"Failed to cache asset "+asset.LogicalPath, storeErr)
-		}
-
-		manifest.Layers = append(manifest.Layers, cache.ManifestLayer{
-			LogicalPath:   asset.LogicalPath,
-			AssetType:     asset.AssetType,
-			ContentSHA256: digest,
-			Size:          int64(len(data)),
-			MediaType:     asset.MediaType,
-		})
+	manifest, err := pull.CacheBundle(store, bundle)
+	if err != nil {
+		return nil, clierrors.Errorf("cache bundle: %w", err)
 	}
 
 	return manifest, nil
@@ -329,25 +258,8 @@ func storeManifestAndMeta(
 	manifest *cache.BundleManifest,
 	resolvedFromLatest bool,
 ) error {
-	if storeErr := store.StoreManifest(hostID, namespace, slug, version, manifest); storeErr != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest", storeErr)
-	}
-
-	now := time.Now()
-
-	if storeErr := store.StoreManifestMeta(hostID, namespace, slug, version, &cache.ManifestMeta{
-		FetchedAt: now,
-		TTL:       cache.DefaultManifestTTL,
-	}); storeErr != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to write manifest metadata", storeErr)
-	}
-
-	if resolvedFromLatest {
-		_ = store.UpdateRef(hostID, namespace, slug, &cache.RefData{ //nolint:errcheck // best-effort ref cache
-			Version:   version,
-			CachedAt:  now,
-			ExpiresAt: now.Add(time.Duration(cache.DefaultRefTTL) * time.Second),
-		})
+	if err := pull.StoreManifest(store, hostID, namespace, slug, version, manifest, resolvedFromLatest); err != nil {
+		return clierrors.Errorf("store manifest: %w", err)
 	}
 
 	return nil
@@ -355,9 +267,9 @@ func storeManifestAndMeta(
 
 // resolveLatestVersionCtx fetches bundle detail to determine the latest version.
 func resolveLatestVersionCtx(ctx context.Context, out *output.Writer, namespace, slug string) (string, error) {
-	_, apiClient, authErr := newAPIClient()
+	_, apiClient, authErr := newAPIClientFromContext(ctx)
 	if authErr != nil {
-		apiURL := configForPublicClient()
+		apiURL := configForPublicClient(ctx)
 		apiClient = newPublicAPIClient(apiURL)
 	}
 
@@ -384,28 +296,10 @@ func resolveLatestVersionCtx(ctx context.Context, out *output.Writer, namespace,
 	return detail.LatestVersion, nil
 }
 
-// countAssetsByType returns a map of asset type to count from manifest layers.
 func countAssetsByType(layers []cache.ManifestLayer) map[string]int {
-	counts := make(map[string]int)
-	for _, layer := range layers {
-		counts[layer.AssetType]++
-	}
-
-	return counts
+	return pull.CountAssetsByType(layers)
 }
 
-// formatAssetSummary returns a human-readable summary of asset types.
 func formatAssetSummary(layers []cache.ManifestLayer) string {
-	counts := countAssetsByType(layers)
-
-	var parts []string
-	for assetType, count := range counts {
-		parts = append(parts, fmt.Sprintf("%d %s", count, assetType))
-	}
-
-	if len(parts) == 0 {
-		return "no assets"
-	}
-
-	return fmt.Sprintf("%d asset(s): %s", len(layers), strings.Join(parts, ", "))
+	return pull.FormatAssetSummary(layers)
 }

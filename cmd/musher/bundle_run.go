@@ -15,11 +15,12 @@ func newBundleRunCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "run <namespace/slug[:version]>",
-		Short: "Load and run a bundle with a harness",
+		Use:    "run <namespace/slug[:version]>",
+		Short:  "Load and run a bundle with a harness",
+		Hidden: true,
 		Long: `Load a bundle from the registry and run it with a harness.
 
-This is an alias for 'musher run'. See 'musher run --help' for details.`,
+This is a fully-qualified alias for 'musher run'. Prefer the top-level command.`,
 		Example: `  musher bundle run acme/code-review --harness claude
   musher bundle run acme/code-review:1.0.0 --harness cursor`,
 		Args: requireOneArg,

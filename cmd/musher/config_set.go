@@ -27,10 +27,15 @@ func newConfigSetCmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			cfg := config.Load()
+			cfg := config.FromContext(cmd.Context())
 
 			key := args[0]
 			value := args[1]
+
+			if !config.IsKnownKey(key) {
+				out.Warning("Unknown configuration key %q — this may be a typo", key)
+				out.Info("Run 'musher config list' to see known keys")
+			}
 
 			if err := cfg.Set(key, value); err != nil {
 				return clierrors.ConfigFailed("save configuration", err)

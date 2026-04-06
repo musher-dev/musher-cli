@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 
@@ -21,8 +22,8 @@ func (p *Passthrough) Run(ctx context.Context, cfg *Config) (int, error) {
 	cmd := exec.CommandContext(ctx, cfg.Binary, cfg.Args...) //nolint:gosec // binary from trusted harness spec
 	cmd.Dir = cfg.WorkDir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = transcriptTee(os.Stdout, cfg.Transcript, "stdout")
+	cmd.Stderr = transcriptTee(os.Stderr, cfg.Transcript, "stderr")
 
 	if err := cmd.Start(); err != nil {
 		return 0, clierrors.Wrap(clierrors.ExitHarness, "Failed to start harness", err)
@@ -53,4 +54,29 @@ func (p *Passthrough) Run(ctx context.Context, cfg *Config) (int, error) {
 	}
 
 	return 0, clierrors.Wrap(clierrors.ExitHarness, "Harness process failed", waitErr)
+}
+
+// transcriptTee returns a writer that writes to w and also records data to the
+// transcript writer. If tw is nil, returns w unchanged.
+func transcriptTee(w io.Writer, tw TranscriptWriter, stream string) io.Writer {
+	if tw == nil {
+		return w
+	}
+
+	return &teeWriter{w: w, tw: tw, stream: stream}
+}
+
+type teeWriter struct {
+	w      io.Writer
+	tw     TranscriptWriter
+	stream string
+}
+
+func (t *teeWriter) Write(p []byte) (int, error) {
+	n, err := t.w.Write(p)
+	if n > 0 {
+		t.tw.Write(t.stream, string(p[:n])) //nolint:errcheck // best-effort transcript
+	}
+
+	return n, err //nolint:wrapcheck // implementing io.Writer, passthrough error from underlying writer
 }

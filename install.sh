@@ -19,8 +19,20 @@ if [ -n "${MUSHER_INSTALL_BASE_URL:-}" ]; then
   BASE_URL="${MUSHER_INSTALL_BASE_URL}"
 fi
 
+warn_if_tls_skip() {
+  if [ "${MUSHER_INSTALL_SKIP_TLS_VERIFY:-${MUSHER_INSTALL_INSECURE:-0}}" = "1" ]; then
+    printf '\033[1;33mWARNING: TLS certificate verification is disabled.\033[0m
+' >&2
+    printf 'This makes the download vulnerable to man-in-the-middle attacks.
+' >&2
+    printf 'Only use this behind a corporate proxy with a custom CA.
+
+' >&2
+  fi
+}
+
 curl_flags() {
-  if [ "${MUSHER_INSTALL_INSECURE:-0}" = "1" ]; then
+  if [ "${MUSHER_INSTALL_SKIP_TLS_VERIFY:-${MUSHER_INSTALL_INSECURE:-0}}" = "1" ]; then
     printf '%s\n' "--proto" "=https" "--tlsv1.2" "-k" "-fsSL"
     return
   fi
@@ -29,7 +41,7 @@ curl_flags() {
 }
 
 wget_flags() {
-  if [ "${MUSHER_INSTALL_INSECURE:-0}" = "1" ]; then
+  if [ "${MUSHER_INSTALL_SKIP_TLS_VERIFY:-${MUSHER_INSTALL_INSECURE:-0}}" = "1" ]; then
     printf '%s\n' "--https-only" "--no-check-certificate" "-q"
     return
   fi
@@ -315,6 +327,8 @@ main() {
 
   TMP_DIR="$(mktemp -d 2> /dev/null || mktemp -d -t musher)"
   trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+
+  warn_if_tls_skip
 
   say "Downloading ${ARCHIVE_NAME}..."
   download "$ARCHIVE_URL" "${TMP_DIR}/${ARCHIVE_NAME}"

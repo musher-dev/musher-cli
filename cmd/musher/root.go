@@ -10,6 +10,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/discovery"
 	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -85,6 +86,10 @@ Run without arguments in a terminal for an interactive experience.`,
 				return err
 			}
 
+			// Load config once and store in context for all subcommands.
+			cfg := config.Load()
+			cmd.SetContext(config.WithContext(cmd.Context(), cfg))
+
 			maybeStartAgent(buildinfo.Version)
 
 			return nil
@@ -111,6 +116,8 @@ Run without arguments in a terminal for an interactive experience.`,
 	rootCmd.PersistentFlags().StringVar(&logStderr, "log-stderr", "", "Structured logging to stderr: auto, on, off")
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "", "Override Musher API URL for this command")
 	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "", "API key override (prefer MUSHER_API_KEY env var)")
+	rootCmd.PersistentFlags().String("profile", "", "Configuration profile (or set MUSHER_PROFILE)")
+	_ = rootCmd.PersistentFlags().MarkHidden("profile") //nolint:errcheck // MarkHidden cannot fail for registered flags
 
 	_ = rootCmd.PersistentFlags().MarkHidden("log-level")  //nolint:errcheck // MarkHidden cannot fail for registered flags
 	_ = rootCmd.PersistentFlags().MarkHidden("log-format") //nolint:errcheck // MarkHidden cannot fail for registered flags
@@ -200,6 +207,10 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	runCmd := newRunCmd()
 	runCmd.GroupID = groupConsumer
 	rootCmd.AddCommand(runCmd)
+
+	historyCmd := newHistoryCmd()
+	historyCmd.GroupID = groupConsumer
+	rootCmd.AddCommand(historyCmd)
 
 	// Bundle group
 	bundleCmd := newBundleCmd()
@@ -307,7 +318,7 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		return cmd.Help() //nolint:wrapcheck // cobra's Help() returns nil or a well-defined error
 	}
 
-	cfg := config.Load()
+	cfg := config.FromContext(cmd.Context())
 	apiURL := cfg.APIURL()
 	apiClient := newPublicAPIClient(apiURL)
 
@@ -315,7 +326,7 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 
 	var pusher tui.BundlePusher
 
-	if _, c, err := newAPIClient(); err == nil {
+	if _, c, err := newAPIClientFromContext(cmd.Context()); err == nil {
 		authChecker = c
 		pusher = c
 	}
@@ -348,8 +359,8 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 	healthChecker := newRegistryHealthChecker(reg)
 
 	deps := &tui.HomeDeps{
-		Searcher:         apiClient,
-		Puller:           apiClient,
+		Searcher:         &discovery.FallbackSearcher{HubClient: apiClient},
+		Puller:           &discovery.FallbackPuller{HubClient: apiClient, OCIPullFunc: pullFromOCI},
 		Harnesses:        reg,
 		HealthChecker:    healthChecker,
 		Auth:             authChecker,

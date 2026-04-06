@@ -26,6 +26,7 @@ const (
 	searchMaxVisibleMax = 8   // maximum visible results on tall terminals
 	searchPanelMax      = 80  // max width for search/detail panels
 	validationPanelMax  = 100 // max width for validation panel
+	pushPanelMax        = 80  // max width for push review panel
 
 	// Publisher trust tier values.
 	trustTierVerified = "verified"

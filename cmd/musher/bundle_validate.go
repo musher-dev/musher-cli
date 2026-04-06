@@ -22,21 +22,23 @@ referenced asset files exist. This performs the same checks that
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := output.FromContext(cmd.Context())
-			return runValidate(out)
+			_, err := runValidate(out)
+
+			return err
 		},
 	}
 }
 
-func runValidate(out *output.Writer) error {
+func runValidate(out *output.Writer) (*bundledef.Def, error) {
 	workDir, err := os.Getwd()
 	if err != nil {
-		return clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
+		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to determine working directory", err)
 	}
 
 	// Run schema validation first.
 	yamlPath, err := bundledef.Resolve(workDir)
 	if err != nil {
-		return clierrors.InvalidBundleDef(err.Error())
+		return nil, clierrors.InvalidBundleDef(err.Error())
 	}
 
 	yamlData, err := os.ReadFile(yamlPath) //nolint:gosec // path constructed from working directory + resolved filename
@@ -49,26 +51,26 @@ func runValidate(out *output.Writer) error {
 				parts = append(parts, "  - "+e.String())
 			}
 
-			return clierrors.InvalidBundleDef(strings.Join(parts, "\n"))
+			return nil, clierrors.InvalidBundleDef(strings.Join(parts, "\n"))
 		}
 	}
 
 	bundle, err := bundledef.Load(workDir)
 	if err != nil {
-		return clierrors.InvalidBundleDef(err.Error())
+		return nil, clierrors.InvalidBundleDef(err.Error())
 	}
 
 	if err := bundle.Validate(); err != nil {
-		return clierrors.InvalidBundleDef(err.Error())
+		return nil, clierrors.InvalidBundleDef(err.Error())
 	}
 
 	if err := bundle.ValidateAssets(workDir); err != nil {
-		return clierrors.ValidateFailed(err.Error())
+		return nil, clierrors.ValidateFailed(err.Error())
 	}
 
 	if out.JSON {
 		//nolint:wrapcheck // PrintJSON is an internal helper, wrapping adds noise
-		return out.PrintJSON(struct {
+		return bundle, out.PrintJSON(struct {
 			Valid      bool   `json:"valid"`
 			Namespace  string `json:"namespace"`
 			Slug       string `json:"slug"`
@@ -85,5 +87,5 @@ func runValidate(out *output.Writer) error {
 
 	out.Success("Bundle is valid: %s (%d assets)", bundle.VersionRef(), len(bundle.Assets))
 
-	return nil
+	return bundle, nil
 }

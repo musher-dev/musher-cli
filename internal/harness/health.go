@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/musher-dev/musher-cli/internal/pathutil"
+	"github.com/musher-dev/musher-cli/internal/paths"
 )
 
 // CheckStatus represents the outcome of a single health check.
@@ -158,7 +158,7 @@ func detectVersion(ctx context.Context, binary string, args []string) string {
 
 // checkPath verifies a tilde-expanded path exists.
 func checkPath(name, path, description string) HealthCheck {
-	expanded, err := pathutil.ExpandTilde(path)
+	expanded, err := paths.ExpandTilde(path)
 	if err != nil {
 		return HealthCheck{
 			Name:    name,

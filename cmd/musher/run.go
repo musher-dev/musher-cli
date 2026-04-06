@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
+	"github.com/musher-dev/musher-cli/internal/bundle/pull"
 	"github.com/musher-dev/musher-cli/internal/bundle/session"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/prompt"
+	"github.com/musher-dev/musher-cli/internal/transcript"
 	"github.com/musher-dev/musher-cli/internal/tui"
 )
 
@@ -92,7 +94,7 @@ func runBundleRun(ctx context.Context, out *output.Writer, ref, harnessName, pro
 		exitCode, runErr := runSingleSession(ctx, out, ref, prov, projectDir, force, noWatch)
 
 		if errors.Is(runErr, runtime.ErrSwapRequested) {
-			apiURL := config.Load().APIURL()
+			apiURL := config.FromContext(ctx).APIURL()
 			searcher := newPublicAPIClient(apiURL)
 
 			swapResult, pickerErr := tui.RunSwapPicker(ctx, searcher, cacheRoot, ref)
@@ -190,6 +192,23 @@ func runSingleSession(
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Set up transcript recording.
+	var transcriptWriter runtime.TranscriptWriter
+
+	if transcriptDir, pathErr := paths.TranscriptDir(); pathErr == nil {
+		store := transcript.NewStore(transcriptDir)
+		if sess, createErr := store.Create(versionRef); createErr == nil {
+			if writer, openErr := store.OpenWriter(sess.ID); openErr == nil {
+				transcriptWriter = writer
+
+				defer func() {
+					writer.Close()       //nolint:errcheck // best-effort close
+					store.Close(sess.ID) //nolint:errcheck // best-effort close
+				}()
+			}
+		}
+	}
+
 	// Select and launch executor.
 	cfg := &runtime.Config{
 		Binary:      prov.Spec.Binary,
@@ -197,6 +216,7 @@ func runSingleSession(
 		WorkDir:     projectDir,
 		BundleRef:   versionRef,
 		HarnessName: prov.Spec.DisplayName,
+		Transcript:  transcriptWriter,
 	}
 
 	executor := runtime.Select(out.Terminal().IsTTY, noWatch)
@@ -308,7 +328,7 @@ func resolveHarnessInteractive(ctx context.Context, out *output.Writer, reg *har
 }
 
 // loadManifestFromCache creates a cache store and loads the bundle manifest.
-func loadManifestFromCache(result *pullCacheResult) (*cache.Store, *cache.BundleManifest, error) {
+func loadManifestFromCache(result *pull.Result) (*cache.Store, *cache.BundleManifest, error) {
 	store, err := cache.NewStore(result.CacheRoot)
 	if err != nil {
 		return nil, nil, clierrors.Wrap(clierrors.ExitConfig, "Failed to open cache store", err)
@@ -362,7 +382,7 @@ func runBundleFromTUIResult(ctx context.Context, out *output.Writer, result *tui
 		exitCode, runErr := runSingleSession(ctx, out, ref, prov, projectDir, false, false)
 
 		if errors.Is(runErr, runtime.ErrSwapRequested) {
-			apiURL := config.Load().APIURL()
+			apiURL := config.FromContext(ctx).APIURL()
 			searcher := newPublicAPIClient(apiURL)
 
 			swapResult, pickerErr := tui.RunSwapPicker(ctx, searcher, cacheRoot, ref)

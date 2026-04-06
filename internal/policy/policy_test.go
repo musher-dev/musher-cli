@@ -34,7 +34,6 @@ var (
 		moduleRoot + "/internal/harness":       true,
 		moduleRoot + "/internal/oci":           true,
 		moduleRoot + "/internal/observability": true,
-		moduleRoot + "/internal/pathutil":      true,
 		moduleRoot + "/internal/paths":         true,
 		moduleRoot + "/internal/safeio":        true,
 		moduleRoot + "/internal/skills":        true,

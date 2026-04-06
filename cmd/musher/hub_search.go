@@ -65,10 +65,10 @@ func runHubSearch(cmd *cobra.Command, out *output.Writer, query, bundleType, sor
 		out.Warning("--sort updated is deprecated; using recent")
 	}
 
-	_, c, err := newAPIClient()
+	_, c, err := newAPIClientFromContext(cmd.Context())
 	if err != nil {
 		// Hub search is public — create an unauthenticated client.
-		cfg := configForPublicClient()
+		cfg := configForPublicClient(cmd.Context())
 		c = newPublicAPIClient(cfg)
 	}
 

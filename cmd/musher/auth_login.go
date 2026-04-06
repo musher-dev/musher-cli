@@ -78,7 +78,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 	spin := out.Spinner("Validating credentials")
 	spin.Start()
 
-	cfg := config.Load()
+	cfg := config.FromContext(cmd.Context())
 
 	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
 	if err != nil {

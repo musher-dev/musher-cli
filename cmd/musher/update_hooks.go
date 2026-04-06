@@ -20,7 +20,7 @@ func maybeStartAgent(currentVersion string) {
 		return
 	}
 
-	cfg := config.Load()
+	cfg := config.Load() // No command context available; runs in background goroutine.
 	agentCfg := update.AgentConfig{
 		CurrentVersion: currentVersion,
 		CheckInterval:  cfg.UpdateCheckInterval(),
