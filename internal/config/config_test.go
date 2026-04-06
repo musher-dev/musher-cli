@@ -290,3 +290,204 @@ func TestOCIRegistryURL(t *testing.T) {
 		t.Errorf("OCIRegistryURL() = %q, want %q", got, DefaultOCIRegistryURL)
 	}
 }
+
+func TestResolveProfile(t *testing.T) {
+	t.Run("flag takes precedence", func(t *testing.T) {
+		t.Setenv(ProfileEnvVar, "from-env")
+
+		got := ResolveProfile("from-flag")
+		if got != "from-flag" {
+			t.Errorf("ResolveProfile = %q, want %q", got, "from-flag")
+		}
+	})
+
+	t.Run("env var used when no flag", func(t *testing.T) {
+		t.Setenv(ProfileEnvVar, "staging")
+
+		got := ResolveProfile("")
+		if got != "staging" {
+			t.Errorf("ResolveProfile = %q, want %q", got, "staging")
+		}
+	})
+
+	t.Run("default when nothing set", func(t *testing.T) {
+		t.Setenv(ProfileEnvVar, "")
+
+		got := ResolveProfile("")
+		if got != DefaultProfile {
+			t.Errorf("ResolveProfile = %q, want %q", got, DefaultProfile)
+		}
+	})
+}
+
+func TestActiveProfile(t *testing.T) {
+	t.Setenv(ProfileEnvVar, "")
+
+	got := ActiveProfile()
+	if got != DefaultProfile {
+		t.Errorf("ActiveProfile = %q, want %q", got, DefaultProfile)
+	}
+}
+
+func TestLoadWithProfile_Default(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+	t.Setenv("MUSHER_API_URL", "")
+
+	cfg := LoadWithProfile("")
+	if cfg == nil {
+		t.Fatal("LoadWithProfile returned nil")
+	}
+
+	if got := cfg.ActiveProfileName(); got != DefaultProfile {
+		t.Errorf("ActiveProfileName = %q, want %q", got, DefaultProfile)
+	}
+}
+
+func TestLoadWithProfile_Named(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+	t.Setenv("MUSHER_API_URL", "")
+
+	// Create profile directory and config.
+	profileDir := filepath.Join(tmp, profilesDirName, "staging")
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	content := "api:\n  url: https://staging.musher.dev\n"
+	if err := os.WriteFile(filepath.Join(profileDir, "config.yaml"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := LoadWithProfile("staging")
+	if cfg == nil {
+		t.Fatal("LoadWithProfile returned nil")
+	}
+
+	if got := cfg.ActiveProfileName(); got != "staging" {
+		t.Errorf("ActiveProfileName = %q, want %q", got, "staging")
+	}
+
+	if got := cfg.APIURL(); got != "https://staging.musher.dev" {
+		t.Errorf("APIURL = %q, want %q", got, "https://staging.musher.dev")
+	}
+}
+
+func TestListProfiles(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+
+	// No profiles directory yet — should return just "default".
+	profiles, err := ListProfiles()
+	if err != nil {
+		t.Fatalf("ListProfiles: %v", err)
+	}
+
+	if len(profiles) != 1 || profiles[0] != DefaultProfile {
+		t.Errorf("profiles = %v, want [%q]", profiles, DefaultProfile)
+	}
+
+	// Create a named profile.
+	profileDir := filepath.Join(tmp, profilesDirName, "staging")
+	if mkErr := os.MkdirAll(profileDir, 0o700); mkErr != nil {
+		t.Fatal(mkErr)
+	}
+
+	if writeErr := os.WriteFile(filepath.Join(profileDir, "config.yaml"), []byte("api:\n  url: test\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	profiles, err = ListProfiles()
+	if err != nil {
+		t.Fatalf("ListProfiles: %v", err)
+	}
+
+	if len(profiles) != 2 {
+		t.Fatalf("profiles = %v, want 2 entries", profiles)
+	}
+
+	if profiles[1] != "staging" {
+		t.Errorf("profiles[1] = %q, want %q", profiles[1], "staging")
+	}
+}
+
+func TestDeleteProfile(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+
+	// Cannot delete default.
+	if err := DeleteProfile(DefaultProfile); err == nil {
+		t.Fatal("expected error deleting default profile")
+	}
+
+	// Cannot delete empty.
+	if err := DeleteProfile(""); err == nil {
+		t.Fatal("expected error deleting empty profile")
+	}
+
+	// Cannot delete nonexistent.
+	if err := DeleteProfile("nonexistent"); err == nil {
+		t.Fatal("expected error deleting nonexistent profile")
+	}
+
+	// Create and delete a profile.
+	profileDir := filepath.Join(tmp, profilesDirName, "temp")
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(profileDir, "config.yaml"), []byte("api:\n  url: temp\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteProfile("temp"); err != nil {
+		t.Fatalf("DeleteProfile: %v", err)
+	}
+
+	// Verify it's gone.
+	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
+		t.Error("profile directory still exists after delete")
+	}
+}
+
+func TestSetForProfile(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+	t.Setenv("MUSHER_API_URL", "")
+
+	// Create profile config.
+	profileDir := filepath.Join(tmp, profilesDirName, "test")
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(profileDir, "config.yaml"), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := LoadWithProfile("test")
+
+	if err := cfg.SetForProfile("api.url", "https://custom.api.dev"); err != nil {
+		t.Fatalf("SetForProfile: %v", err)
+	}
+
+	if got := cfg.GetString("api.url"); got != "https://custom.api.dev" {
+		t.Errorf("GetString after SetForProfile = %q, want %q", got, "https://custom.api.dev")
+	}
+}
+
+func TestProfileConfigDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", tmp)
+
+	dir, err := ProfileConfigDir("staging")
+	if err != nil {
+		t.Fatalf("ProfileConfigDir: %v", err)
+	}
+
+	expected := filepath.Join(tmp, profilesDirName, "staging")
+	if dir != expected {
+		t.Errorf("dir = %q, want %q", dir, expected)
+	}
+}

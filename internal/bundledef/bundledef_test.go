@@ -449,3 +449,285 @@ func TestResolve(t *testing.T) {
 		}
 	})
 }
+
+func TestSanitizeSlug(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"lowercase", "My-Bundle", "my-bundle"},
+		{"spaces to hyphens", "My Cool Bundle", "my-cool-bundle"},
+		{"special chars", "my@bundle!2.0", "my-bundle-2-0"},
+		{"consecutive hyphens", "my--bundle", "my-bundle"},
+		{"leading hyphens", "---bundle", "bundle"},
+		{"trailing hyphens", "bundle---", "bundle"},
+		{"empty string", "", "my-bundle"},
+		{"all special", "@#$%", "my-bundle"},
+		{"already valid", "cool-bundle-123", "cool-bundle-123"},
+		{"long name truncated", strings.Repeat("a", 150), strings.Repeat("a", 100)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := SanitizeSlug(tt.in)
+			if got != tt.want {
+				t.Errorf("SanitizeSlug(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		def     Def
+		wantErr bool
+		errText string
+	}{
+		{
+			"all empty",
+			Def{},
+			true,
+			"namespace is required",
+		},
+		{
+			"missing slug",
+			Def{Namespace: "ns", Version: "1.0.0", Name: "Test"},
+			true,
+			"slug is required",
+		},
+		{
+			"missing version",
+			Def{Namespace: "ns", Slug: "test", Name: "Test"},
+			true,
+			"version is required",
+		},
+		{
+			"missing name",
+			Def{Namespace: "ns", Slug: "test", Version: "1.0.0"},
+			true,
+			"name is required",
+		},
+		{
+			"whitespace only namespace",
+			Def{Namespace: "   ", Slug: "test", Version: "1.0.0", Name: "Test"},
+			true,
+			"namespace is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			errs := tt.def.validateRequiredFields()
+
+			if tt.wantErr && len(errs) == 0 {
+				t.Fatal("expected validation errors")
+			}
+
+			if !tt.wantErr && len(errs) > 0 {
+				t.Fatalf("unexpected errors: %v", errs)
+			}
+
+			if tt.errText != "" {
+				found := false
+
+				for _, e := range errs {
+					if strings.Contains(e, tt.errText) {
+						found = true
+
+						break
+					}
+				}
+
+				if !found {
+					t.Errorf("expected error containing %q, got %v", tt.errText, errs)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateAssetPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		asset := Asset{ID: "missing", Src: "nonexistent.md"}
+
+		errs := validateAssetPath(dir, asset)
+		if len(errs) == 0 {
+			t.Fatal("expected error for missing file")
+		}
+
+		if !strings.Contains(errs[0], "file not found") {
+			t.Errorf("error = %q, want 'file not found'", errs[0])
+		}
+	})
+
+	t.Run("valid file", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+
+		skillDir := filepath.Join(dir, "skills", "test")
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		content := "---\nname: test\ndescription: A test.\n---\n\n# Test\n"
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		asset := Asset{ID: "test", Src: "skills/test/SKILL.md", Kind: kindSkill}
+
+		errs := validateAssetPath(dir, asset)
+		if len(errs) > 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+	})
+}
+
+func TestSetVisibilityInsertsFallback(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create musher.yaml without version line.
+	content := `name: "Test"
+namespace: testns
+slug: "test"
+assets:
+  - id: hello
+    src: skills/hello/SKILL.md
+`
+
+	if err := os.WriteFile(filepath.Join(dir, "musher.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetVisibility(dir, "public"); err != nil {
+		t.Fatalf("SetVisibility: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "musher.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(data), "visibility: public") {
+		t.Fatalf("visibility not inserted, got:\n%s", data)
+	}
+}
+
+func TestSetVisibilityAppendsWhenNoAnchor(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create musher.yaml without version or assets.
+	content := `name: "Test"
+namespace: testns
+slug: "test"
+`
+
+	if err := os.WriteFile(filepath.Join(dir, "musher.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetVisibility(dir, "private"); err != nil {
+		t.Fatalf("SetVisibility: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "musher.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(data), "visibility: private") {
+		t.Fatalf("visibility not appended, got:\n%s", data)
+	}
+}
+
+func TestLoadAndSaveRoundtrip(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	content := `name: "Test"
+namespace: testns
+slug: "test"
+version: 0.1.0
+assets:
+  - id: hello
+    src: skills/hello/SKILL.md
+`
+
+	if err := os.WriteFile(filepath.Join(dir, "musher.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	def, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if def.Name != "Test" {
+		t.Errorf("name = %q", def.Name)
+	}
+
+	// Save and reload.
+	if saveErr := Save(dir, def); saveErr != nil {
+		t.Fatalf("Save: %v", saveErr)
+	}
+
+	def2, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load after save: %v", err)
+	}
+
+	if def2.Slug != "test" {
+		t.Errorf("slug after roundtrip = %q", def2.Slug)
+	}
+}
+
+func TestLoadMissingFile(t *testing.T) {
+	t.Parallel()
+
+	_, err := Load(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for missing musher.yaml")
+	}
+}
+
+func TestValidateSymlinkNonSymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	filePath := filepath.Join(dir, "regular.md")
+	if err := os.WriteFile(filePath, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Lstat(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errs := validateSymlink(info, filePath, dir, Asset{ID: "test", Src: "regular.md"})
+	if errs != nil {
+		t.Fatalf("unexpected errors for non-symlink: %v", errs)
+	}
+}

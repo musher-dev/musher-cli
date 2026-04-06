@@ -196,6 +196,150 @@ func TestPredictScrollCount_ScrollRegionRejected(t *testing.T) {
 	}
 }
 
+func TestPredictScrollCount_EscD_IndexDown(t *testing.T) {
+	t.Parallel()
+
+	// ESC D = Index (moves cursor down, scrolling if at bottom).
+	scrolls, ok := predictScrollCount([]byte("\x1bD"), 0, 23, 80, 24)
+	if !ok {
+		t.Fatal("ESC D should be accepted")
+	}
+
+	// At row 23 (bottom), ESC D should trigger a scroll.
+	if scrolls != 1 {
+		t.Fatalf("scrolls = %d, want 1", scrolls)
+	}
+}
+
+func TestPredictScrollCount_EscE_NextLine(t *testing.T) {
+	t.Parallel()
+
+	// ESC E = Next Line (moves cursor down and resets column).
+	scrolls, ok := predictScrollCount([]byte("\x1bE"), 10, 23, 80, 24)
+	if !ok {
+		t.Fatal("ESC E should be accepted")
+	}
+
+	if scrolls != 1 {
+		t.Fatalf("scrolls = %d, want 1", scrolls)
+	}
+}
+
+func TestPredictScrollCount_EscM_ReverseIndex(t *testing.T) {
+	t.Parallel()
+
+	// ESC M = Reverse Index (just resets wrapPending in our tracker).
+	scrolls, ok := predictScrollCount([]byte("\x1bM"), 0, 0, 80, 24)
+	if !ok {
+		t.Fatal("ESC M should be accepted")
+	}
+
+	if scrolls != 0 {
+		t.Fatalf("scrolls = %d, want 0", scrolls)
+	}
+}
+
+func TestPredictScrollCount_Backspace(t *testing.T) {
+	t.Parallel()
+
+	// Backspace should move cursor left.
+	scrolls, ok := predictScrollCount([]byte("AB\b"), 0, 0, 80, 24)
+	if !ok {
+		t.Fatal("backspace should be accepted")
+	}
+
+	if scrolls != 0 {
+		t.Fatalf("scrolls = %d, want 0", scrolls)
+	}
+}
+
+func TestPredictScrollCount_Tab(t *testing.T) {
+	t.Parallel()
+
+	scrolls, ok := predictScrollCount([]byte("\t"), 0, 0, 80, 24)
+	if !ok {
+		t.Fatal("tab should be accepted")
+	}
+
+	if scrolls != 0 {
+		t.Fatalf("scrolls = %d, want 0", scrolls)
+	}
+}
+
+func TestPredictScrollCount_ControlChars(t *testing.T) {
+	t.Parallel()
+
+	// BEL (0x07) and other control chars should be silently skipped.
+	scrolls, ok := predictScrollCount([]byte("\x07hello"), 0, 0, 80, 24)
+	if !ok {
+		t.Fatal("control chars should be accepted")
+	}
+
+	if scrolls != 0 {
+		t.Fatalf("scrolls = %d, want 0", scrolls)
+	}
+}
+
+func TestPredictScrollCount_UnknownEscRejected(t *testing.T) {
+	t.Parallel()
+
+	// ESC followed by an unrecognized char should be rejected.
+	_, ok := predictScrollCount([]byte("\x1b7"), 0, 0, 80, 24)
+	if ok {
+		t.Fatal("unknown ESC sequence should be rejected")
+	}
+}
+
+func TestPredictScrollCount_TruncatedEsc(t *testing.T) {
+	t.Parallel()
+
+	// ESC at end of chunk should be rejected.
+	_, ok := predictScrollCount([]byte("\x1b"), 0, 0, 80, 24)
+	if ok {
+		t.Fatal("truncated ESC should be rejected")
+	}
+}
+
+func TestPredictScrollCount_TruncatedCSI(t *testing.T) {
+	t.Parallel()
+
+	// ESC [ at end of chunk — CSI without final byte.
+	_, ok := predictScrollCount([]byte("\x1b["), 0, 0, 80, 24)
+	if ok {
+		t.Fatal("truncated CSI should be rejected")
+	}
+}
+
+func TestPredictScrollCount_WriteRuneZeroCols(t *testing.T) {
+	t.Parallel()
+
+	// With cols=0 after initial check (edge case), writeRune should not crash.
+	scrolls, ok := predictScrollCount([]byte("A"), 0, 0, 1, 1)
+	if !ok {
+		t.Fatal("single char in 1x1 should be ok")
+	}
+
+	// In a 1x1 terminal, 'A' at (0,0) should set wrapPending.
+	if scrolls != 0 {
+		t.Fatalf("scrolls = %d, want 0", scrolls)
+	}
+}
+
+func TestPredictScrollCount_VerticalFormFeed(t *testing.T) {
+	t.Parallel()
+
+	// \v and \f are treated like \n.
+	scrolls, ok := predictScrollCount([]byte("\v\f"), 0, 22, 80, 24)
+	if !ok {
+		t.Fatal("VT/FF should be accepted")
+	}
+
+	// Row 22 → 23 (VT), 23 → scroll (FF).
+	if scrolls != 1 {
+		t.Fatalf("scrolls = %d, want 1", scrolls)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // parseCSIArg unit tests
 // ---------------------------------------------------------------------------
