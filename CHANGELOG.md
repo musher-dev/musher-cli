@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.13](https://github.com/musher-dev/musher-cli/compare/v0.3.12...v0.3.13) (2026-04-07)
+
+
+### Features
+
+* add workflow package, scrollback config, scroll capture, and agent skills ([2e4c2d4](https://github.com/musher-dev/musher-cli/commit/2e4c2d4754bc928a4b79533b24a8e57beb1b287f))
+* centralize config, consolidate packages, harden CI ([16c0801](https://github.com/musher-dev/musher-cli/commit/16c0801a13d4aa1ceccf3cbda5f838c4363729aa))
+* centralize config, consolidate packages, harden CI, and add fuzz tests ([d4f248e](https://github.com/musher-dev/musher-cli/commit/d4f248e868c44d84252bc5c2d0a674e2fe9d3c72))
+* **env:** centralize env var access through internal/env wrapper ([7d000a0](https://github.com/musher-dev/musher-cli/commit/7d000a003ea8a4e3b4e0639eb5d99867270dba43))
+* **env:** centralize env var access through internal/env wrapper ([c659cce](https://github.com/musher-dev/musher-cli/commit/c659ccef1171b08b412b73713abf40f33a25eb4c))
+
+
+### Bug Fixes
+
+* prevent data race on color.NoColor in parallel tests ([d218b37](https://github.com/musher-dev/musher-cli/commit/d218b37e545156521ccd94663aee6a03ca0e2786))
+
 ## [0.3.12](https://github.com/musher-dev/musher-cli/compare/v0.3.11...v0.3.12) (2026-04-05)
 
 
