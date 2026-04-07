@@ -6,12 +6,12 @@ package update
 
 import (
 	"context"
-	"os"
 	"runtime"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	selfupdate "github.com/creativeprojects/go-selfupdate"
+	"github.com/musher-dev/musher-cli/internal/env"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -19,7 +19,7 @@ const repoSlug = "musher-dev/musher-cli"
 
 // IsDisabled returns true if update checks are disabled via MUSHER_UPDATE_DISABLED.
 func IsDisabled() bool {
-	v := os.Getenv("MUSHER_UPDATE_DISABLED")
+	v := env.Get(env.UpdateDisabled)
 	if v == "1" || strings.EqualFold(v, "true") {
 		return true
 	}
@@ -46,7 +46,7 @@ type Updater struct {
 // NewUpdater creates a new Updater configured for GitHub Releases.
 func NewUpdater() (*Updater, error) {
 	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
-		APIToken: os.Getenv("GITHUB_TOKEN"),
+		APIToken: env.Get(env.GitHubToken),
 	})
 	if err != nil {
 		return nil, repoerrors.Errorf("create github source: %w", err)

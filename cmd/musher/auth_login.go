@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -10,6 +9,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
+	"github.com/musher-dev/musher-cli/internal/env"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
@@ -50,7 +50,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string) error {
 
 	// Try environment variable if no flag
 	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("MUSHER_API_KEY"))
+		apiKey = strings.TrimSpace(env.Get(env.APIKey))
 	}
 
 	// Interactive prompt

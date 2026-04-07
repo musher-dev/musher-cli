@@ -111,7 +111,7 @@ func NewStore(cacheDir string) (*Store, error) {
 		"refs",
 	} {
 		dir := filepath.Join(cacheDir, sub)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if err := safeio.MkdirAll(dir, 0o700); err != nil {
 			return nil, repoerrors.Errorf("create cache directory %s: %w", dir, err)
 		}
 	}
@@ -144,11 +144,11 @@ func (s *Store) StoreBlob(data []byte) (string, error) {
 		return digest, nil // already cached
 	}
 
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := safeio.MkdirAll(dir, 0o700); err != nil {
 		return "", repoerrors.Errorf("create blob prefix dir: %w", err)
 	}
 
-	if err := os.WriteFile(blobFile, data, 0o600); err != nil {
+	if err := safeio.WriteFile(blobFile, data, 0o600); err != nil {
 		return "", repoerrors.Errorf("write blob %s: %w", digest, err)
 	}
 
@@ -159,7 +159,7 @@ func (s *Store) StoreBlob(data []byte) (string, error) {
 func (s *Store) GetBlob(digest string) ([]byte, error) {
 	blobFile := s.blobPath(digest)
 
-	data, err := os.ReadFile(blobFile) //nolint:gosec // path is derived from digest, not user input
+	data, err := safeio.ReadFile(blobFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, repoerrors.Errorf("blob %s: %w", digest, ErrNotFound)
@@ -220,7 +220,7 @@ func (s *Store) StoreManifest(hostID, namespace, slug, version string, manifest 
 func (s *Store) LoadManifest(hostID, namespace, slug, version string) (*BundleManifest, error) {
 	manifestFile := s.manifestPath(hostID, namespace, slug, version)
 
-	data, err := os.ReadFile(manifestFile) //nolint:gosec // path constructed from validated components
+	data, err := safeio.ReadFile(manifestFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, repoerrors.Errorf("manifest %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
@@ -262,7 +262,7 @@ func (s *Store) StoreManifestMeta(hostID, namespace, slug, version string, meta 
 func (s *Store) LoadManifestMeta(hostID, namespace, slug, version string) (*ManifestMeta, error) {
 	metaFile := s.manifestMetaPath(hostID, namespace, slug, version)
 
-	data, err := os.ReadFile(metaFile) //nolint:gosec // path constructed from validated components
+	data, err := safeio.ReadFile(metaFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, repoerrors.Errorf("manifest meta %s/%s:%s: %w", namespace, slug, version, ErrNotFound)
@@ -324,7 +324,7 @@ func (s *Store) UpdateRef(hostID, namespace, slug string, ref *RefData) error {
 func (s *Store) ReadRef(hostID, namespace, slug string) (*RefData, error) {
 	refFile := s.refPath(hostID, namespace, slug)
 
-	data, err := os.ReadFile(refFile) //nolint:gosec // path constructed from validated components
+	data, err := safeio.ReadFile(refFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, repoerrors.Errorf("ref %s/%s: %w", namespace, slug, ErrNotFound)
@@ -515,7 +515,7 @@ func (s *Store) DiskUsage() (totalBytes int64, blobCount int, err error) {
 func (s *Store) EnsureCacheDirTag() error {
 	tagPath := filepath.Join(s.root, "CACHEDIR.TAG")
 
-	existing, err := os.ReadFile(tagPath) //nolint:gosec // trusted path
+	existing, err := safeio.ReadFile(tagPath)
 	if err == nil && len(existing) >= len(cacheDirTagSignature) &&
 		string(existing[:len(cacheDirTagSignature)]) == cacheDirTagSignature {
 		return nil // already valid
@@ -570,7 +570,7 @@ func (s *Store) collectReferencedDigests() (map[string]bool, error) {
 			return nil
 		}
 
-		data, readErr := os.ReadFile(path) //nolint:gosec // trusted cache path
+		data, readErr := safeio.ReadFile(path)
 		if readErr != nil {
 			return nil //nolint:nilerr // skip unreadable manifests
 		}
@@ -608,7 +608,7 @@ func (s *Store) removeExpiredManifests(dir string) (int, error) {
 			return nil
 		}
 
-		data, readErr := os.ReadFile(path) //nolint:gosec // trusted cache path
+		data, readErr := safeio.ReadFile(path)
 		if readErr != nil {
 			return nil //nolint:nilerr // skip unreadable metadata
 		}
@@ -658,7 +658,7 @@ func (s *Store) removeExpiredRefs(dir string) (int, error) {
 			return nil
 		}
 
-		data, readErr := os.ReadFile(path) //nolint:gosec // trusted cache path
+		data, readErr := safeio.ReadFile(path)
 		if readErr != nil {
 			return nil //nolint:nilerr // skip unreadable refs
 		}

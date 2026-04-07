@@ -1,12 +1,11 @@
 package main
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/config"
+	"github.com/musher-dev/musher-cli/internal/env"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 )
@@ -28,7 +27,7 @@ func newAuthLogoutCmd() *cobra.Command {
 
 			out.Success("Credentials removed")
 
-			if os.Getenv("MUSHER_API_KEY") != "" {
+			if env.Get(env.APIKey) != "" {
 				out.Warning("MUSHER_API_KEY environment variable is still set — it will be used for authentication")
 			}
 

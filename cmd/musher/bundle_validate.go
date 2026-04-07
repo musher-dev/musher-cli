@@ -9,6 +9,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/bundledef"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 func newBundleValidateCmd() *cobra.Command {
@@ -41,7 +42,7 @@ func runValidate(out *output.Writer) (*bundledef.Def, error) {
 		return nil, clierrors.InvalidBundleDef(err.Error())
 	}
 
-	yamlData, err := os.ReadFile(yamlPath) //nolint:gosec // path constructed from working directory + resolved filename
+	yamlData, err := safeio.ReadFile(yamlPath)
 	if err == nil {
 		if schemaErrs := bundledef.ValidateSchema(yamlData); len(schemaErrs) > 0 {
 			parts := make([]string, 0, len(schemaErrs)+1)

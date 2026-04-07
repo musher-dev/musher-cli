@@ -3,18 +3,19 @@ package tui
 import (
 	"fmt"
 	"image/color"
-	"os"
 	"strconv"
 
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
+
+	"github.com/musher-dev/musher-cli/internal/env"
 )
 
 // noColorEnv reports whether the NO_COLOR standard
 // (https://no-color.org) is enabled. When set, the TUI palette collapses to
 // monochrome and visual hierarchy is carried by bold/italic/borders alone.
 func noColorEnv() bool {
-	v, ok := os.LookupEnv("NO_COLOR")
+	v, ok := env.Lookup(env.NoColor)
 
 	return ok && v != ""
 }

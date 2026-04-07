@@ -3,6 +3,14 @@
 // Design note on output interaction: when TUI is active, output.Writer calls
 // must not write directly to stdout (they would corrupt the bubbletea display).
 // All rendering goes through bubbletea's View() method.
+//
+// Error convention: errors that flow through tea.Msg values inside the
+// bubbletea program use stdlib errors.New / fmt.Errorf — they are internal
+// state, not user-facing diagnostics. Errors that escape the program back to
+// the caller in cmd/musher (i.e. the value returned by runScreen / runApp)
+// MUST be wrapped as *internal/errors.CLIError so the cmd layer can render
+// them with the standard exit code, hint, and error code surface. The wrap
+// happens at the program boundary (see runApp), not inside individual screens.
 package tui
 
 import (

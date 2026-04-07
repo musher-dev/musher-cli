@@ -2,9 +2,9 @@ package observability
 
 import (
 	"context"
-	"os"
 	"strings"
 
+	"github.com/musher-dev/musher-cli/internal/env"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -41,7 +41,7 @@ func SetupTelemetry(ctx context.Context, cfg *TelemetryConfig) (TelemetryShutdow
 
 	serviceName := cfg.ServiceName
 	if serviceName == "" {
-		if envName := os.Getenv("OTEL_SERVICE_NAME"); envName != "" {
+		if envName := env.Get(env.OTELServiceName); envName != "" {
 			serviceName = envName
 		} else {
 			serviceName = "musher"
@@ -55,7 +55,7 @@ func SetupTelemetry(ctx context.Context, cfg *TelemetryConfig) (TelemetryShutdow
 
 	environment := cfg.Environment
 	if environment == "" {
-		if envVal := os.Getenv("OTEL_ENVIRONMENT"); envVal != "" {
+		if envVal := env.Get(env.OTELEnvironment); envVal != "" {
 			environment = envVal
 		} else {
 			environment = "development"
@@ -129,7 +129,7 @@ func Tracer(name string) trace.Tracer {
 
 // IsTelemetryEnabled checks the OTEL_ENABLED env var.
 func IsTelemetryEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("OTEL_ENABLED")))
+	v := strings.ToLower(strings.TrimSpace(env.Get(env.OTELEnabled)))
 	return v == "1" || v == "true" || v == "yes"
 }
 

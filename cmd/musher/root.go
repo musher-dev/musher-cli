@@ -13,6 +13,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/bundle/discovery"
 	"github.com/musher-dev/musher-cli/internal/bundle/install"
 	"github.com/musher-dev/musher-cli/internal/config"
+	"github.com/musher-dev/musher-cli/internal/env"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/paths"
@@ -142,7 +143,7 @@ func warnIfRoot(cmd *cobra.Command, out *output.Writer) {
 	if os.Geteuid() == 0 && cmd.Name() != cmdNameUpdate {
 		out.Warning("Running as root is not recommended. Files created will be owned by root.")
 
-		if os.Getenv("SUDO_USER") != "" {
+		if env.Get(env.SudoUser) != "" {
 			out.Warning("Credentials from 'musher auth login' are stored per-user and won't be accessible under sudo.")
 		}
 	}

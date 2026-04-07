@@ -102,7 +102,10 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 		vt10x.WithWriter(ptyFile),
 	)
 
-	screen.EnableMouse()
+	// Enable only button + drag tracking (SGR 1002), not motion tracking
+	// (SGR 1003). Motion tracking would consume every mouse move and break the
+	// terminal's native text selection (Shift+drag / drag-to-select).
+	screen.EnableMouse(tcell.MouseButtonEvents | tcell.MouseDragEvents)
 
 	runtime := &embeddedRuntime{
 		screen:     screen,

@@ -15,6 +15,7 @@ import (
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 	"github.com/musher-dev/musher-cli/internal/prompt"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 const placeholderNamespace = "your-namespace"
@@ -416,11 +417,11 @@ func writeExampleAssets(workDir string) ([]string, error) {
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil { //nolint:gosec // project files need standard read+execute for all users
+		if err := safeio.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create directory for "+rel, err)
 		}
 
-		if writeErr := os.WriteFile(absPath, []byte(exampleFiles[rel]), 0o644); writeErr != nil { //nolint:gosec // G306: example content is not sensitive
+		if writeErr := safeio.WriteFile(absPath, []byte(exampleFiles[rel]), 0o644); writeErr != nil {
 			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create "+rel, writeErr)
 		}
 
@@ -441,7 +442,7 @@ func writeReadmeIfMissing(workDir string, data initData) ([]string, error) {
 		"- **test-generator** — Generates unit tests (`skills/test-generator/SKILL.md`)\n" +
 		"- **reviewer** — Agent that orchestrates code review and test generation (`agents/reviewer.md`)\n"
 
-	if writeErr := os.WriteFile(readmePath, []byte(readmeContent), 0o644); writeErr != nil { //nolint:gosec // G306: readme is not sensitive
+	if writeErr := safeio.WriteFile(readmePath, []byte(readmeContent), 0o644); writeErr != nil {
 		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Failed to create README.md", writeErr)
 	}
 
@@ -485,7 +486,7 @@ func hintUndiscoveredAssets(out *output.Writer, workDir string) {
 }
 
 func writeTemplate(path string, tmpl *template.Template, data initData) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // project files need standard read permissions
+	f, err := safeio.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return clierrors.Errorf("create %s: %w", filepath.Base(path), err)
 	}

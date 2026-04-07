@@ -3,18 +3,18 @@
 package testutil
 
 import (
-	"os"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
+	"github.com/musher-dev/musher-cli/internal/env"
 )
 
 // SkipIfNoAPI skips the test when MUSHER_API_KEY is not set.
 func SkipIfNoAPI(t *testing.T) {
 	t.Helper()
 
-	if os.Getenv("MUSHER_API_KEY") == "" {
+	if env.Get(env.APIKey) == "" {
 		t.Skip("MUSHER_API_KEY not set; skipping integration test")
 	}
 }
@@ -29,5 +29,5 @@ func NewLiveClient(t *testing.T) *client.Client {
 
 	cfg := config.Load()
 
-	return client.New(cfg.APIURL(), os.Getenv("MUSHER_API_KEY"))
+	return client.New(cfg.APIURL(), env.Get(env.APIKey))
 }
