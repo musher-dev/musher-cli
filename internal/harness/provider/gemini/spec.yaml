@@ -1,5 +1,5 @@
 name: gemini
-displayName: Google Gemini CLI
+displayName: Google Gemini
 description: Google's AI coding agent
 binary: gemini
 

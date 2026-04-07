@@ -182,6 +182,17 @@ type styles struct {
 	footerStatus    lipgloss.Style
 	footerBg        lipgloss.Style
 	footerSep       lipgloss.Style
+
+	// Header chrome (mirrors the footer treatment: tinted background row +
+	// thin separator). Inline header text segments carry the same Background
+	// so the tint flows continuously across the row.
+	headerBrand      lipgloss.Style
+	headerVersion    lipgloss.Style
+	headerBreadcrumb lipgloss.Style
+	headerContext    lipgloss.Style
+	headerTagline    lipgloss.Style
+	headerBg         lipgloss.Style
+	headerSep        lipgloss.Style
 }
 
 // formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
@@ -453,6 +464,24 @@ func newStyles(isDark bool) styles {
 		footerBg: lipgloss.NewStyle().
 			Background(footerBgFor(isDark)),
 		footerSep: func() lipgloss.Style {
+			if noColorEnv() {
+				return lipgloss.NewStyle().Foreground(lipgloss.NoColor{})
+			}
+
+			return lipgloss.NewStyle().
+				Foreground(lightDark(lipgloss.Color("#C5C2D8"), lipgloss.Color("#2A2540")))
+		}(),
+
+		// Header chrome. Reuses the same tint helpers as the footer so the
+		// top and bottom strips read as a matched pair of bookends.
+		headerBrand:      footerStyle(colorAccent, footerBgFor(isDark)).Bold(true),
+		headerVersion:    footerStyle(colorMuted, footerBgFor(isDark)),
+		headerBreadcrumb: footerStyle(colorTextSec, footerBgFor(isDark)),
+		headerContext:    footerStyle(colorTextSec, footerBgFor(isDark)),
+		headerTagline:    footerStyle(colorDim, footerBgFor(isDark)).Italic(true),
+		headerBg: lipgloss.NewStyle().
+			Background(footerBgFor(isDark)),
+		headerSep: func() lipgloss.Style {
 			if noColorEnv() {
 				return lipgloss.NewStyle().Foreground(lipgloss.NoColor{})
 			}

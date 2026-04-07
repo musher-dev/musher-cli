@@ -359,11 +359,19 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 
 	healthChecker := newRegistryHealthChecker(reg)
 
+	fetcher, healthCache, fetcherErr := buildFetcherAndHealthCache(cmd.Context(), reg)
+	if fetcherErr != nil {
+		// Non-fatal: the TUI screens that need it will surface a friendlier error.
+		fetcher = nil
+	}
+
 	deps := &tui.HomeDeps{
 		Searcher:         &discovery.FallbackSearcher{HubClient: apiClient},
 		Puller:           &discovery.FallbackPuller{HubClient: apiClient, OCIPullFunc: pullFromOCI},
 		Harnesses:        reg,
 		HealthChecker:    healthChecker,
+		Fetcher:          fetcher,
+		HealthCache:      healthCache,
 		Auth:             authChecker,
 		AuthMgr:          authAdapter{},
 		Cache:            cacheSummarizer,

@@ -14,6 +14,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/musher-dev/musher-cli/internal/client"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 const (
@@ -55,9 +57,10 @@ var filterTypes = []struct {
 // searchScreen is the TUI search screen with live-filtered results.
 type searchScreen struct {
 	searcher      BundleSearcher
-	puller        BundlePuller
+	fetcher       *bundlefetch.Fetcher
 	harnesses     HarnessLister
 	healthChecker HarnessHealthChecker
+	healthCache   *healthcache.Cache
 	ctx           context.Context
 	input         textinput.Model
 	spinner       spinner.Model
@@ -102,9 +105,10 @@ type searchScreen struct {
 func newSearchScreen(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnesses HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	initialQuery string,
 	sty *styles,
 	keys *keyMap,
@@ -130,9 +134,10 @@ func newSearchScreen(
 
 	return &searchScreen{
 		searcher:      searcher,
-		puller:        puller,
+		fetcher:       fetcher,
 		harnesses:     harnesses,
 		healthChecker: healthChecker,
+		healthCache:   healthCache,
 		ctx:           ctx,
 		input:         searchInput,
 		spinner:       spin,
@@ -339,7 +344,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 				return s, func() tea.Msg {
 					return pushScreenMsg{
 						screen: newLoadScreen(
-							s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+							s.ctx, s.searcher, s.fetcher, s.harnesses, s.healthChecker, s.healthCache,
 							bundle.Publisher.Handle, bundle.Slug, bundle.LatestVersion,
 							s.styles, s.keys,
 						),
@@ -350,7 +355,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 			return s, func() tea.Msg {
 				return pushScreenMsg{
 					screen: newDetailScreen(
-						s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+						s.ctx, s.searcher, s.fetcher, s.harnesses, s.healthChecker, s.healthCache,
 						bundle.Publisher.Handle, bundle.Slug, s.styles, s.keys,
 					),
 				}
@@ -367,7 +372,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 			return s, func() tea.Msg {
 				return pushScreenMsg{
 					screen: newLoadScreen(
-						s.ctx, s.searcher, s.puller, s.harnesses, s.healthChecker,
+						s.ctx, s.searcher, s.fetcher, s.harnesses, s.healthChecker, s.healthCache,
 						bundle.Publisher.Handle, bundle.Slug, bundle.LatestVersion,
 						s.styles, s.keys,
 					),
@@ -486,7 +491,9 @@ func (s *searchScreen) View() string {
 		content = s.renderWithPanels()
 	}
 
-	return renderScreen(s.width, s.height, content, s.renderFooter())
+	header := renderScreenHeader(s.styles, s.width, "", "Search")
+
+	return renderScreenWithHeader(s.width, s.height, header, content, s.renderFooter())
 }
 
 // previewPanelFits returns true if there's enough space for a preview panel.
@@ -526,10 +533,6 @@ func (s *searchScreen) renderWithPanels() string {
 	panelW := s.panelWidth()
 	innerWidth := panelW - panelContentOffset
 
-	// Breadcrumb.
-	view.WriteString(s.styles.breadcrumb.Render("Search"))
-	view.WriteString("\n\n")
-
 	// Search input panel.
 	inputContent := s.input.View()
 	view.WriteString(renderPanel(s.styles, "Search", inputContent, panelW, s.focusArea == searchFocusInput))
@@ -552,9 +555,6 @@ func (s *searchScreen) renderWithPanels() string {
 func (s *searchScreen) renderMinimal() string {
 	var view strings.Builder
 
-	view.WriteString(s.styles.breadcrumb.Render("Search"))
-	view.WriteString("\n\n")
-
 	view.WriteString(s.input.View())
 	view.WriteString("\n")
 	view.WriteString(s.renderFilterBar())
@@ -572,10 +572,6 @@ func (s *searchScreen) renderTwoPanel() string {
 	searchW := min(clampMenuWidth(s.width), searchPanelMax)
 	previewW := s.width - searchW - twoPanelGap
 	searchInner := searchW - panelContentOffset
-
-	// Breadcrumb.
-	view.WriteString(s.styles.breadcrumb.Render("Search"))
-	view.WriteString("\n\n")
 
 	// Build left column: search input + filter bar + results.
 	var left strings.Builder

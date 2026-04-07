@@ -19,7 +19,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
 	"github.com/musher-dev/musher-cli/internal/transcript"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 var errUnexpectedModel = errors.New("unexpected model type from TUI program")
@@ -123,15 +125,16 @@ func RunHomeWithPalette(ctx context.Context, homeDeps *HomeDeps, isAuthed func()
 func RunSearch(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnesses HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	initialQuery string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	return runScreen(newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys))
+	return runScreen(newSearchScreen(ctx, searcher, fetcher, harnesses, healthChecker, healthCache, initialQuery, &sty, &keys))
 }
 
 // RunNewBundle launches the TUI in new bundle creation mode.
@@ -175,13 +178,14 @@ func RunHistoryDetail(ctx context.Context, session *transcript.Session, events [
 func RunLoad(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnessLister HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	namespace, slug, version string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	return runScreen(newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys))
+	return runScreen(newLoadScreen(ctx, searcher, fetcher, harnessLister, healthChecker, healthCache, namespace, slug, version, &sty, &keys))
 }

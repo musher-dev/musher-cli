@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
@@ -110,24 +111,24 @@ func CheckHealth(ctx context.Context, prov *Provider) *HealthReport {
 	return report
 }
 
-// CheckAllHealth runs health checks for all providers concurrently.
+// CheckAllHealth runs health checks for all providers concurrently.  The
+// per-provider checks each respect the supplied context, so canceling it
+// (e.g. via a bounded timeout) cleanly stops in-flight version subprocesses.
 func CheckAllHealth(ctx context.Context, reg *Registry) []*HealthReport {
 	providers := reg.List()
 	results := make([]*HealthReport, len(providers))
 
-	var wg sync.WaitGroup
+	group, gctx := errgroup.WithContext(ctx)
 
-	for i, prov := range providers {
-		wg.Add(1)
-
-		go func(idx int, p *Provider) {
-			defer wg.Done()
-
-			results[idx] = CheckHealth(ctx, p)
-		}(i, prov)
+	for idx, prov := range providers {
+		group.Go(func() error {
+			results[idx] = CheckHealth(gctx, prov)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	// CheckHealth never returns an error, so group.Wait is purely a join.
+	_ = group.Wait() //nolint:errcheck // see above
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].ProviderName < results[j].ProviderName

@@ -322,55 +322,28 @@ func (pk *packScreen) View() string {
 
 	switch layout {
 	case layoutMinimal:
-		content = pk.renderMinimal()
+		content = pk.renderBody()
 	default:
-		content = pk.renderSinglePanel()
+		panelW := clampMenuWidth(pk.width)
+		content = renderPanel(pk.styles, "Pack Bundle", pk.renderBody(), panelW, true)
 	}
 
-	return renderScreen(pk.width, pk.height, content, pk.renderFooter())
+	return renderScreenWithHeader(pk.width, pk.height, pk.renderHeader(), content, pk.renderFooter())
 }
 
-func (pk *packScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(pk.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	panelW := clampMenuWidth(pk.width)
-	body := pk.renderBody()
-
-	view.WriteString(renderPanel(pk.styles, "Pack Bundle", body, panelW, true))
-
-	return view.String()
-}
-
-func (pk *packScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(pk.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderBody())
-
-	return view.String()
-}
-
-func (pk *packScreen) renderBreadcrumb() string {
-	trail := pk.styles.breadcrumb.Render("Pack")
+func (pk *packScreen) renderHeader() string {
+	trail := "Pack"
 
 	switch pk.state {
 	case packStateValidating, packStateValidateFailed:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Validate")
+		trail += " > Validate"
 	case packStatePacking:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Cache")
+		trail += " > Cache"
 	case packStateSuccess, packStateFailed:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Done")
+		trail += " > Done"
 	}
 
-	return trail
+	return renderScreenHeader(pk.styles, pk.width, pk.deps.Version, trail)
 }
 
 func (pk *packScreen) validationMaxDetailLines() int {

@@ -171,41 +171,15 @@ func (v *validateScreen) View() string {
 
 	switch layout {
 	case layoutMinimal:
-		content = v.renderMinimal()
+		content = v.renderBody()
 	default:
-		content = v.renderSinglePanel()
+		panelW := min(max(v.width-4, 30), validationPanelMax)
+		content = renderPanel(v.styles, "Bundle Validation", v.renderBody(), panelW, true)
 	}
 
-	return renderScreen(v.width, v.height, content, v.renderFooter())
-}
+	header := renderScreenHeader(v.styles, v.width, v.deps.Version, "Validate")
 
-func (v *validateScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(v.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	panelW := min(max(v.width-4, 30), validationPanelMax)
-	body := v.renderBody()
-
-	view.WriteString(renderPanel(v.styles, "Bundle Validation", body, panelW, true))
-
-	return view.String()
-}
-
-func (v *validateScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(v.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(v.renderBody())
-
-	return view.String()
-}
-
-func (v *validateScreen) renderBreadcrumb() string {
-	return v.styles.breadcrumb.Render("Validate")
+	return renderScreenWithHeader(v.width, v.height, header, content, v.renderFooter())
 }
 
 func (v *validateScreen) validationMaxDetailLines() int {

@@ -306,15 +306,10 @@ func (c *configScreen) View() string {
 		content = c.renderSinglePanel()
 	}
 
-	return renderScreen(c.width, c.height, content, c.renderFooter())
+	return renderScreenWithHeader(c.width, c.height, c.renderBreadcrumb(), content, c.renderFooter())
 }
 
 func (c *configScreen) renderTwoPanel() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(c.width)
 	leftContent := c.renderItemList()
 	leftPanel := renderPanel(c.styles, "Settings", leftContent, panelW, c.focusArea == 0)
@@ -326,38 +321,23 @@ func (c *configScreen) renderTwoPanel() string {
 	rightPanel := renderPanel(c.styles, "Details", rightContent, rightW, c.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
-	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel))
 
-	return view.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 }
 
 func (c *configScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(c.width)
 	content := c.renderItemList()
 
-	view.WriteString(renderPanel(c.styles, "Settings", content, panelW, true))
-
-	return view.String()
+	return renderPanel(c.styles, "Settings", content, panelW, true)
 }
 
 func (c *configScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(c.renderItemList())
-
-	return view.String()
+	return c.renderItemList()
 }
 
 func (c *configScreen) renderBreadcrumb() string {
-	return c.styles.breadcrumb.Render("Configuration")
+	return renderScreenHeader(c.styles, c.width, "", "Configuration")
 }
 
 func (c *configScreen) renderItemList() string {

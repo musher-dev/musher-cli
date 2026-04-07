@@ -159,9 +159,10 @@ func buildGlobalCommands(deps *CommandDeps) []Command {
 				return newSearchScreen(
 					deps.Ctx,
 					deps.HomeDeps.Searcher,
-					deps.HomeDeps.Puller,
+					deps.HomeDeps.Fetcher,
 					deps.HomeDeps.Harnesses,
 					deps.HomeDeps.HealthChecker,
+					deps.HomeDeps.HealthCache,
 					"",
 					deps.Styles,
 					deps.Keys,

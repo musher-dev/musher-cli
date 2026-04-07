@@ -10,14 +10,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/musher-dev/musher-cli/internal/client"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 // detailScreen shows detailed information about a bundle.
 type detailScreen struct {
 	searcher      BundleSearcher
-	puller        BundlePuller
+	fetcher       *bundlefetch.Fetcher
 	harnesses     HarnessLister
 	healthChecker HarnessHealthChecker
+	healthCache   *healthcache.Cache
 	ctx           context.Context
 	publisher     string
 	slug          string
@@ -35,9 +38,10 @@ type detailScreen struct {
 func newDetailScreen(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnesses HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	publisher, slug string,
 	sty *styles,
 	keys *keyMap,
@@ -46,9 +50,10 @@ func newDetailScreen(
 
 	return &detailScreen{
 		searcher:      searcher,
-		puller:        puller,
+		fetcher:       fetcher,
 		harnesses:     harnesses,
 		healthChecker: healthChecker,
+		healthCache:   healthCache,
 		ctx:           ctx,
 		publisher:     publisher,
 		slug:          slug,
@@ -114,9 +119,10 @@ func (d *detailScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 					screen: newLoadScreen(
 						d.ctx,
 						d.searcher,
-						d.puller,
+						d.fetcher,
 						d.harnesses,
 						d.healthChecker,
+						d.healthCache,
 						d.publisher,
 						d.slug,
 						d.detail.LatestVersion,
@@ -144,7 +150,9 @@ func (d *detailScreen) View() string {
 		content = d.renderWithPanel()
 	}
 
-	return renderScreen(d.width, d.height, content, d.renderFooter())
+	header := renderScreenHeader(d.styles, d.width, "", "Search > "+d.publisher+"/"+d.slug)
+
+	return renderScreenWithHeader(d.width, d.height, header, content, d.renderFooter())
 }
 
 func (d *detailScreen) panelWidth() int {
@@ -163,12 +171,6 @@ func (d *detailScreen) panelWidth() int {
 func (d *detailScreen) renderWithPanel() string {
 	var view strings.Builder
 
-	// Breadcrumb.
-	view.WriteString(d.styles.breadcrumb.Render("Search"))
-	view.WriteString(d.styles.breadcrumbSep.Render(" > "))
-	view.WriteString(d.styles.breadcrumb.Render(d.publisher + "/" + d.slug))
-	view.WriteString("\n\n")
-
 	pw := d.panelWidth()
 	panelTitle := d.publisher + "/" + d.slug
 	content := d.renderContent()
@@ -179,16 +181,7 @@ func (d *detailScreen) renderWithPanel() string {
 }
 
 func (d *detailScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(d.styles.breadcrumb.Render("Search"))
-	view.WriteString(d.styles.breadcrumbSep.Render(" > "))
-	view.WriteString(d.styles.breadcrumb.Render(d.publisher + "/" + d.slug))
-	view.WriteString("\n\n")
-
-	view.WriteString(d.renderContent())
-
-	return view.String()
+	return d.renderContent()
 }
 
 func (d *detailScreen) renderContent() string {

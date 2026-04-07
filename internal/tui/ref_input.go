@@ -389,7 +389,7 @@ func (r *refInputScreen) handleLeftPanelEnter() (Screen, tea.Cmd) {
 	// "Find on Hub" action.
 	return r, func() tea.Msg {
 		return pushScreenMsg{
-			screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
+			screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Fetcher, r.deps.Harnesses, r.deps.HealthChecker, r.deps.HealthCache, "", r.styles, r.keys),
 		}
 	}
 }
@@ -515,9 +515,10 @@ func (r *refInputScreen) submit() (Screen, tea.Cmd) {
 			screen: newLoadScreen(
 				r.ctx,
 				r.deps.Searcher,
-				r.deps.Puller,
+				r.deps.Fetcher,
 				r.deps.Harnesses,
 				r.deps.HealthChecker,
+				r.deps.HealthCache,
 				ref.Namespace,
 				ref.Slug,
 				ref.Version,
@@ -534,9 +535,10 @@ func (r *refInputScreen) loadSuggestion(item *suggestion) tea.Cmd {
 			screen: newLoadScreen(
 				r.ctx,
 				r.deps.Searcher,
-				r.deps.Puller,
+				r.deps.Fetcher,
 				r.deps.Harnesses,
 				r.deps.HealthChecker,
+				r.deps.HealthCache,
 				item.namespace,
 				item.slug,
 				item.version,
@@ -634,7 +636,9 @@ func (r *refInputScreen) View() string {
 		content = r.renderWithPanel()
 	}
 
-	return renderScreen(r.width, r.height, content, r.renderFooter())
+	header := renderScreenHeader(r.styles, r.width, r.deps.Version, "Load Bundle")
+
+	return renderScreenWithHeader(r.width, r.height, header, content, r.renderFooter())
 }
 
 func (r *refInputScreen) panelWidth() int {
@@ -652,9 +656,6 @@ func (r *refInputScreen) panelWidth() int {
 
 func (r *refInputScreen) renderWithPanel() string {
 	var view strings.Builder
-
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 
 	panelW := r.panelWidth()
 
@@ -686,8 +687,6 @@ func (r *refInputScreen) renderWithPanel() string {
 func (r *refInputScreen) renderMinimal() string {
 	var view strings.Builder
 
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 	view.WriteString(r.input.View())
 
 	if r.errMsg != "" {
@@ -707,9 +706,6 @@ func (r *refInputScreen) renderMinimal() string {
 
 func (r *refInputScreen) renderTwoPanelRef() string {
 	var view strings.Builder
-
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 
 	panelW := clampMenuWidth(r.width)
 

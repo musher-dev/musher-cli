@@ -801,64 +801,37 @@ func (p *pushScreen) View() string {
 
 	switch layout {
 	case layoutMinimal:
-		content = p.renderMinimal()
+		content = p.renderBody()
 	default:
-		content = p.renderSinglePanel()
+		panelW := min(max(p.width-4, 30), pushPanelMax)
+		content = renderPanel(p.styles, "Push to Registry", p.renderBody(), panelW, true)
 	}
 
-	return renderScreen(p.width, p.height, content, p.renderFooter())
+	return renderScreenWithHeader(p.width, p.height, p.renderHeader(), content, p.renderFooter())
 }
 
 func (p *pushScreen) validationMaxDetailLines() int {
-	// Reserve lines for: breadcrumb(1) + gaps(4) + 4 check lines + panel chrome(4) + footer(1) + extra status(2) + padding(2) = ~18
+	// Reserve lines for: header(3) + gaps(2) + 4 check lines + panel chrome(4) + footer(2) + padding(3) = ~18
 	const pushChrome = 18
 
 	return max(p.height-pushChrome, 3)
 }
 
-func (p *pushScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(p.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	panelW := min(max(p.width-4, 30), pushPanelMax)
-	body := p.renderBody()
-
-	view.WriteString(renderPanel(p.styles, "Push to Registry", body, panelW, true))
-
-	return view.String()
-}
-
-func (p *pushScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(p.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderBody())
-
-	return view.String()
-}
-
-func (p *pushScreen) renderBreadcrumb() string {
-	trail := p.styles.breadcrumb.Render("Push")
+func (p *pushScreen) renderHeader() string {
+	trail := "Push"
 
 	switch p.state {
 	case pushStateValidating, pushStateValidateFailed:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Validate")
+		trail += " > Validate"
 	case pushStateReview:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Review")
+		trail += " > Review"
 	case pushStatePushing, pushStatePushSuccess, pushStatePushFailed:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Execute")
+		trail += " > Execute"
 	default:
 		// No additional breadcrumb for auth, pre-check, visibility, or hub states.
 	}
 
-	return trail
+	return renderScreenHeader(p.styles, p.width, p.deps.Version, trail)
 }
 
 func (p *pushScreen) renderBody() string {

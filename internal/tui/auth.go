@@ -291,15 +291,10 @@ func (a *authScreen) View() string {
 		content = a.renderSinglePanel()
 	}
 
-	return renderScreen(a.width, a.height, content, a.renderFooter())
+	return renderScreenWithHeader(a.width, a.height, a.renderBreadcrumb(), content, a.renderFooter())
 }
 
 func (a *authScreen) renderTwoPanel() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(a.width)
 	leftContent := a.renderMainContent()
 	leftPanel := renderPanel(a.styles, "Authentication", leftContent, panelW, a.focusArea == 0)
@@ -311,17 +306,11 @@ func (a *authScreen) renderTwoPanel() string {
 	rightPanel := renderPanel(a.styles, "Details", rightContent, rightW, a.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
-	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel))
 
-	return view.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 }
 
 func (a *authScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(a.width)
 	content := a.renderMainContent()
 
@@ -330,31 +319,21 @@ func (a *authScreen) renderSinglePanel() string {
 		content += "\n" + a.renderDetailContent()
 	}
 
-	view.WriteString(renderPanel(a.styles, "Authentication", content, panelW, true))
-
-	return view.String()
+	return renderPanel(a.styles, "Authentication", content, panelW, true)
 }
 
 func (a *authScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(a.renderMainContent())
-
-	return view.String()
+	return a.renderMainContent()
 }
 
 func (a *authScreen) renderBreadcrumb() string {
-	trail := a.styles.breadcrumb.Render("Auth")
+	trail := "Auth"
 
 	if a.state == authStateLoginInput || a.state == authStateValidating {
-		trail += a.styles.breadcrumbSep.Render(" > ")
-		trail += a.styles.breadcrumb.Render("Log in")
+		trail += " > Log in"
 	}
 
-	return trail
+	return renderScreenHeader(a.styles, a.width, a.deps.Version, trail)
 }
 
 func (a *authScreen) renderMainContent() string {

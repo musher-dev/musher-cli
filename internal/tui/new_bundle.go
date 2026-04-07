@@ -349,7 +349,9 @@ func (screen *newBundleScreen) View() string {
 		content = screen.renderMinimal()
 	}
 
-	return renderScreen(screen.width, screen.height, content, screen.renderFooter())
+	header := renderScreenHeader(screen.styles, screen.width, screen.deps.Version, "Home > New Bundle")
+
+	return renderScreenWithHeader(screen.width, screen.height, header, content, screen.renderFooter())
 }
 
 func (screen *newBundleScreen) renderTwoPanel() string {
@@ -366,12 +368,9 @@ func (screen *newBundleScreen) renderTwoPanel() string {
 	gap := strings.Repeat(" ", twoPanelGap)
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, formPanel, gap, previewPanel)
 
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(totalWidth)
 
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panels, desc,
-	)
+	return lipgloss.JoinVertical(lipgloss.Center, panels, desc)
 }
 
 func (screen *newBundleScreen) renderSinglePanel() string {
@@ -379,35 +378,24 @@ func (screen *newBundleScreen) renderSinglePanel() string {
 	formContent := screen.renderFormContent(panelW - panelContentOffset)
 	panel := renderPanel(screen.styles, "New Bundle", formContent, panelW, true)
 
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(panelW)
 
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panel, desc,
-	)
+	return lipgloss.JoinVertical(lipgloss.Center, panel, desc)
 }
 
 func (screen *newBundleScreen) renderPreviewOnly() string {
 	panelW := min(clampMenuWidth(screen.width), searchPanelMax)
 	def := screen.buildDef()
-	panel := screen.preview.RenderYAML(def, panelW)
 
-	breadcrumb := screen.renderBreadcrumb()
-
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panel,
-	)
+	return screen.preview.RenderYAML(def, panelW)
 }
 
 func (screen *newBundleScreen) renderCompact() string {
 	formWidth := max(screen.width-4, 30)
 	form := screen.renderFormContent(formWidth)
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(formWidth)
 
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", form, desc,
-	)
+	return lipgloss.JoinVertical(lipgloss.Center, form, desc)
 }
 
 func (screen *newBundleScreen) renderMinimal() string {
@@ -415,9 +403,7 @@ func (screen *newBundleScreen) renderMinimal() string {
 	form := screen.renderFormContent(formWidth)
 	desc := screen.renderFieldDescription(formWidth)
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		screen.styles.breadcrumb.Render("New Bundle"), "", form, desc,
-	)
+	return lipgloss.JoinVertical(lipgloss.Left, form, desc)
 }
 
 func (screen *newBundleScreen) renderFormContent(width int) string {
@@ -462,12 +448,6 @@ func (screen *newBundleScreen) renderFieldDescription(width int) string {
 	}
 
 	return screen.styles.description.Width(width).Render(current.HelpText())
-}
-
-func (screen *newBundleScreen) renderBreadcrumb() string {
-	return screen.styles.breadcrumb.Render("Home") +
-		screen.styles.breadcrumbSep.Render(" > ") +
-		screen.styles.breadcrumb.Render("New Bundle")
 }
 
 func (screen *newBundleScreen) renderFooter() string {

@@ -164,10 +164,6 @@ func historyMaxVisible(termHeight int) int {
 func (s *historyScreen) View() string {
 	var content strings.Builder
 
-	// Header.
-	title := s.styles.title.Render("Session History")
-	content.WriteString(title + "\n\n")
-
 	switch {
 	case s.loading:
 		content.WriteString(s.spinner.View() + " Loading sessions...")
@@ -212,7 +208,9 @@ func (s *historyScreen) View() string {
 		}
 	}
 
-	return renderScreen(s.width, s.height, content.String(), s.renderFooter())
+	header := renderScreenHeader(s.styles, s.width, "", "Session History")
+
+	return renderScreenWithHeader(s.width, s.height, header, content.String(), s.renderFooter())
 }
 
 func (s *historyScreen) renderFooter() string {

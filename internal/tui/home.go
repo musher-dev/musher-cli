@@ -318,7 +318,7 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 
 func (h *homeScreen) pushSearchScreen() tea.Cmd {
 	return func() tea.Msg {
-		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Puller, h.deps.Harnesses, h.deps.HealthChecker, "", h.styles, h.keys)
+		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Fetcher, h.deps.Harnesses, h.deps.HealthChecker, h.deps.HealthCache, "", h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}
@@ -402,12 +402,11 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 	menuW := clampMenuWidth(h.width)
 
 	leftContent := h.renderMenuContent(menuW)
-	leftTitle := "musher " + formatVersion(h.deps.Version)
-	leftPanel := renderPanel(h.styles, leftTitle, leftContent, menuW, h.focusArea == 0)
+	leftPanel := renderPanel(h.styles, "Menu", leftContent, menuW, h.focusArea == 0)
 
 	contextW := menuW
 	rightContent := h.renderContextContent()
-	rightPanel := renderPanel(h.styles, "Status", rightContent, contextW, h.focusArea == 1)
+	rightPanel := renderPanel(h.styles, "Environment", rightContent, contextW, h.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
 	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
@@ -415,7 +414,7 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 	desc := h.renderDescription(menuW)
 	content := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc)
 
-	return renderScreen(h.width, h.height, content, h.renderFooter(true))
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), content, h.renderFooter(true))
 }
 
 // --- Single-panel layout (60–99 cols) ---
@@ -423,14 +422,12 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 func (h *homeScreen) renderHomeSinglePanel() string {
 	menuW := clampMenuWidth(h.width)
 
-	header := h.renderBrand()
-	status := h.renderStatusLine()
 	menu := h.renderMenuBox(menuW)
 	desc := h.renderDescription(menuW)
 
-	content := lipgloss.JoinVertical(lipgloss.Center, header, "", status, menu, desc)
+	content := lipgloss.JoinVertical(lipgloss.Center, menu, desc)
 
-	return renderScreen(h.width, h.height, content, h.renderFooter(false))
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), content, h.renderFooter(false))
 }
 
 // --- Compact layout (40–59 cols) ---
@@ -438,33 +435,57 @@ func (h *homeScreen) renderHomeSinglePanel() string {
 func (h *homeScreen) renderHomeCompact() string {
 	menuW := clampMenuWidth(h.width)
 
-	header := h.renderBrand()
 	menu := h.renderMenuBox(menuW)
 
-	content := lipgloss.JoinVertical(lipgloss.Center, header, "", menu)
-
-	return renderScreen(h.width, h.height, content, h.renderFooter(false))
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), menu, h.renderFooter(false))
 }
 
 // --- Minimal layout (< 40 cols) ---
 
 func (h *homeScreen) renderHomeMinimal() string {
-	header := NewHeader(h.styles, h.width).Render(HeaderContext{Title: "musher"})
 	menu := h.renderMenuContent(h.width - 4)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, header, "", menu)
-
-	return renderScreen(h.width, h.height, content, h.renderFooter(false))
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), menu, h.renderFooter(false))
 }
 
 // --- Rendering helpers ---
 
-func (h *homeScreen) renderBrand() string {
+// renderHeader builds the unified top header for the home screen. The
+// landing page has no breadcrumb (it is the root), but it carries the
+// brand, version, tagline, identity context, and the [?] help hint.
+func (h *homeScreen) renderHeader() string {
 	return NewHeader(h.styles, h.width).Render(HeaderContext{
 		Title:   "musher",
 		Version: h.deps.Version,
 		Tagline: "Discover, load, and manage agent bundles",
+		Context: h.identityContext(),
 	})
+}
+
+// identityContext returns the right-zone slug shown in the header. It
+// reuses the existing greeting / identityName / identityOrg helpers so the
+// header stays in sync with the rest of the home state.
+func (h *homeScreen) identityContext() string {
+	if h.ctxInfo.loading {
+		return "…"
+	}
+
+	if h.ctxInfo.identity == nil {
+		return "not authenticated"
+	}
+
+	name := strings.TrimPrefix(h.identityName(), ", ")
+	if name == "" {
+		name = h.ctxInfo.greeting
+	} else {
+		name = h.ctxInfo.greeting + ", " + name
+	}
+
+	if org := h.identityOrg(); org != "" {
+		return name + " · " + org
+	}
+
+	return name
 }
 
 func formatVersion(ver string) string {
@@ -473,36 +494,6 @@ func formatVersion(ver string) string {
 	}
 
 	return "v" + ver
-}
-
-func (h *homeScreen) renderStatusLine() string {
-	if h.ctxInfo.loading {
-		return h.styles.placeholder.Render("Loading...")
-	}
-
-	if h.ctxInfo.identity == nil {
-		return renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("not authenticated")
-	}
-
-	parts := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
-
-	if org := h.identityOrg(); org != "" {
-		parts = append(parts, h.styles.subtitle.Render(org))
-	}
-
-	sep := h.styles.hintSep.Render(" \u00B7 ")
-
-	return strings.Join(parts, sep)
-}
-
-func renderStatusDot(sty *styles, ok bool) string {
-	dot := "\u25CF" // ●
-
-	if ok {
-		return sty.success.Render(dot)
-	}
-
-	return sty.warning.Render(dot)
 }
 
 func (h *homeScreen) identityName() string {
@@ -613,13 +604,12 @@ func (h *homeScreen) renderDescription(menuW int) string {
 	return h.styles.description.Width(menuW).Render(desc)
 }
 
-// renderContextContent renders the right panel content (auth + project +
-// cache + harnesses). Social links live in the shared Footer primitive now,
-// so they no longer appear here — keeping them in two places would be
-// noise.
+// renderContextContent renders the right panel content. Identity now
+// lives in the top header, so this panel is purely environmental:
+// project · cache · harnesses. Social links live in the shared Footer
+// primitive.
 func (h *homeScreen) renderContextContent() string {
 	sections := []string{
-		h.renderContextAuth(),
 		h.renderContextProject(),
 		h.renderContextCache(),
 	}
@@ -629,29 +619,6 @@ func (h *homeScreen) renderContextContent() string {
 	}
 
 	return strings.Join(sections, "\n\n")
-}
-
-func (h *homeScreen) renderContextAuth() string {
-	title := h.styles.contextLabel.Render("Auth")
-
-	var body string
-
-	switch {
-	case h.ctxInfo.loading:
-		body = h.styles.placeholder.Render("Loading...")
-	case h.ctxInfo.identity != nil:
-		lines := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
-
-		if org := h.identityOrg(); org != "" {
-			lines = append(lines, h.styles.subtitle.Render("Organization: "+org))
-		}
-
-		body = strings.Join(lines, "\n")
-	default:
-		body = renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("Not authenticated")
-	}
-
-	return title + "\n" + body
 }
 
 func (h *homeScreen) renderContextHarnesses() string {

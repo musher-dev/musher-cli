@@ -336,16 +336,20 @@ func TestHomeScreenView_TwoPanel(t *testing.T) {
 
 	view := screen.View()
 
-	if !strings.Contains(view, "musher v1.0.0") {
-		t.Error("expected view to contain versioned title")
+	if !strings.Contains(view, "musher") {
+		t.Error("expected view to contain brand title")
 	}
 
-	if !strings.Contains(view, "Status") {
-		t.Error("expected view to contain 'Status' panel title")
+	if !strings.Contains(view, "v1.0.0") {
+		t.Error("expected view to contain version slug")
 	}
 
-	if !strings.Contains(view, "Auth") {
-		t.Error("expected view to contain 'Auth' section in context panel")
+	if !strings.Contains(view, "Environment") {
+		t.Error("expected view to contain 'Environment' panel title")
+	}
+
+	if !strings.Contains(view, "Menu") {
+		t.Error("expected view to contain 'Menu' panel title")
 	}
 
 	if !strings.Contains(view, "tab") {

@@ -135,14 +135,10 @@ func (s *historyDetailScreen) View() string {
 
 	var view strings.Builder
 
-	// Header.
 	shortID := s.session.ID
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-
-	title := s.styles.title.Render("Session " + shortID)
-	view.WriteString(title + "\n")
 
 	meta := s.session.BundleRef + "  |  " + s.session.StartTime.Local().Format("2006-01-02 15:04:05")
 	if !s.session.CloseTime.IsZero() {
@@ -150,11 +146,11 @@ func (s *historyDetailScreen) View() string {
 	}
 
 	view.WriteString(s.styles.muted.Render(meta) + "\n\n")
-
-	// Viewport content.
 	view.WriteString(s.viewport.View())
 
-	return renderScreen(s.width, s.height, view.String(), s.renderFooter())
+	header := renderScreenHeader(s.styles, s.width, "", "Session History > "+shortID)
+
+	return renderScreenWithHeader(s.width, s.height, header, view.String(), s.renderFooter())
 }
 
 func (s *historyDetailScreen) renderFooter() string {
