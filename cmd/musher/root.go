@@ -379,7 +379,9 @@ func runRootTUI(cmd *cobra.Command, out *output.Writer, noTUI bool) error {
 		WorkDir:          workDir,
 	}
 
-	result, err := tui.RunHome(cmd.Context(), deps)
+	isAuthed := func() bool { return authChecker != nil }
+
+	result, err := tui.RunHomeWithPalette(cmd.Context(), deps, isAuthed)
 	if err != nil {
 		return clierrors.Errorf("home: %w", err)
 	}

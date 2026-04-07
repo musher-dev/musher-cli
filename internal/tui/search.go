@@ -144,6 +144,13 @@ func newSearchScreen(
 }
 
 // Init implements Screen.
+// HasActiveInput implements TextInputActive. When the search input is
+// focused, the App-level dispatcher must let the literal `/` and `:`
+// characters reach the screen so the user can type them into the query
+// field. When the results list is focused, those keys revert to their
+// global meaning (open the command palette).
+func (s *searchScreen) HasActiveInput() bool { return s.focusArea == searchFocusInput }
+
 func (s *searchScreen) Init() tea.Cmd {
 	cmds := []tea.Cmd{s.input.Focus(), s.spinner.Tick}
 
@@ -310,7 +317,7 @@ func (s *searchScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	case key.Matches(msg, s.keys.Back):
 		return s, func() tea.Msg { return popScreenMsg{} }
 
-	case key.Matches(msg, s.keys.Tab), key.Matches(msg, s.keys.Search):
+	case key.Matches(msg, s.keys.Tab):
 		s.focusArea = searchFocusInput
 		s.input.Focus()
 
@@ -479,7 +486,7 @@ func (s *searchScreen) View() string {
 		content = s.renderWithPanels()
 	}
 
-	return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreen(s.width, s.height, content, s.renderFooter())
 }
 
 // previewPanelFits returns true if there's enough space for a preview panel.
@@ -538,10 +545,6 @@ func (s *searchScreen) renderWithPanels() string {
 	resultTitle := s.resultPanelTitle()
 
 	view.WriteString(renderPanel(s.styles, resultTitle, resultContent, panelW, s.focusArea == searchFocusList))
-	view.WriteString("\n\n")
-
-	// Footer.
-	view.WriteString(s.renderFooter())
 
 	return view.String()
 }
@@ -559,9 +562,6 @@ func (s *searchScreen) renderMinimal() string {
 
 	innerWidth := max(s.width-4, 20)
 	view.WriteString(s.renderResults(innerWidth))
-	view.WriteString("\n\n")
-
-	view.WriteString(s.renderFooter())
 
 	return view.String()
 }
@@ -608,10 +608,6 @@ func (s *searchScreen) renderTwoPanel() string {
 	// Join horizontally.
 	gap := strings.Repeat(" ", twoPanelGap)
 	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left.String(), gap, rightPanel))
-	view.WriteString("\n\n")
-
-	// Footer.
-	view.WriteString(s.renderFooter())
 
 	return view.String()
 }
@@ -869,14 +865,12 @@ func (s *searchScreen) renderResultCard(w *strings.Builder, bundle *client.HubBu
 }
 
 func (s *searchScreen) renderFooter() string {
-	sep := s.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	if s.focusArea == searchFocusInput {
-		hints = []string{
-			s.styles.hintKey.Render("tab") + " " + s.styles.hintDesc.Render("browse results"),
-			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("go back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "browse results")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 	} else {
 		const hintLoad = "load"
@@ -886,19 +880,25 @@ func (s *searchScreen) renderFooter() string {
 			enterHint = hintLoad
 		}
 
-		hints = []string{
-			s.styles.hintKey.Render("\u2191/\u2193") + " " + s.styles.hintDesc.Render("move"),
-			s.styles.hintKey.Render("enter") + " " + s.styles.hintDesc.Render(enterHint),
-			s.styles.hintKey.Render("r") + " " + s.styles.hintDesc.Render(hintLoad),
-			s.styles.hintKey.Render("s") + " " + s.styles.hintDesc.Render("sort"),
-			s.styles.hintKey.Render("t") + " " + s.styles.hintDesc.Render("filter"),
-			s.styles.hintKey.Render("/") + " " + s.styles.hintDesc.Render("search"),
-			s.styles.hintKey.Render("esc") + " " + s.styles.hintDesc.Render("go back"),
-			s.styles.hintKey.Render("q") + " " + s.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "move")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", enterHint)),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", hintLoad)),
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
+			key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "filter")),
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "search")),
 		}
 	}
 
-	return strings.Join(hints, sep)
+	width := s.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(s.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // doSearch fires an API search call.

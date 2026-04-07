@@ -16,7 +16,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/bundledef"
 	"github.com/musher-dev/musher-cli/internal/client"
@@ -807,7 +806,7 @@ func (p *pushScreen) View() string {
 		content = p.renderSinglePanel()
 	}
 
-	return lipgloss.Place(p.width, p.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreen(p.width, p.height, content, p.renderFooter())
 }
 
 func (p *pushScreen) validationMaxDetailLines() int {
@@ -827,9 +826,6 @@ func (p *pushScreen) renderSinglePanel() string {
 	body := p.renderBody()
 
 	view.WriteString(renderPanel(p.styles, "Push to Registry", body, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderFooter())
 
 	return view.String()
 }
@@ -841,9 +837,6 @@ func (p *pushScreen) renderMinimal() string {
 	view.WriteString("\n\n")
 
 	view.WriteString(p.renderBody())
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderFooter())
 
 	return view.String()
 }
@@ -1184,51 +1177,57 @@ func (p *pushScreen) renderHubConfirm() string {
 }
 
 func (p *pushScreen) renderFooter() string {
-	sep := p.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	switch p.state {
 	case pushStateAuthRequired:
-		hints = []string{
-			p.styles.hintKey.Render("a") + " " + p.styles.hintDesc.Render("log in"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "log in")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	case pushStateVersionConflict:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	case pushStateReview:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("ctrl+s") + " " + p.styles.hintDesc.Render("push"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "push")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	case pushStatePushSuccess:
-		hints = []string{
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("done"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	case pushStateVisibilityRecovery, pushStateHubConfirm:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	default:
-		hints = []string{
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
-			p.styles.hintKey.Render("q") + " " + p.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
 
-	return strings.Join(hints, sep)
+	width := p.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(p.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }

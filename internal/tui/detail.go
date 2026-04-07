@@ -8,7 +8,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/client"
 )
@@ -145,7 +144,7 @@ func (d *detailScreen) View() string {
 		content = d.renderWithPanel()
 	}
 
-	return lipgloss.Place(d.width, d.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreen(d.width, d.height, content, d.renderFooter())
 }
 
 func (d *detailScreen) panelWidth() int {
@@ -175,10 +174,6 @@ func (d *detailScreen) renderWithPanel() string {
 	content := d.renderContent()
 
 	view.WriteString(renderPanel(d.styles, panelTitle, content, pw, true))
-	view.WriteString("\n\n")
-
-	// Footer.
-	view.WriteString(d.renderFooter())
 
 	return view.String()
 }
@@ -192,9 +187,6 @@ func (d *detailScreen) renderMinimal() string {
 	view.WriteString("\n\n")
 
 	view.WriteString(d.renderContent())
-	view.WriteString("\n\n")
-
-	view.WriteString(d.renderFooter())
 
 	return view.String()
 }
@@ -338,15 +330,21 @@ func (d *detailScreen) renderVersions(w *strings.Builder, det *client.HubBundleD
 }
 
 func (d *detailScreen) renderFooter() string {
-	sep := d.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		d.styles.hintKey.Render("enter") + " " + d.styles.hintDesc.Render("load bundle"),
-		d.styles.hintKey.Render("esc") + " " + d.styles.hintDesc.Render("go back"),
-		d.styles.hintKey.Render("q") + " " + d.styles.hintDesc.Render("quit"),
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "load bundle")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "go back")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}
 
-	return strings.Join(hints, sep)
+	width := d.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(d.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 func (d *detailScreen) fetchDetail() tea.Cmd {

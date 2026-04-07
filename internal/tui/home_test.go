@@ -622,19 +622,17 @@ func TestHomeScreenValidateDescription(t *testing.T) {
 	}
 }
 
-func TestHomeScreenSlashOpensSearch(t *testing.T) {
+// TestHomeScreenSlashIsHandledByDispatcher confirms the home screen does
+// NOT consume `/` itself — the App-level dispatcher intercepts it as the
+// global palette key, so home returns no command for that keypress.
+func TestHomeScreenSlashIsHandledByDispatcher(t *testing.T) {
 	t.Parallel()
 
 	screen, _, _ := newTestHomeScreen(nil)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: '/'})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd for / key")
-	}
-
-	msg := cmd()
-	if _, ok := msg.(pushScreenMsg); !ok {
-		t.Errorf("expected pushScreenMsg, got %T", msg)
+	if cmd != nil {
+		t.Errorf("expected home to ignore / (palette dispatcher owns it), got cmd %T", cmd())
 	}
 }
 

@@ -423,7 +423,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		}
 	})
 
-	t.Run("slash returns to input from list", func(t *testing.T) {
+	t.Run("tab returns to input from list", func(t *testing.T) {
 		t.Parallel()
 
 		sty := newStyles(true)
@@ -431,7 +431,7 @@ func TestSearchScreenKeyHandling(t *testing.T) {
 		screen := newSearchScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
 
-		updated, _ := screen.Update(tea.KeyPressMsg{Code: -1, Text: "/"})
+		updated, _ := screen.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		searchScr := updated.(*searchScreen)
 
 		if searchScr.focusArea != searchFocusInput {
@@ -779,14 +779,16 @@ func TestSearchScreenFooter(t *testing.T) {
 		keys := defaultKeyMap()
 		screen := newSearchScreen(t.Context(), &mockSearcher{}, nil, nil, nil, "", &sty, &keys)
 		screen.focusArea = searchFocusList
+		screen.width = 120
+		screen.height = 30
 
 		footer := screen.renderFooter()
 		if !strings.Contains(footer, "move") {
 			t.Error("list footer should mention move")
 		}
 
-		if !strings.Contains(footer, "quit") {
-			t.Error("list footer should mention quit")
+		if !strings.Contains(footer, "sort") {
+			t.Error("list footer should mention sort")
 		}
 	})
 }

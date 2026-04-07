@@ -248,14 +248,9 @@ func (h *homeScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return h, nil
 	}
 
-	// "/" opens search directly.
-	if key.Matches(msg, h.keys.Search) {
-		cmd := h.pushSearchScreen()
-
-		return h, cmd
-	}
-
 	// Check hotkey runes (only on home screen, no text input conflict).
+	// `/` is reserved as the global palette key — the App-level dispatcher
+	// intercepts it before this method ever runs.
 	if r := msg.String(); len(r) == 1 {
 		for i, item := range h.items {
 			if rune(r[0]) == item.hotkey {
@@ -418,15 +413,9 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 
 	desc := h.renderDescription(menuW)
-	footer := h.renderFooter(true)
+	content := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc)
 
-	topBlock := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc, "", footer)
-
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		topBlock,
-	)
+	return renderScreen(h.width, h.height, content, h.renderFooter(true))
 }
 
 // --- Single-panel layout (60–99 cols) ---
@@ -438,17 +427,10 @@ func (h *homeScreen) renderHomeSinglePanel() string {
 	status := h.renderStatusLine()
 	menu := h.renderMenuBox(menuW)
 	desc := h.renderDescription(menuW)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		header, "", status, menu, desc, "", footer,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Center, header, "", status, menu, desc)
 
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreen(h.width, h.height, content, h.renderFooter(false))
 }
 
 // --- Compact layout (40–59 cols) ---
@@ -458,45 +440,31 @@ func (h *homeScreen) renderHomeCompact() string {
 
 	header := h.renderBrand()
 	menu := h.renderMenuBox(menuW)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		header, "", menu, "", footer,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Center, header, "", menu)
 
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreen(h.width, h.height, content, h.renderFooter(false))
 }
 
 // --- Minimal layout (< 40 cols) ---
 
 func (h *homeScreen) renderHomeMinimal() string {
-	header := h.styles.brand.Render("musher")
+	header := NewHeader(h.styles, h.width).Render(HeaderContext{Title: "musher"})
 	menu := h.renderMenuContent(h.width - 4)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header, "", menu, "", footer,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Left, header, "", menu)
 
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreen(h.width, h.height, content, h.renderFooter(false))
 }
 
 // --- Rendering helpers ---
 
 func (h *homeScreen) renderBrand() string {
-	ver := formatVersion(h.deps.Version)
-	brand := h.styles.brand.Render("musher") + " " + h.styles.muted.Render(ver)
-	tagline := h.styles.tagline.Render("Discover, load, and manage agent bundles")
-
-	return lipgloss.JoinVertical(lipgloss.Center, brand, tagline)
+	return NewHeader(h.styles, h.width).Render(HeaderContext{
+		Title:   "musher",
+		Version: h.deps.Version,
+		Tagline: "Discover, load, and manage agent bundles",
+	})
 }
 
 func formatVersion(ver string) string {
@@ -645,7 +613,10 @@ func (h *homeScreen) renderDescription(menuW int) string {
 	return h.styles.description.Width(menuW).Render(desc)
 }
 
-// renderContextContent renders the right panel content (auth + project + cache + harnesses + links).
+// renderContextContent renders the right panel content (auth + project +
+// cache + harnesses). Social links live in the shared Footer primitive now,
+// so they no longer appear here — keeping them in two places would be
+// noise.
 func (h *homeScreen) renderContextContent() string {
 	sections := []string{
 		h.renderContextAuth(),
@@ -656,8 +627,6 @@ func (h *homeScreen) renderContextContent() string {
 	if len(h.harnesses) > 0 {
 		sections = append(sections, h.renderContextHarnesses())
 	}
-
-	sections = append(sections, h.renderSocialLinks())
 
 	return strings.Join(sections, "\n\n")
 }
@@ -756,17 +725,6 @@ func (h *homeScreen) renderContextCache() string {
 	return title + "\n" + body
 }
 
-func (h *homeScreen) renderSocialLinks() string {
-	sep := h.styles.hintSep.Render(" \u00B7 ")
-	linkStyle := h.styles.accent
-
-	links := hyperlink("https://discord.gg/SaVMzMgX2c", linkStyle.Render("Discord")) + sep +
-		hyperlink("https://github.com/musher-dev", linkStyle.Render("GitHub")) + sep +
-		hyperlink("https://x.com/musherdev", linkStyle.Render("X"))
-
-	return links
-}
-
 // hyperlink wraps text with OSC 8 terminal hyperlink escape sequences.
 func hyperlink(url, text string) string {
 	return ansi.SetHyperlink(url) + text + ansi.ResetHyperlink()
@@ -833,27 +791,30 @@ func renderBorderTitle(title string, outerWidth int, borderColor, titleStyle *li
 	return builder.String()
 }
 
-// renderFooter returns the context-sensitive key hint bar.
+// renderFooter returns the context-sensitive key hint bar via the shared
+// Footer primitive so the L1 help (?) and L2 command palette (:) hints are
+// always advertised next to the screen-local bindings.
 func (h *homeScreen) renderFooter(twoPanel bool) string {
-	sep := h.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		h.styles.hintKey.Render("\u2191/\u2193") + " " + h.styles.hintDesc.Render("navigate"),
-		h.styles.hintKey.Render("enter") + " " + h.styles.hintDesc.Render("select"),
-		h.styles.hintKey.Render("/") + " " + h.styles.hintDesc.Render("search"),
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 	}
 
 	if twoPanel {
-		hints = append(hints,
-			h.styles.hintKey.Render("tab")+" "+h.styles.hintDesc.Render("switch"),
-		)
+		bindings = append(bindings, key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")))
 	}
 
-	hints = append(hints,
-		h.styles.hintKey.Render("q")+" "+h.styles.hintDesc.Render("quit"),
-	)
+	bindings = append(bindings, key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")))
 
-	return strings.Join(hints, sep)
+	width := h.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(h.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // --- Async auth loading ---

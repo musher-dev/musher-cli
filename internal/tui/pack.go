@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/bundledef"
@@ -328,7 +327,7 @@ func (pk *packScreen) View() string {
 		content = pk.renderSinglePanel()
 	}
 
-	return lipgloss.Place(pk.width, pk.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreen(pk.width, pk.height, content, pk.renderFooter())
 }
 
 func (pk *packScreen) renderSinglePanel() string {
@@ -341,9 +340,6 @@ func (pk *packScreen) renderSinglePanel() string {
 	body := pk.renderBody()
 
 	view.WriteString(renderPanel(pk.styles, "Pack Bundle", body, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderFooter())
 
 	return view.String()
 }
@@ -355,9 +351,6 @@ func (pk *packScreen) renderMinimal() string {
 	view.WriteString("\n\n")
 
 	view.WriteString(pk.renderBody())
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderFooter())
 
 	return view.String()
 }
@@ -445,24 +438,30 @@ func (pk *packScreen) renderFailed() string {
 }
 
 func (pk *packScreen) renderFooter() string {
-	sep := pk.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	switch pk.state {
 	case packStateSuccess:
-		hints = []string{
-			pk.styles.hintKey.Render("p") + " " + pk.styles.hintDesc.Render("push"),
-			pk.styles.hintKey.Render("enter") + " " + pk.styles.hintDesc.Render("done"),
-			pk.styles.hintKey.Render("esc") + " " + pk.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "push")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	default:
-		hints = []string{
-			pk.styles.hintKey.Render("esc") + " " + pk.styles.hintDesc.Render("back"),
-			pk.styles.hintKey.Render("q") + " " + pk.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
 
-	return strings.Join(hints, sep)
+	width := pk.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(pk.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }

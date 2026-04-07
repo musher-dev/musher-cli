@@ -7,7 +7,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/bundledef"
 )
@@ -177,7 +176,7 @@ func (v *validateScreen) View() string {
 		content = v.renderSinglePanel()
 	}
 
-	return lipgloss.Place(v.width, v.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreen(v.width, v.height, content, v.renderFooter())
 }
 
 func (v *validateScreen) renderSinglePanel() string {
@@ -190,9 +189,6 @@ func (v *validateScreen) renderSinglePanel() string {
 	body := v.renderBody()
 
 	view.WriteString(renderPanel(v.styles, "Bundle Validation", body, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(v.renderFooter())
 
 	return view.String()
 }
@@ -204,9 +200,6 @@ func (v *validateScreen) renderMinimal() string {
 	view.WriteString("\n\n")
 
 	view.WriteString(v.renderBody())
-	view.WriteString("\n\n")
-
-	view.WriteString(v.renderFooter())
 
 	return view.String()
 }
@@ -238,20 +231,26 @@ func (v *validateScreen) renderBody() string {
 }
 
 func (v *validateScreen) renderFooter() string {
-	sep := v.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		v.styles.hintKey.Render("esc") + " " + v.styles.hintDesc.Render("back"),
-		v.styles.hintKey.Render("q") + " " + v.styles.hintDesc.Render("quit"),
-	}
+	var bindings []key.Binding
 
 	if v.state == validateStateSuccess {
-		hints = append([]string{
-			v.styles.hintKey.Render("p") + " " + v.styles.hintDesc.Render("push"),
-		}, hints...)
+		bindings = append(bindings, key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "push")))
 	}
 
-	return strings.Join(hints, sep)
+	bindings = append(bindings,
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	)
+
+	width := v.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(v.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // formatAssetCount returns a human-readable asset count string.

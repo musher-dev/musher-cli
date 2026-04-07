@@ -3,11 +3,21 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"strconv"
 
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 )
+
+// noColorEnv reports whether the NO_COLOR standard
+// (https://no-color.org) is enabled. When set, the TUI palette collapses to
+// monochrome and visual hierarchy is carried by bold/italic/borders alone.
+func noColorEnv() bool {
+	v, ok := os.LookupEnv("NO_COLOR")
+
+	return ok && v != ""
+}
 
 // Responsive layout breakpoints.
 const (
@@ -151,6 +161,26 @@ type styles struct {
 	stepDone    lipgloss.Style
 	stepActive  lipgloss.Style
 	stepPending lipgloss.Style
+
+	// Command palette / help overlay primitives.
+	paletteInput    lipgloss.Style
+	paletteItem     lipgloss.Style
+	paletteItemSel  lipgloss.Style
+	paletteSubtitle lipgloss.Style
+	paletteGroup    lipgloss.Style
+	paletteShortcut lipgloss.Style
+	paletteDisabled lipgloss.Style
+	helpGroup       lipgloss.Style
+	helpKey         lipgloss.Style
+	helpDesc        lipgloss.Style
+	helpBox         lipgloss.Style
+	footerHint      lipgloss.Style
+	footerKey       lipgloss.Style
+	footerDesc      lipgloss.Style
+	footerSepInline lipgloss.Style
+	footerStatus    lipgloss.Style
+	footerBg        lipgloss.Style
+	footerSep       lipgloss.Style
 }
 
 // formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
@@ -208,6 +238,26 @@ func newStyles(isDark bool) styles {
 	colorMuted := lightDark(lipgloss.Color("#8E96A5"), lipgloss.Color("#4E5668"))
 	colorBorder := lightDark(lipgloss.Color("#D4D8E0"), lipgloss.Color("#3B4252"))
 	colorHighlight := lightDark(lipgloss.Color("#E4E1F0"), lipgloss.Color("#33294A"))
+
+	// NO_COLOR: collapse the entire palette to lipgloss.NoColor{} so every
+	// Foreground/Background/BorderForeground call below renders without ANSI
+	// color escapes. Hierarchy is preserved via bold/italic/borders, which
+	// remain intact.
+	if noColorEnv() {
+		var noColor color.Color = lipgloss.NoColor{}
+
+		colorAccent = noColor
+		colorAccentDim = noColor
+		colorSuccess = noColor
+		colorWarning = noColor
+		colorError = noColor
+		colorText = noColor
+		colorTextSec = noColor
+		colorDim = noColor
+		colorMuted = noColor
+		colorBorder = noColor
+		colorHighlight = noColor
+	}
 
 	menuW := menuWidthFull
 	itemWidth := menuW - panelContentOffset
@@ -351,5 +401,85 @@ func newStyles(isDark bool) styles {
 			Foreground(colorAccent),
 		stepPending: lipgloss.NewStyle().
 			Foreground(colorMuted),
+
+		// Command palette.
+		paletteInput: lipgloss.NewStyle().
+			Foreground(colorText).
+			Padding(0, 1),
+		paletteItem: lipgloss.NewStyle().
+			Foreground(colorText).
+			Padding(0, 1),
+		paletteItemSel: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorAccent).
+			Background(colorHighlight).
+			Padding(0, 1),
+		paletteSubtitle: lipgloss.NewStyle().
+			Foreground(colorTextSec),
+		paletteGroup: lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Bold(true).
+			Padding(0, 1),
+		paletteShortcut: lipgloss.NewStyle().
+			Foreground(colorAccentDim),
+		paletteDisabled: lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Padding(0, 1),
+
+		// Help overlay.
+		helpGroup: lipgloss.NewStyle().
+			Foreground(colorAccent).
+			Bold(true),
+		helpKey: lipgloss.NewStyle().
+			Foreground(colorAccent).
+			Bold(true),
+		helpDesc: lipgloss.NewStyle().
+			Foreground(colorTextSec),
+		helpBox: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorAccent).
+			Padding(1, 2),
+
+		// Footer. The footer chrome lives on a tinted background; every
+		// inline style used inside the footer carries the same Background
+		// color so the tint flows continuously across the row instead of
+		// being interrupted by inner ANSI resets.
+		footerHint:      footerStyle(colorAccentDim, footerBgFor(isDark)),
+		footerKey:       footerStyle(colorAccent, footerBgFor(isDark)).Bold(true),
+		footerDesc:      footerStyle(colorTextSec, footerBgFor(isDark)),
+		footerSepInline: footerStyle(colorMuted, footerBgFor(isDark)),
+		footerStatus:    footerStyle(colorMuted, footerBgFor(isDark)),
+		footerBg: lipgloss.NewStyle().
+			Background(footerBgFor(isDark)),
+		footerSep: func() lipgloss.Style {
+			if noColorEnv() {
+				return lipgloss.NewStyle().Foreground(lipgloss.NoColor{})
+			}
+
+			return lipgloss.NewStyle().
+				Foreground(lightDark(lipgloss.Color("#C5C2D8"), lipgloss.Color("#2A2540")))
+		}(),
 	}
+}
+
+// footerBgFor returns the tinted background color used by the footer chrome.
+// Pulled out so every inline footer-text style references the same value.
+// Returns lipgloss.NoColor{} when NO_COLOR is set so the footer renders
+// without a background fill.
+func footerBgFor(isDark bool) color.Color {
+	if noColorEnv() {
+		return lipgloss.NoColor{}
+	}
+
+	if isDark {
+		return lipgloss.Color("#1F1B2E")
+	}
+
+	return lipgloss.Color("#ECEAF5")
+}
+
+// footerStyle is a small constructor that builds a foreground+background
+// inline style suitable for use inside the footer chrome.
+func footerStyle(fg, bg color.Color) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(fg).Background(bg)
 }

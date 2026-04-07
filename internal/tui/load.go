@@ -438,10 +438,8 @@ func (l *loadScreen) View() string {
 			l.styles.muted.Render("Press r to retry")
 		panel := renderPanel(l.styles, panelTitle, errContent, l.panelWidth(), true)
 		view.WriteString(panel)
-		view.WriteString("\n")
-		l.writeHelp(&view, "r", "retry", "esc", "back", "q", "quit")
 
-		return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
+		return renderScreen(l.width, l.height, view.String(), l.renderFooter())
 	}
 
 	switch l.state {
@@ -449,8 +447,6 @@ func (l *loadScreen) View() string {
 		content := l.renderProgressSteps()
 		panel := renderPanel(l.styles, panelTitle, content, l.panelWidth(), true)
 		view.WriteString(panel)
-
-		return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
 
 	case loadStatePreview:
 		if classifyLayout(l.width) == layoutTwoPanel {
@@ -461,15 +457,10 @@ func (l *loadScreen) View() string {
 			view.WriteString(panel)
 		}
 
-		view.WriteString("\n")
-		l.writeHelp(&view, "tab/\u2190/\u2192", "switch", "enter", "select", "esc", "back", "q", "quit")
-
 	case loadStateHarnessSelect:
 		content := l.renderHarnessContent()
 		panel := renderPanel(l.styles, panelTitle, content, l.panelWidth(), true)
 		view.WriteString(panel)
-		view.WriteString("\n")
-		l.writeHelp(&view, "\u2191\u2193", "navigate", "tab", "details", "enter", "select", "esc", "back", "q", "quit")
 
 	case loadStateAutoSelect:
 		content := l.renderAutoSelectContent()
@@ -477,7 +468,50 @@ func (l *loadScreen) View() string {
 		view.WriteString(panel)
 	}
 
-	return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
+	return renderScreen(l.width, l.height, view.String(), l.renderFooter())
+}
+
+func (l *loadScreen) renderFooter() string {
+	var bindings []key.Binding
+
+	switch {
+	case l.err != nil:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	case l.state == loadStatePreview:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("tab", "left", "right"), key.WithHelp("tab/←/→", "switch")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	case l.state == loadStateHarnessSelect:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "navigate")),
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "details")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	default:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
+
+	width := l.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(l.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // panelWidth returns the panel content width for the current terminal size.
@@ -923,17 +957,6 @@ func (l *loadScreen) renderInstallHint(view *strings.Builder, providerName strin
 
 	if prov.Spec.Status.InstallHint != "" {
 		view.WriteString("      " + l.styles.muted.Render(prov.Spec.Status.InstallHint) + "\n")
-	}
-}
-
-func (l *loadScreen) writeHelp(view *strings.Builder, pairs ...string) {
-	for i := 0; i+1 < len(pairs); i += 2 {
-		if i > 0 {
-			view.WriteString("  ")
-		}
-
-		view.WriteString(l.styles.hintKey.Render(pairs[i]))
-		view.WriteString(l.styles.hintDesc.Render(" " + pairs[i+1]))
 	}
 }
 

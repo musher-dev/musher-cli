@@ -9,7 +9,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/transcript"
 )
@@ -169,70 +168,70 @@ func (s *historyScreen) View() string {
 	title := s.styles.title.Render("Session History")
 	content.WriteString(title + "\n\n")
 
-	if s.loading {
+	switch {
+	case s.loading:
 		content.WriteString(s.spinner.View() + " Loading sessions...")
-
-		return s.centerContent(content.String())
-	}
-
-	if s.err != nil {
+	case s.err != nil:
 		content.WriteString(s.styles.errStyle.Render("Error: " + s.err.Error()))
-
-		return s.centerContent(content.String())
-	}
-
-	if len(s.sessions) == 0 {
+	case len(s.sessions) == 0:
 		content.WriteString(s.styles.muted.Render("No sessions recorded yet."))
 		content.WriteString("\n")
 		content.WriteString(s.styles.muted.Render("Sessions are recorded when running bundles with a harness."))
+	default:
+		maxVisible := historyMaxVisible(s.height)
+		startIdx := s.scrollOffset
+		endIdx := min(startIdx+maxVisible, len(s.sessions))
 
-		return s.centerContent(content.String())
-	}
-
-	maxVisible := historyMaxVisible(s.height)
-	startIdx := s.scrollOffset
-	endIdx := min(startIdx+maxVisible, len(s.sessions))
-
-	if startIdx > 0 {
-		content.WriteString(s.styles.muted.Render(fmt.Sprintf("  ↑ %d more above\n", startIdx)))
-	}
-
-	for i := startIdx; i < endIdx; i++ {
-		sess := s.sessions[i]
-		indicator := "  "
-
-		if i == s.cursor {
-			indicator = s.styles.accent.Render("> ")
+		if startIdx > 0 {
+			content.WriteString(s.styles.muted.Render(fmt.Sprintf("  ↑ %d more above\n", startIdx)))
 		}
 
-		shortID := sess.ID
-		if len(shortID) > 8 {
-			shortID = shortID[:8]
+		for i := startIdx; i < endIdx; i++ {
+			sess := s.sessions[i]
+			indicator := "  "
+
+			if i == s.cursor {
+				indicator = s.styles.accent.Render("> ")
+			}
+
+			shortID := sess.ID
+			if len(shortID) > 8 {
+				shortID = shortID[:8]
+			}
+
+			age := historyFormatAge(sess.StartTime)
+			duration := historyFormatDuration(sess.StartTime, sess.CloseTime)
+			ref := sess.BundleRef
+
+			line := fmt.Sprintf("%s%s  %s  %s  %s", indicator, s.styles.accent.Render(shortID), ref, s.styles.muted.Render(age), s.styles.muted.Render(duration))
+			content.WriteString(line + "\n")
 		}
 
-		age := historyFormatAge(sess.StartTime)
-		duration := historyFormatDuration(sess.StartTime, sess.CloseTime)
-		ref := sess.BundleRef
-
-		line := fmt.Sprintf("%s%s  %s  %s  %s", indicator, s.styles.accent.Render(shortID), ref, s.styles.muted.Render(age), s.styles.muted.Render(duration))
-		content.WriteString(line + "\n")
+		if endIdx < len(s.sessions) {
+			content.WriteString(s.styles.muted.Render(fmt.Sprintf("  ↓ %d more below\n", len(s.sessions)-endIdx)))
+		}
 	}
 
-	if endIdx < len(s.sessions) {
-		content.WriteString(s.styles.muted.Render(fmt.Sprintf("  ↓ %d more below\n", len(s.sessions)-endIdx)))
-	}
-
-	// Footer.
-	content.WriteString("\n")
-	content.WriteString(s.styles.muted.Render("↑/↓ navigate • enter view • esc back • q quit"))
-
-	return s.centerContent(content.String())
+	return renderScreen(s.width, s.height, content.String(), s.renderFooter())
 }
 
-func (s *historyScreen) centerContent(viewContent string) string {
-	return lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, viewContent,
-		lipgloss.WithWhitespaceChars(" "),
-	)
+func (s *historyScreen) renderFooter() string {
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "view")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	}
+
+	width := s.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(s.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 func historyFormatAge(t time.Time) string {

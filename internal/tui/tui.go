@@ -18,7 +18,13 @@ var errUnexpectedModel = errors.New("unexpected model type from TUI program")
 
 // runScreen wraps a screen in an App, runs the BubbleTea program, and extracts the result.
 func runScreen(screen Screen) (*Result, error) {
-	app := NewApp(screen)
+	return runApp(NewApp(screen))
+}
+
+// runApp executes a pre-configured App. Use this overload when the caller
+// needs to install a palette factory or other App-level wiring before the
+// program starts.
+func runApp(app *App) (*Result, error) {
 	p := tea.NewProgram(app)
 
 	finalModel, err := p.Run()
@@ -67,6 +73,41 @@ func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 	keys := defaultKeyMap()
 
 	return runScreen(newHomeScreen(ctx, deps, &sty, &keys))
+}
+
+// RunHomeWithPalette launches the polished home screen as the root surface
+// and installs the command palette as a modal-over-home overlay reachable
+// from any pushed screen via `:`, `ctrl+k`, or `ctrl+p`. This is the entry
+// point used by bare `musher` invocation.
+func RunHomeWithPalette(ctx context.Context, homeDeps *HomeDeps, isAuthed func() bool) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+
+	cmdDeps := &CommandDeps{
+		Ctx:      ctx,
+		HomeDeps: homeDeps,
+		Styles:   &sty,
+		Keys:     &keys,
+		IsAuthed: isAuthed,
+	}
+
+	global := buildGlobalCommands(cmdDeps)
+
+	makePaletteDeps := func() *PaletteDeps {
+		return &PaletteDeps{
+			Global:  global,
+			Resume:  loadResumeTarget(homeDeps.WorkDir),
+			LoadMRU: loadPaletteMRU,
+			SaveMRU: savePaletteMRU,
+			Styles:  &sty,
+		}
+	}
+
+	home := newHomeScreen(ctx, homeDeps, &sty, &keys)
+	app := NewApp(home)
+	app.SetPaletteFactory(func() Screen { return NewPalette(makePaletteDeps()) })
+
+	return runApp(app)
 }
 
 // RunSearch launches the TUI in search mode and returns the user's selection.
