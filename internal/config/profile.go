@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	mEnv "github.com/musher-dev/musher-cli/internal/env"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 )
@@ -26,8 +27,8 @@ func ResolveProfile(flagValue string) string {
 		return flagValue
 	}
 
-	if env := os.Getenv(ProfileEnvVar); env != "" {
-		return env
+	if v := mEnv.Get(ProfileEnvVar); v != "" {
+		return v
 	}
 
 	return DefaultProfile

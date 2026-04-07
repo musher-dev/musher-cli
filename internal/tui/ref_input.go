@@ -240,14 +240,6 @@ func (r *refInputScreen) handleInputKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	case key.Matches(msg, r.keys.Enter):
 		return r.submit()
 
-	case key.Matches(msg, r.keys.Search):
-		// "/" escapes to the search/browse screen.
-		return r, func() tea.Msg {
-			return pushScreenMsg{
-				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
-			}
-		}
-
 	case key.Matches(msg, r.keys.Tab):
 		// Two-panel Tab is handled in handleKey before reaching here.
 		if len(r.suggestions) > 0 {
@@ -374,13 +366,6 @@ func (r *refInputScreen) handleListKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		}
 
 		return r, nil
-
-	case key.Matches(msg, r.keys.Search):
-		return r, func() tea.Msg {
-			return pushScreenMsg{
-				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
-			}
-		}
 	}
 
 	return r, nil
@@ -404,7 +389,7 @@ func (r *refInputScreen) handleLeftPanelEnter() (Screen, tea.Cmd) {
 	// "Find on Hub" action.
 	return r, func() tea.Msg {
 		return pushScreenMsg{
-			screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
+			screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Fetcher, r.deps.Harnesses, r.deps.HealthChecker, r.deps.HealthCache, "", r.styles, r.keys),
 		}
 	}
 }
@@ -458,13 +443,6 @@ func (r *refInputScreen) handleRightPanelKey(msg tea.KeyPressMsg) (Screen, tea.C
 
 	case key.Matches(msg, r.keys.Enter):
 		return r.handleRightPanelEnter()
-
-	case key.Matches(msg, r.keys.Search):
-		return r, func() tea.Msg {
-			return pushScreenMsg{
-				screen: newSearchScreen(r.ctx, r.deps.Searcher, r.deps.Puller, r.deps.Harnesses, r.deps.HealthChecker, "", r.styles, r.keys),
-			}
-		}
 	}
 
 	return r, nil
@@ -537,9 +515,10 @@ func (r *refInputScreen) submit() (Screen, tea.Cmd) {
 			screen: newLoadScreen(
 				r.ctx,
 				r.deps.Searcher,
-				r.deps.Puller,
+				r.deps.Fetcher,
 				r.deps.Harnesses,
 				r.deps.HealthChecker,
+				r.deps.HealthCache,
 				ref.Namespace,
 				ref.Slug,
 				ref.Version,
@@ -556,9 +535,10 @@ func (r *refInputScreen) loadSuggestion(item *suggestion) tea.Cmd {
 			screen: newLoadScreen(
 				r.ctx,
 				r.deps.Searcher,
-				r.deps.Puller,
+				r.deps.Fetcher,
 				r.deps.Harnesses,
 				r.deps.HealthChecker,
+				r.deps.HealthCache,
 				item.namespace,
 				item.slug,
 				item.version,
@@ -656,7 +636,9 @@ func (r *refInputScreen) View() string {
 		content = r.renderWithPanel()
 	}
 
-	return lipgloss.Place(r.width, r.height, lipgloss.Center, lipgloss.Center, content)
+	header := renderScreenHeader(r.styles, r.width, r.deps.Version, "Load Bundle")
+
+	return renderScreenWithHeader(r.width, r.height, header, content, r.renderFooter())
 }
 
 func (r *refInputScreen) panelWidth() int {
@@ -674,9 +656,6 @@ func (r *refInputScreen) panelWidth() int {
 
 func (r *refInputScreen) renderWithPanel() string {
 	var view strings.Builder
-
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 
 	panelW := r.panelWidth()
 
@@ -696,14 +675,11 @@ func (r *refInputScreen) renderWithPanel() string {
 	if suggestionsView != "" {
 		body.WriteString(suggestionsView)
 	} else {
-		body.WriteString(r.styles.muted.Render("Type a bundle reference, or press ") +
-			r.styles.accent.Render("/") +
-			r.styles.muted.Render(" to search the Hub"))
+		body.WriteString(r.styles.muted.Render("Type a bundle reference like ") +
+			r.styles.accent.Render("namespace/slug:version"))
 	}
 
 	view.WriteString(renderPanel(r.styles, "Load Bundle", body.String(), panelW, true))
-	view.WriteString("\n\n")
-	view.WriteString(r.renderFooter())
 
 	return view.String()
 }
@@ -711,8 +687,6 @@ func (r *refInputScreen) renderWithPanel() string {
 func (r *refInputScreen) renderMinimal() string {
 	var view strings.Builder
 
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 	view.WriteString(r.input.View())
 
 	if r.errMsg != "" {
@@ -727,17 +701,11 @@ func (r *refInputScreen) renderMinimal() string {
 		view.WriteString(suggestionsView)
 	}
 
-	view.WriteString("\n\n")
-	view.WriteString(r.renderFooter())
-
 	return view.String()
 }
 
 func (r *refInputScreen) renderTwoPanelRef() string {
 	var view strings.Builder
-
-	view.WriteString(r.styles.breadcrumb.Render("Load Bundle"))
-	view.WriteString("\n\n")
 
 	panelW := clampMenuWidth(r.width)
 
@@ -753,8 +721,6 @@ func (r *refInputScreen) renderTwoPanelRef() string {
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 
 	view.WriteString(panels)
-	view.WriteString("\n\n")
-	view.WriteString(r.renderTwoPanelFooter())
 
 	return view.String()
 }
@@ -781,27 +747,15 @@ func (r *refInputScreen) renderLeftPanelContent(availWidth int) string {
 	body.WriteString("\n")
 
 	hubLabel := "Find a bundle on the Hub"
-	hubBadge := r.styles.hotkey.Render("[/]")
 	hubActive := r.focusPanel == 0 && r.focusArea == refFocusList && r.cursor >= len(r.filteredRecent())
 
-	var lineLeft string
-
 	if hubActive {
-		lineLeft = r.styles.accent.Render(cursorActive) + hubLabel
+		body.WriteString(r.styles.accent.Render(cursorActive) + hubLabel)
 	} else {
-		lineLeft = cursorBlank + hubLabel
+		body.WriteString(cursorBlank + hubLabel)
 	}
 
-	// Right-align the badge.
-	leftWidth := ansi.StringWidth(lineLeft)
-	badgeWidth := ansi.StringWidth(hubBadge)
-	gap := availWidth - leftWidth - badgeWidth
-
-	if gap > 1 {
-		body.WriteString(lineLeft + strings.Repeat(" ", gap) + hubBadge)
-	} else {
-		body.WriteString(lineLeft + "  " + hubBadge)
-	}
+	_ = availWidth
 
 	return body.String()
 }
@@ -902,20 +856,6 @@ func (r *refInputScreen) renderRefItem(item *suggestion, isSelected bool, availW
 	}
 
 	return line + "\n"
-}
-
-func (r *refInputScreen) renderTwoPanelFooter() string {
-	sep := r.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		r.styles.hintKey.Render("\u2191/\u2193") + " " + r.styles.hintDesc.Render("navigate"),
-		r.styles.hintKey.Render("tab") + " " + r.styles.hintDesc.Render("switch"),
-		r.styles.hintKey.Render("enter") + " " + r.styles.hintDesc.Render("select"),
-		r.styles.hintKey.Render("/") + " " + r.styles.hintDesc.Render("search"),
-		r.styles.hintKey.Render("esc") + " " + r.styles.hintDesc.Render("back"),
-	}
-
-	return strings.Join(hints, sep)
 }
 
 // filteredRecent returns recent bundles filtered by current input.
@@ -1042,22 +982,38 @@ func (r *refInputScreen) hasFilteredSource(source string) bool {
 }
 
 func (r *refInputScreen) renderFooter() string {
-	sep := r.styles.hintSep.Render(" \u2022 ")
+	var bindings []key.Binding
 
-	hints := []string{
-		r.styles.hintKey.Render("enter") + " " + r.styles.hintDesc.Render("load"),
+	if classifyLayout(r.width) == layoutTwoPanel {
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		}
+	} else {
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "load")),
+		}
+
+		if len(r.suggestions) > 0 {
+			bindings = append(bindings, key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "suggestions")))
+		}
+
+		bindings = append(bindings,
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		)
 	}
 
-	if len(r.suggestions) > 0 {
-		hints = append(hints, r.styles.hintKey.Render("tab")+" "+r.styles.hintDesc.Render("suggestions"))
+	width := r.width
+	if width <= 0 {
+		width = 80
 	}
 
-	hints = append(hints,
-		r.styles.hintKey.Render("/")+" "+r.styles.hintDesc.Render("search"),
-		r.styles.hintKey.Render("esc")+" "+r.styles.hintDesc.Render("back"),
-	)
-
-	return strings.Join(hints, sep)
+	return NewFooter(r.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // --- Async commands and messages ---

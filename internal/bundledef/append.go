@@ -2,12 +2,12 @@ package bundledef
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 // assetEntryRE matches the start of an asset list entry (e.g. "  - id:").
@@ -34,7 +34,7 @@ func AppendAssets(dir string, assets []Asset) (int, error) {
 		return 0, err
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, []byte(content), 0o644); err != nil {
 		return 0, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
@@ -60,7 +60,7 @@ func renderAppend(dir string, assets []Asset) (resultContent string, appended in
 		return "", 0, err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return "", 0, repoerrors.Errorf("read bundle definition: %w", err)
 	}

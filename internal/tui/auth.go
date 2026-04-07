@@ -291,15 +291,10 @@ func (a *authScreen) View() string {
 		content = a.renderSinglePanel()
 	}
 
-	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreenWithHeader(a.width, a.height, a.renderBreadcrumb(), content, a.renderFooter())
 }
 
 func (a *authScreen) renderTwoPanel() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(a.width)
 	leftContent := a.renderMainContent()
 	leftPanel := renderPanel(a.styles, "Authentication", leftContent, panelW, a.focusArea == 0)
@@ -311,20 +306,11 @@ func (a *authScreen) renderTwoPanel() string {
 	rightPanel := renderPanel(a.styles, "Details", rightContent, rightW, a.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
-	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel))
-	view.WriteString("\n\n")
 
-	view.WriteString(a.renderFooter())
-
-	return view.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 }
 
 func (a *authScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(a.width)
 	content := a.renderMainContent()
 
@@ -333,37 +319,21 @@ func (a *authScreen) renderSinglePanel() string {
 		content += "\n" + a.renderDetailContent()
 	}
 
-	view.WriteString(renderPanel(a.styles, "Authentication", content, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(a.renderFooter())
-
-	return view.String()
+	return renderPanel(a.styles, "Authentication", content, panelW, true)
 }
 
 func (a *authScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(a.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(a.renderMainContent())
-	view.WriteString("\n\n")
-
-	view.WriteString(a.renderFooter())
-
-	return view.String()
+	return a.renderMainContent()
 }
 
 func (a *authScreen) renderBreadcrumb() string {
-	trail := a.styles.breadcrumb.Render("Auth")
+	trail := "Auth"
 
 	if a.state == authStateLoginInput || a.state == authStateValidating {
-		trail += a.styles.breadcrumbSep.Render(" > ")
-		trail += a.styles.breadcrumb.Render("Log in")
+		trail += " > Log in"
 	}
 
-	return trail
+	return renderScreenHeader(a.styles, a.width, a.deps.Version, trail)
 }
 
 func (a *authScreen) renderMainContent() string {
@@ -582,37 +552,42 @@ func (a *authScreen) renderDetailContent() string {
 }
 
 func (a *authScreen) renderFooter() string {
-	sep := a.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	switch a.state {
 	case authStateLoginInput:
-		hints = []string{
-			a.styles.hintKey.Render("enter") + " " + a.styles.hintDesc.Render("submit"),
-			a.styles.hintKey.Render("esc") + " " + a.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 	case authStateConfirmLogout:
-		hints = []string{
-			a.styles.hintKey.Render("\u2191/\u2193") + " " + a.styles.hintDesc.Render("navigate"),
-			a.styles.hintKey.Render("enter") + " " + a.styles.hintDesc.Render("select"),
-			a.styles.hintKey.Render("esc") + " " + a.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 	default:
-		hints = []string{
-			a.styles.hintKey.Render("enter") + " " + a.styles.hintDesc.Render("select"),
-			a.styles.hintKey.Render("esc") + " " + a.styles.hintDesc.Render("back"),
-			a.styles.hintKey.Render("q") + " " + a.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 		if classifyLayout(a.width) == layoutTwoPanel {
-			hints = append(hints[:2],
-				a.styles.hintKey.Render("tab")+" "+a.styles.hintDesc.Render("switch"),
-				hints[2])
+			bindings = append(bindings, key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")))
 		}
+
+		bindings = append(bindings, key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")))
 	}
 
-	return strings.Join(hints, sep)
+	width := a.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(a.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // Async commands and messages.

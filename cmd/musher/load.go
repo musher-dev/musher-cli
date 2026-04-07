@@ -60,18 +60,23 @@ func runLoadTUI(cmd *cobra.Command, out *output.Writer, ref string) error {
 	// Wrap with fallback: try hub endpoints first, fall back to resolve+OCI
 	// for bundles that exist in the registry but lack a hub listing.
 	searcher := &discovery.FallbackSearcher{HubClient: apiClient}
-	puller := &discovery.FallbackPuller{HubClient: apiClient, OCIPullFunc: pullFromOCI}
 
 	// Build harness registry with all built-in providers.
 	harnessReg := newHarnessRegistry()
 	healthChecker := newRegistryHealthChecker(harnessReg)
 
+	fetcher, healthCache, err := buildFetcherAndHealthCache(cmd.Context(), harnessReg)
+	if err != nil {
+		return err
+	}
+
 	result, err := tui.RunLoad(
 		cmd.Context(),
 		searcher,
-		puller,
+		fetcher,
 		harnessReg,
 		healthChecker,
+		healthCache,
 		namespace, slug, bundleVersion,
 	)
 	if err != nil {

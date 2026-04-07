@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/env"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/observability"
 	"github.com/musher-dev/musher-cli/internal/output"
@@ -97,7 +97,7 @@ func pickBoolFlagOrEnv(flagValue bool, envKeys ...string) bool {
 	}
 
 	for _, envKey := range envKeys {
-		v := strings.ToLower(strings.TrimSpace(os.Getenv(envKey)))
+		v := strings.ToLower(strings.TrimSpace(env.Get(envKey)))
 		if v == "1" || v == "true" || v == "yes" {
 			return true
 		}
@@ -112,7 +112,7 @@ func pickFlagOrEnv(flagValue, envKey, fallback string) string {
 		return trimmed
 	}
 
-	if envValue := strings.TrimSpace(os.Getenv(envKey)); envValue != "" {
+	if envValue := strings.TrimSpace(env.Get(envKey)); envValue != "" {
 		return envValue
 	}
 

@@ -135,14 +135,10 @@ func (s *historyDetailScreen) View() string {
 
 	var view strings.Builder
 
-	// Header.
 	shortID := s.session.ID
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-
-	title := s.styles.title.Render("Session " + shortID)
-	view.WriteString(title + "\n")
 
 	meta := s.session.BundleRef + "  |  " + s.session.StartTime.Local().Format("2006-01-02 15:04:05")
 	if !s.session.CloseTime.IsZero() {
@@ -150,17 +146,33 @@ func (s *historyDetailScreen) View() string {
 	}
 
 	view.WriteString(s.styles.muted.Render(meta) + "\n\n")
-
-	// Viewport content.
 	view.WriteString(s.viewport.View())
-	view.WriteByte('\n')
 
-	// Footer.
+	header := renderScreenHeader(s.styles, s.width, "", "Session History > "+shortID)
+
+	return renderScreenWithHeader(s.width, s.height, header, view.String(), s.renderFooter())
+}
+
+func (s *historyDetailScreen) renderFooter() string {
 	scrollPct := s.viewport.ScrollPercent()
 	totalLines := strings.Count(s.viewport.GetContent(), "\n")
-	footer := fmt.Sprintf("%.0f%% of %d lines", scrollPct*100, totalLines)
-	footer += "  |  j/k scroll  pgup/pgdn page  q back"
-	view.WriteString(s.styles.muted.Render(footer))
+	status := fmt.Sprintf("%.0f%% of %d lines", scrollPct*100, totalLines)
 
-	return view.String()
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("j", "k"), key.WithHelp("j/k", "scroll")),
+		key.NewBinding(key.WithKeys("pgup", "pgdown"), key.WithHelp("pgup/pgdn", "page")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	}
+
+	width := s.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(s.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		Status:    status,
+		ShowHints: true,
+	})
 }

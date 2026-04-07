@@ -4,8 +4,9 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
+
+	"github.com/musher-dev/musher-cli/internal/env"
 )
 
 // Exit codes for CLI commands.
@@ -97,7 +98,7 @@ func As(err error, target **CLIError) bool {
 // NotAuthenticated returns an error indicating missing credentials.
 func NotAuthenticated() *CLIError {
 	hint := "Run 'musher auth login' or set MUSHER_API_KEY"
-	if os.Getenv("SUDO_USER") != "" {
+	if env.Get(env.SudoUser) != "" {
 		hint = "Credentials from 'musher auth login' are not accessible under sudo. " +
 			"Run without sudo, or pass --api-key, or set MUSHER_API_KEY"
 	}

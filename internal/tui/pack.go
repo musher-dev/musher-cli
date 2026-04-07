@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
 	"github.com/musher-dev/musher-cli/internal/bundledef"
@@ -323,61 +322,28 @@ func (pk *packScreen) View() string {
 
 	switch layout {
 	case layoutMinimal:
-		content = pk.renderMinimal()
+		content = pk.renderBody()
 	default:
-		content = pk.renderSinglePanel()
+		panelW := clampMenuWidth(pk.width)
+		content = renderPanel(pk.styles, "Pack Bundle", pk.renderBody(), panelW, true)
 	}
 
-	return lipgloss.Place(pk.width, pk.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreenWithHeader(pk.width, pk.height, pk.renderHeader(), content, pk.renderFooter())
 }
 
-func (pk *packScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(pk.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	panelW := clampMenuWidth(pk.width)
-	body := pk.renderBody()
-
-	view.WriteString(renderPanel(pk.styles, "Pack Bundle", body, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderFooter())
-
-	return view.String()
-}
-
-func (pk *packScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(pk.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderBody())
-	view.WriteString("\n\n")
-
-	view.WriteString(pk.renderFooter())
-
-	return view.String()
-}
-
-func (pk *packScreen) renderBreadcrumb() string {
-	trail := pk.styles.breadcrumb.Render("Pack")
+func (pk *packScreen) renderHeader() string {
+	trail := "Pack"
 
 	switch pk.state {
 	case packStateValidating, packStateValidateFailed:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Validate")
+		trail += " > Validate"
 	case packStatePacking:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Cache")
+		trail += " > Cache"
 	case packStateSuccess, packStateFailed:
-		trail += pk.styles.breadcrumbSep.Render(" > ")
-		trail += pk.styles.breadcrumb.Render("Done")
+		trail += " > Done"
 	}
 
-	return trail
+	return renderScreenHeader(pk.styles, pk.width, pk.deps.Version, trail)
 }
 
 func (pk *packScreen) validationMaxDetailLines() int {
@@ -445,24 +411,30 @@ func (pk *packScreen) renderFailed() string {
 }
 
 func (pk *packScreen) renderFooter() string {
-	sep := pk.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	switch pk.state {
 	case packStateSuccess:
-		hints = []string{
-			pk.styles.hintKey.Render("p") + " " + pk.styles.hintDesc.Render("push"),
-			pk.styles.hintKey.Render("enter") + " " + pk.styles.hintDesc.Render("done"),
-			pk.styles.hintKey.Render("esc") + " " + pk.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "push")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	default:
-		hints = []string{
-			pk.styles.hintKey.Render("esc") + " " + pk.styles.hintDesc.Render("back"),
-			pk.styles.hintKey.Render("q") + " " + pk.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
 
-	return strings.Join(hints, sep)
+	width := pk.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(pk.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }

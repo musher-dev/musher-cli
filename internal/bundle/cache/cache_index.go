@@ -9,6 +9,7 @@ import (
 	"time"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 // CachedBundle describes a single bundle version present in the cache.
@@ -138,7 +139,7 @@ func buildCachedBundle(manifestsDir, hostID, namespace, slug, version string) Ca
 	metaPath := filepath.Join(manifestsDir, hostID, namespace, slug, version+".meta.json")
 
 	// Read manifest for asset count and total size.
-	if data, err := os.ReadFile(manifestPath); err == nil { //nolint:gosec // trusted cache path
+	if data, err := safeio.ReadFile(manifestPath); err == nil {
 		var manifest BundleManifest
 		if json.Unmarshal(data, &manifest) == nil {
 			entry.AssetCount = len(manifest.Layers)
@@ -150,7 +151,7 @@ func buildCachedBundle(manifestsDir, hostID, namespace, slug, version string) Ca
 	}
 
 	// Read meta for fetch time.
-	if data, err := os.ReadFile(metaPath); err == nil { //nolint:gosec // trusted cache path
+	if data, err := safeio.ReadFile(metaPath); err == nil {
 		var meta ManifestMeta
 		if json.Unmarshal(data, &meta) == nil {
 			entry.FetchedAt = meta.FetchedAt

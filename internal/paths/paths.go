@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/musher-dev/musher-cli/internal/env"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -20,7 +21,7 @@ const appName = "musher"
 //  2. MUSHER_HOME/<suffix>  (must be absolute)
 //  3. XDG env → OS func → $HOME/<fallback> (appends /musher)
 func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (string, error), homeFallbackDir string) (string, error) {
-	if branded := os.Getenv(brandedEnv); branded != "" {
+	if branded := env.Get(brandedEnv); branded != "" {
 		if !filepath.IsAbs(branded) {
 			return "", repoerrors.Errorf("%s must be an absolute path", brandedEnv)
 		}
@@ -28,7 +29,7 @@ func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (strin
 		return filepath.Clean(branded), nil
 	}
 
-	if musherHome := os.Getenv("MUSHER_HOME"); musherHome != "" {
+	if musherHome := env.Get(env.Home); musherHome != "" {
 		if !filepath.IsAbs(musherHome) {
 			return "", errors.New("MUSHER_HOME must be an absolute path")
 		}
@@ -36,7 +37,7 @@ func resolveRoot(brandedEnv, musherHomeSuffix, xdgEnv string, osFn func() (strin
 		return filepath.Join(musherHome, musherHomeSuffix), nil
 	}
 
-	if xdg := os.Getenv(xdgEnv); xdg != "" && filepath.IsAbs(xdg) {
+	if xdg := env.Get(xdgEnv); xdg != "" && filepath.IsAbs(xdg) {
 		return filepath.Join(xdg, appName), nil
 	}
 
@@ -103,7 +104,7 @@ func CacheRoot() (string, error) {
 
 // RuntimeRoot returns the runtime directory for Musher (lock files, sockets, etc.).
 func RuntimeRoot() (string, error) {
-	if branded := os.Getenv("MUSHER_RUNTIME_DIR"); branded != "" {
+	if branded := env.Get(env.RuntimeDir); branded != "" {
 		if !filepath.IsAbs(branded) {
 			return "", errors.New("MUSHER_RUNTIME_DIR must be an absolute path")
 		}
@@ -111,7 +112,7 @@ func RuntimeRoot() (string, error) {
 		return filepath.Clean(branded), nil
 	}
 
-	if musherHome := os.Getenv("MUSHER_HOME"); musherHome != "" {
+	if musherHome := env.Get(env.Home); musherHome != "" {
 		if !filepath.IsAbs(musherHome) {
 			return "", errors.New("MUSHER_HOME must be an absolute path")
 		}
@@ -120,7 +121,7 @@ func RuntimeRoot() (string, error) {
 	}
 
 	if runtime.GOOS == "linux" {
-		if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" && filepath.IsAbs(xdg) {
+		if xdg := env.Get(env.XDGRuntimeDir); xdg != "" && filepath.IsAbs(xdg) {
 			return filepath.Join(xdg, appName), nil
 		}
 	}

@@ -239,6 +239,12 @@ linters:
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/tui
               desc: prompt must not import TUI (separate rendering systems)
+        cmd_no_net_http:
+          files:
+            - cmd/musher/**/*.go
+          deny:
+            - pkg: net/http
+              desc: cmd/ must use internal/client for HTTP, not net/http directly
     forbidigo:
       analyze-types: true
       forbid:
@@ -250,6 +256,10 @@ linters:
           msg: "use internal/errors.Errorf instead of fmt.Errorf"
         - pattern: ^log\.(Print|Fatal|Panic)(ln|f)?$
           msg: "use output.Writer instead of log package"
+        - pattern: ^os\.Getenv$
+          msg: "use internal/env (env.Get) instead of os.Getenv"
+        - pattern: ^os\.LookupEnv$
+          msg: "use internal/env (env.Lookup) instead of os.LookupEnv"
     gosec:
       excludes:
         - G104
@@ -350,6 +360,12 @@ linters:
           - gocognit
           - contextcheck
           - musttag
+      - path: _test\.go
+        linters:
+          - forbidigo    # tests may use os.Getenv / fmt.Print freely
+      - path: internal/env/env\.go
+        linters:
+          - forbidigo    # env wraps os.Getenv/LookupEnv (the single allowed site)
       - path: internal/tui/
         linters:
           - forbidigo    # TUI uses bubbletea rendering, not fmt.Print to stdout

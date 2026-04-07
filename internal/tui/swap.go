@@ -297,7 +297,7 @@ func (m *swapModel) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *swapModel) handleCachedKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.Search), key.Matches(msg, m.keys.Tab):
+	case key.Matches(msg, m.keys.Tab):
 		m.switchToInputFocus()
 
 		return m, nil
@@ -341,7 +341,7 @@ func (m *swapModel) handleCachedKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *swapModel) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.Search), key.Matches(msg, m.keys.Tab):
+	case key.Matches(msg, m.keys.Tab):
 		m.switchToInputFocus()
 
 		return m, nil
@@ -471,12 +471,7 @@ func (m *swapModel) View() tea.View {
 		view.WriteString(renderPanel(&m.styles, searchTitle, searchContent, panelW, m.focusArea == swapFocusSearch))
 	}
 
-	view.WriteString("\n\n")
-
-	// Footer.
-	view.WriteString(m.renderFooter())
-
-	content := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, view.String())
+	content := renderScreen(m.width, m.height, view.String(), m.renderFooter())
 	v := tea.NewView(content)
 	v.AltScreen = true
 
@@ -586,17 +581,22 @@ func (m *swapModel) renderSwapEntry(w *strings.Builder, entry *swapEntry, idx, c
 }
 
 func (m *swapModel) renderFooter() string {
-	sep := m.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		m.styles.hintKey.Render("\u2191/\u2193") + " " + m.styles.hintDesc.Render("move"),
-		m.styles.hintKey.Render("enter") + " " + m.styles.hintDesc.Render("select"),
-		m.styles.hintKey.Render("/") + " " + m.styles.hintDesc.Render("search hub"),
-		m.styles.hintKey.Render("tab") + " " + m.styles.hintDesc.Render("switch"),
-		m.styles.hintKey.Render("esc") + " " + m.styles.hintDesc.Render("cancel"),
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "move")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	}
 
-	return strings.Join(hints, sep)
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(&m.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 func (m *swapModel) panelWidth() int {

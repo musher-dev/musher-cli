@@ -349,7 +349,9 @@ func (screen *newBundleScreen) View() string {
 		content = screen.renderMinimal()
 	}
 
-	return lipgloss.Place(screen.width, screen.height, lipgloss.Center, lipgloss.Center, content)
+	header := renderScreenHeader(screen.styles, screen.width, screen.deps.Version, "Home > New Bundle")
+
+	return renderScreenWithHeader(screen.width, screen.height, header, content, screen.renderFooter())
 }
 
 func (screen *newBundleScreen) renderTwoPanel() string {
@@ -366,15 +368,9 @@ func (screen *newBundleScreen) renderTwoPanel() string {
 	gap := strings.Repeat(" ", twoPanelGap)
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, formPanel, gap, previewPanel)
 
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(totalWidth)
-	footer := screen.renderFooter()
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panels, desc, "", footer,
-	)
-
-	return content
+	return lipgloss.JoinVertical(lipgloss.Center, panels, desc)
 }
 
 func (screen *newBundleScreen) renderSinglePanel() string {
@@ -382,51 +378,32 @@ func (screen *newBundleScreen) renderSinglePanel() string {
 	formContent := screen.renderFormContent(panelW - panelContentOffset)
 	panel := renderPanel(screen.styles, "New Bundle", formContent, panelW, true)
 
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(panelW)
-	footer := screen.renderFooter()
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panel, desc, "", footer,
-	)
-
-	return content
+	return lipgloss.JoinVertical(lipgloss.Center, panel, desc)
 }
 
 func (screen *newBundleScreen) renderPreviewOnly() string {
 	panelW := min(clampMenuWidth(screen.width), searchPanelMax)
 	def := screen.buildDef()
-	panel := screen.preview.RenderYAML(def, panelW)
 
-	breadcrumb := screen.renderBreadcrumb()
-	footer := screen.renderFooter()
-
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", panel, "", footer,
-	)
+	return screen.preview.RenderYAML(def, panelW)
 }
 
 func (screen *newBundleScreen) renderCompact() string {
 	formWidth := max(screen.width-4, 30)
 	form := screen.renderFormContent(formWidth)
-	breadcrumb := screen.renderBreadcrumb()
 	desc := screen.renderFieldDescription(formWidth)
-	footer := screen.renderFooter()
 
-	return lipgloss.JoinVertical(lipgloss.Center,
-		breadcrumb, "", form, desc, "", footer,
-	)
+	return lipgloss.JoinVertical(lipgloss.Center, form, desc)
 }
 
 func (screen *newBundleScreen) renderMinimal() string {
 	formWidth := max(screen.width-2, 20)
 	form := screen.renderFormContent(formWidth)
 	desc := screen.renderFieldDescription(formWidth)
-	footer := screen.renderFooter()
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		screen.styles.breadcrumb.Render("New Bundle"), "", form, desc, "", footer,
-	)
+	return lipgloss.JoinVertical(lipgloss.Left, form, desc)
 }
 
 func (screen *newBundleScreen) renderFormContent(width int) string {
@@ -473,49 +450,46 @@ func (screen *newBundleScreen) renderFieldDescription(width int) string {
 	return screen.styles.description.Width(width).Render(current.HelpText())
 }
 
-func (screen *newBundleScreen) renderBreadcrumb() string {
-	return screen.styles.breadcrumb.Render("Home") +
-		screen.styles.breadcrumbSep.Render(" > ") +
-		screen.styles.breadcrumb.Render("New Bundle")
-}
-
 func (screen *newBundleScreen) renderFooter() string {
-	sep := screen.styles.hintSep.Render(" • ")
+	var bindings []key.Binding
 
-	var hints []string
+	switch {
+	case screen.submitted:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("any"), key.WithHelp("any key", "continue")),
+		}
+	case screen.form.Mode() == FormModeEdit:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+		}
 
-	if screen.submitted {
-		hints = append(hints, renderHint(screen.styles, "any key", "continue"))
-
-		return strings.Join(hints, sep)
-	}
-
-	if screen.form.Mode() == FormModeEdit {
-		hints = append(hints,
-			renderHint(screen.styles, "enter", "confirm"),
-			renderHint(screen.styles, "esc", "cancel"),
-		)
-
-		// Show space hint for asset list.
 		if current := screen.form.CurrentField(); current != nil && current.Label() == labelAssets {
-			hints = append(hints, renderHint(screen.styles, "space", "toggle"))
+			bindings = append(bindings, key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")))
 		}
-	} else {
-		hints = append(hints,
-			renderHint(screen.styles, "↑/↓", "navigate"),
-			renderHint(screen.styles, "enter", "edit"),
-			renderHint(screen.styles, "ctrl+s", "create"),
-		)
-
-		layout := classifyLayout(screen.width)
-		if layout == layoutSingle {
-			hints = append(hints, renderHint(screen.styles, "p", "preview"))
+	default:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
+			key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "create")),
 		}
 
-		hints = append(hints, renderHint(screen.styles, "esc", "back"))
+		if classifyLayout(screen.width) == layoutSingle {
+			bindings = append(bindings, key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "preview")))
+		}
+
+		bindings = append(bindings, key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")))
 	}
 
-	return strings.Join(hints, sep)
+	width := screen.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(screen.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // --- Async commands ---

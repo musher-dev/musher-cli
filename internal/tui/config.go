@@ -306,15 +306,10 @@ func (c *configScreen) View() string {
 		content = c.renderSinglePanel()
 	}
 
-	return lipgloss.Place(c.width, c.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreenWithHeader(c.width, c.height, c.renderBreadcrumb(), content, c.renderFooter())
 }
 
 func (c *configScreen) renderTwoPanel() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(c.width)
 	leftContent := c.renderItemList()
 	leftPanel := renderPanel(c.styles, "Settings", leftContent, panelW, c.focusArea == 0)
@@ -326,47 +321,23 @@ func (c *configScreen) renderTwoPanel() string {
 	rightPanel := renderPanel(c.styles, "Details", rightContent, rightW, c.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
-	view.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel))
-	view.WriteString("\n\n")
 
-	view.WriteString(c.renderFooter())
-
-	return view.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 }
 
 func (c *configScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
 	panelW := clampMenuWidth(c.width)
 	content := c.renderItemList()
 
-	view.WriteString(renderPanel(c.styles, "Settings", content, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(c.renderFooter())
-
-	return view.String()
+	return renderPanel(c.styles, "Settings", content, panelW, true)
 }
 
 func (c *configScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(c.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(c.renderItemList())
-	view.WriteString("\n\n")
-
-	view.WriteString(c.renderFooter())
-
-	return view.String()
+	return c.renderItemList()
 }
 
 func (c *configScreen) renderBreadcrumb() string {
-	return c.styles.breadcrumb.Render("Configuration")
+	return renderScreenHeader(c.styles, c.width, "", "Configuration")
 }
 
 func (c *configScreen) renderItemList() string {
@@ -495,30 +466,37 @@ func (c *configScreen) renderDetailPane() string {
 }
 
 func (c *configScreen) renderFooter() string {
-	sep := c.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	if c.state == configStateEdit {
-		hints = []string{
-			c.styles.hintKey.Render("enter") + " " + c.styles.hintDesc.Render("save"),
-			c.styles.hintKey.Render("esc") + " " + c.styles.hintDesc.Render("discard"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "discard")),
 		}
 	} else {
-		hints = []string{
-			c.styles.hintKey.Render("\u2191/\u2193") + " " + c.styles.hintDesc.Render("navigate"),
-			c.styles.hintKey.Render("enter") + " " + c.styles.hintDesc.Render("edit"),
-			c.styles.hintKey.Render("r") + " " + c.styles.hintDesc.Render("reset"),
-			c.styles.hintKey.Render("esc") + " " + c.styles.hintDesc.Render("back"),
-			c.styles.hintKey.Render("q") + " " + c.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reset")),
 		}
 
 		if classifyLayout(c.width) == layoutTwoPanel {
-			// Insert tab hint before esc.
-			hints = append(hints[:3],
-				append([]string{c.styles.hintKey.Render("tab") + " " + c.styles.hintDesc.Render("switch")}, hints[3:]...)...)
+			bindings = append(bindings, key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")))
 		}
+
+		bindings = append(bindings,
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		)
 	}
 
-	return strings.Join(hints, sep)
+	width := c.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(c.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 	"github.com/musher-dev/musher-cli/internal/skills"
 	"gopkg.in/yaml.v3"
 )
@@ -113,7 +114,7 @@ func Load(dir string) (*Def, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return nil, repoerrors.Errorf("read bundle definition: %w", err)
 	}
@@ -135,7 +136,7 @@ func Save(dir string, d *Def) error {
 		return repoerrors.Errorf("marshal bundle definition: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, data, 0o644); err != nil {
 		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
@@ -150,7 +151,7 @@ func SetVersion(dir, version string) error {
 		return err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return repoerrors.Errorf("read bundle definition: %w", err)
 	}
@@ -163,7 +164,7 @@ func SetVersion(dir, version string) error {
 
 	content = versionLineRE.ReplaceAllString(content, "${1}"+version)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, []byte(content), 0o644); err != nil {
 		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
@@ -179,7 +180,7 @@ func SetVisibility(dir, visibility string) error {
 		return err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return repoerrors.Errorf("read bundle definition: %w", err)
 	}
@@ -205,7 +206,7 @@ func SetVisibility(dir, visibility string) error {
 		}
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, []byte(content), 0o644); err != nil {
 		return repoerrors.Errorf("write bundle definition: %w", err)
 	}
 

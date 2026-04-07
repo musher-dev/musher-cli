@@ -23,8 +23,8 @@ func TestModuleSpecParsed(t *testing.T) {
 		t.Errorf("spec.Name = %q, want %q", spec.Name, "gemini")
 	}
 
-	if spec.DisplayName != "Google Gemini CLI" {
-		t.Errorf("spec.DisplayName = %q, want %q", spec.DisplayName, "Google Gemini CLI")
+	if spec.DisplayName != "Google Gemini" {
+		t.Errorf("spec.DisplayName = %q, want %q", spec.DisplayName, "Google Gemini")
 	}
 
 	if spec.Binary != "gemini" {

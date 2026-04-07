@@ -12,17 +12,32 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/musher-dev/musher-cli/internal/client"
+	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 // loadState tracks the current phase of the load screen.
+//
+// The previous resolve→pull→preview state machine has been replaced by a
+// single previewLoading→preview transition.  Asset bodies are downloaded by
+// the fetcher in the background and do not block the user from seeing or
+// interacting with the preview.
 type loadState int
 
 const (
-	loadStateResolving loadState = iota
-	loadStatePulling
+	// loadStatePreviewLoading is the brief window between Init and the first
+	// resolve response.  Typically <300ms.  Renders a small inline spinner.
+	loadStatePreviewLoading loadState = iota
+	// loadStatePreview shows the bundle metadata, assets, and Run/Install
+	// buttons.  May coexist with an in-flight background download — the
+	// Run/Install buttons display a "finishing download…" hint until the
+	// fetcher reports StatusReady.
 	loadStatePreview
+	// loadStateHarnessLoading is reached only when the user presses Run and
+	// the harness health cache has not yet been populated.  In the common
+	// case (prefetch finished during navigation) this state is skipped.
 	loadStateHarnessLoading
 	loadStateHarnessSelect
 	loadStateAutoSelect
@@ -31,33 +46,43 @@ const (
 // previewMaxAssetsPerType is the number of asset paths shown per type before collapsing.
 const previewMaxAssetsPerType = 3
 
-// loadScreen resolves, pulls, previews, and selects a harness for a bundle.
+// pendingAction tracks a Run/Install press that arrived before the background
+// download finished.  When the fetcher reaches StatusReady, the screen
+// auto-advances by replaying the action.
+type pendingAction int
+
+const (
+	pendingNone pendingAction = iota
+	pendingRun
+	pendingInstall
+)
+
+// loadScreen resolves, previews, and selects a harness for a bundle.
 type loadScreen struct {
 	searcher      BundleSearcher
-	puller        BundlePuller
+	fetcher       *bundlefetch.Fetcher
 	harnesses     HarnessLister
 	healthChecker HarnessHealthChecker
+	healthCache   *healthcache.Cache
 	ctx           context.Context
 
 	namespace string
 	slug      string
 	version   string
 
-	state   loadState
-	spinner spinner.Model
-	detail  *client.HubBundleDetail
-	bundle  *client.PullBundleResponse
-	err     error
-	width   int
-	height  int
-	keys    *keyMap
-	styles  *styles
-
-	// Asset size tracking (computed from ContentText after pull).
-	assetSizes map[string]int64
+	state    loadState
+	spinner  spinner.Model
+	handle   *bundlefetch.Handle
+	snapshot bundlefetch.Snapshot
+	err      error
+	width    int
+	height   int
+	keys     *keyMap
+	styles   *styles
 
 	// Action button state for preview screen.
-	actionFocus int // 0 = Run, 1 = Install
+	actionFocus   int // 0 = Run, 1 = Install
+	pendingAction pendingAction
 
 	// Harness selection state.
 	allProviders    []*harness.Provider
@@ -66,18 +91,20 @@ type loadScreen struct {
 	expandedIdx     int // -1 means none expanded
 	autoSelectName  string
 	autoSelectReady bool
-
-	// Error retry state.
-	errorState loadState // phase that failed, for retry
 }
 
 // newLoadScreen creates a load screen for a given bundle reference.
+//
+// fetcher and healthCache are the production wiring; both may be nil in
+// narrowly-scoped tests, in which case the screen renders an error state on
+// Init rather than panicking.
 func newLoadScreen(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnessLister HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	namespace, slug, version string,
 	sty *styles,
 	keys *keyMap,
@@ -86,14 +113,15 @@ func newLoadScreen(
 
 	return &loadScreen{
 		searcher:      searcher,
-		puller:        puller,
+		fetcher:       fetcher,
 		harnesses:     harnessLister,
 		healthChecker: healthChecker,
+		healthCache:   healthCache,
 		ctx:           ctx,
 		namespace:     namespace,
 		slug:          slug,
 		version:       version,
-		state:         loadStateResolving,
+		state:         loadStatePreviewLoading,
 		spinner:       spin,
 		keys:          keys,
 		styles:        sty,
@@ -103,7 +131,44 @@ func newLoadScreen(
 
 // Init implements Screen.
 func (l *loadScreen) Init() tea.Cmd {
-	return tea.Batch(l.spinner.Tick, l.resolve())
+	if l.fetcher == nil {
+		l.err = repoerrors.Errorf("bundle fetcher not configured")
+		return l.spinner.Tick
+	}
+
+	l.handle = l.fetcher.Start(l.ctx, l.namespace, l.slug, l.version)
+
+	// Opportunistically warm the harness health cache so that pressing Run
+	// is instant when the user gets there.
+	if l.healthCache != nil {
+		l.healthCache.Prefetch(l.ctx)
+	}
+
+	return tea.Batch(l.spinner.Tick, l.waitFetcher())
+}
+
+// waitFetcher returns a tea.Cmd that blocks on the next fetcher state change.
+func (l *loadScreen) waitFetcher() tea.Cmd {
+	handle := l.handle
+
+	return func() tea.Msg {
+		snap, err := handle.WaitChange(l.ctx)
+		if err != nil {
+			return loadFetcherErrMsg{err: err}
+		}
+
+		return loadFetcherSnapshotMsg{snap: snap}
+	}
+}
+
+// loadFetcherSnapshotMsg carries a fetcher state change.
+type loadFetcherSnapshotMsg struct {
+	snap bundlefetch.Snapshot
+}
+
+// loadFetcherErrMsg carries a wait error (typically ctx cancellation).
+type loadFetcherErrMsg struct {
+	err error
 }
 
 // Update implements Screen.
@@ -125,20 +190,16 @@ func (l *loadScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 		return l, cmd
 
-	case loadResolvedMsg:
-		return l.handleResolved(msg)
+	case loadFetcherSnapshotMsg:
+		return l.handleSnapshot(msg.snap)
 
-	case loadPulledMsg:
-		return l.handlePulled(msg)
-
-	case harnessHealthMsg:
-		return l.handleHealthResults(msg)
-
-	case loadErrorMsg:
-		l.errorState = l.state
+	case loadFetcherErrMsg:
 		l.err = msg.err
 
 		return l, nil
+
+	case harnessHealthMsg:
+		return l.handleHealthResults(msg)
 
 	case autoSelectTickMsg:
 		if l.state == loadStateAutoSelect {
@@ -151,6 +212,85 @@ func (l *loadScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	}
 
 	return l, nil
+}
+
+// handleSnapshot reacts to a fetcher state change.
+func (l *loadScreen) handleSnapshot(snap bundlefetch.Snapshot) (Screen, tea.Cmd) {
+	l.snapshot = snap
+
+	switch snap.Status {
+	case bundlefetch.StatusError:
+		l.err = snap.Err
+		return l, nil
+
+	case bundlefetch.StatusResolving:
+		// Still resolving — keep waiting.
+		next := l.waitFetcher()
+		return l, next
+
+	case bundlefetch.StatusDownloading:
+		// Resolve done; metadata is available, body is still streaming.
+		// Move to the preview frame so the user can see the bundle.
+		if snap.Resolved != nil && l.version == "" {
+			l.version = snap.Resolved.Version
+		}
+
+		l.state = loadStatePreview
+		next := l.waitFetcher()
+
+		return l, next
+
+	case bundlefetch.StatusReady:
+		if snap.Resolved != nil && l.version == "" {
+			l.version = snap.Resolved.Version
+		}
+
+		l.state = loadStatePreview
+
+		// If the user pressed Run/Install while the download was in flight,
+		// resume that action now.
+		switch l.pendingAction {
+		case pendingRun:
+			l.pendingAction = pendingNone
+			return l.startRun()
+		case pendingInstall:
+			l.pendingAction = pendingNone
+
+			cmd := l.commitAndInstallCmd()
+
+			return l, cmd
+		case pendingNone:
+			// nothing queued
+		}
+
+		return l, nil
+	}
+
+	return l, nil
+}
+
+// commitAndInstallCmd builds the tea.Cmd that commits the cache and quits
+// with an install result.
+func (l *loadScreen) commitAndInstallCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := l.fetcher.Commit(l.handle); err != nil {
+			return loadFetcherErrMsg{err: err}
+		}
+
+		return quitWithResultMsg{result: l.buildInstallResult()}
+	}
+}
+
+// commitAndQuitCmd builds the tea.Cmd that commits the cache and quits with a
+// load result, optionally pinning a harness selection.
+func (l *loadScreen) commitAndQuitCmd(harnessName string) tea.Cmd {
+	return func() tea.Msg {
+		if err := l.fetcher.Commit(l.handle); err != nil {
+			return loadFetcherErrMsg{err: err}
+		}
+
+		return quitWithResultMsg{result: l.buildResult(harnessName)}
+	}
 }
 
 // autoSelectTickMsg fires after the auto-select flash delay.
@@ -246,74 +386,95 @@ func (l *loadScreen) toggleHarnessExpand() {
 
 func (l *loadScreen) handleRetry() (Screen, tea.Cmd) {
 	l.err = nil
+	l.state = loadStatePreviewLoading
+	l.snapshot = bundlefetch.Snapshot{}
+	l.handle = l.fetcher.Start(l.ctx, l.namespace, l.slug, l.version)
 
-	switch l.errorState {
-	case loadStateResolving:
-		l.state = loadStateResolving
-
-		return l, tea.Batch(l.spinner.Tick, l.resolve())
-	case loadStatePulling:
-		l.state = loadStatePulling
-
-		return l, tea.Batch(l.spinner.Tick, l.pull())
-	case loadStateHarnessLoading:
-		l.state = loadStateHarnessLoading
-
-		return l, tea.Batch(l.spinner.Tick, l.loadHealth())
-	default:
-		return l, nil
-	}
+	return l, tea.Batch(l.spinner.Tick, l.waitFetcher())
 }
 
 func (l *loadScreen) handleEnter() (Screen, tea.Cmd) {
 	switch l.state {
 	case loadStatePreview:
-		if l.actionFocus == 1 {
-			// Install action — skip harness selection.
-			return l, func() tea.Msg {
-				return quitWithResultMsg{result: l.buildInstallResult()}
-			}
-		}
-
-		// Run action — transition to health loading.
-		l.allProviders = l.harnesses.List()
-		if len(l.allProviders) == 0 {
-			return l, func() tea.Msg {
-				return quitWithResultMsg{result: l.buildResult("")}
-			}
-		}
-
-		l.state = loadStateHarnessLoading
-
-		return l, tea.Batch(l.spinner.Tick, l.loadHealth())
-
+		return l.handleEnterPreview()
 	case loadStateHarnessSelect:
-		// "Skip" option is at the end of the list.
-		if l.harnessCursor == len(l.healthResults) {
-			return l, func() tea.Msg {
-				return quitWithResultMsg{result: l.buildResult("")}
-			}
-		}
-
-		if l.harnessCursor < len(l.healthResults) {
-			report := l.healthResults[l.harnessCursor]
-			if !report.Installed {
-				// Toggle expand to show install hint.
-				l.expandedIdx = l.harnessCursor
-
-				return l, nil
-			}
-
-			return l, func() tea.Msg {
-				return quitWithResultMsg{result: l.buildResult(report.ProviderName)}
-			}
-		}
-
-		return l, nil
-
+		return l.handleEnterHarnessSelect()
 	default:
 		return l, nil
 	}
+}
+
+// handleEnterPreview handles Enter on the preview screen: queues an action if
+// the download is still in flight, otherwise commits the cache and proceeds.
+func (l *loadScreen) handleEnterPreview() (Screen, tea.Cmd) {
+	if l.snapshot.Status != bundlefetch.StatusReady {
+		if l.actionFocus == 1 {
+			l.pendingAction = pendingInstall
+		} else {
+			l.pendingAction = pendingRun
+		}
+
+		return l, nil
+	}
+
+	if l.actionFocus == 1 {
+		cmd := l.commitAndInstallCmd()
+		return l, cmd
+	}
+
+	return l.startRun()
+}
+
+// handleEnterHarnessSelect handles Enter on the harness select screen.
+func (l *loadScreen) handleEnterHarnessSelect() (Screen, tea.Cmd) {
+	// "Skip" option is at the end of the list.
+	if l.harnessCursor == len(l.healthResults) {
+		cmd := l.commitAndQuitCmd("")
+		return l, cmd
+	}
+
+	if l.harnessCursor >= len(l.healthResults) {
+		return l, nil
+	}
+
+	report := l.healthResults[l.harnessCursor]
+	if !report.Installed {
+		// Toggle expand to show install hint.
+		l.expandedIdx = l.harnessCursor
+		return l, nil
+	}
+
+	cmd := l.commitAndQuitCmd(report.ProviderName)
+
+	return l, cmd
+}
+
+// startRun transitions into harness selection.  If the harness health cache
+// already has a fresh snapshot, it's used immediately and we skip the loading
+// state entirely.
+func (l *loadScreen) startRun() (Screen, tea.Cmd) {
+	l.allProviders = l.harnesses.List()
+	if len(l.allProviders) == 0 {
+		// No harness providers at all — commit and quit.
+		return l, func() tea.Msg {
+			if err := l.fetcher.Commit(l.handle); err != nil {
+				return loadFetcherErrMsg{err: err}
+			}
+
+			return quitWithResultMsg{result: l.buildResult("")}
+		}
+	}
+
+	// Cache hit — skip the loading state.
+	if l.healthCache != nil {
+		if reports, ok := l.healthCache.Get(); ok {
+			return l.handleHealthResults(harnessHealthMsg{results: reports})
+		}
+	}
+
+	l.state = loadStateHarnessLoading
+
+	return l, tea.Batch(l.spinner.Tick, l.loadHealth())
 }
 
 func (l *loadScreen) handleHealthResults(msg harnessHealthMsg) (Screen, tea.Cmd) {
@@ -366,10 +527,16 @@ func (l *loadScreen) handleHealthResults(msg harnessHealthMsg) (Screen, tea.Cmd)
 
 func (l *loadScreen) loadHealth() tea.Cmd {
 	return func() tea.Msg {
-		if l.healthChecker != nil {
-			results := l.healthChecker.CheckAllHealth(l.ctx)
+		// Prefer the shared cache so concurrent waiters dedupe.
+		if l.healthCache != nil {
+			reports, err := l.healthCache.Wait(l.ctx)
+			if err == nil {
+				return harnessHealthMsg{results: reports}
+			}
+		}
 
-			return harnessHealthMsg{results: results}
+		if l.healthChecker != nil {
+			return harnessHealthMsg{results: l.healthChecker.CheckAllHealth(l.ctx)}
 		}
 
 		// Fallback: build minimal reports from Available() check.
@@ -389,27 +556,6 @@ func (l *loadScreen) loadHealth() tea.Cmd {
 // harnessHealthMsg carries health check results from the async command.
 type harnessHealthMsg struct {
 	results []*harness.HealthReport
-}
-
-func (l *loadScreen) handleResolved(msg loadResolvedMsg) (Screen, tea.Cmd) {
-	l.detail = msg.detail
-	l.version = msg.detail.LatestVersion
-	l.state = loadStatePulling
-
-	return l, tea.Batch(l.spinner.Tick, l.pull())
-}
-
-func (l *loadScreen) handlePulled(msg loadPulledMsg) (Screen, tea.Cmd) {
-	l.bundle = msg.bundle
-	l.state = loadStatePreview
-
-	// Compute per-asset sizes from content length.
-	l.assetSizes = make(map[string]int64, len(msg.bundle.Assets))
-	for i := range msg.bundle.Assets {
-		l.assetSizes[msg.bundle.Assets[i].LogicalPath] = int64(len(msg.bundle.Assets[i].ContentText))
-	}
-
-	return l, nil
 }
 
 func (l *loadScreen) buildResult(harnessName string) *Result {
@@ -432,25 +578,22 @@ func (l *loadScreen) View() string {
 	}
 
 	panelTitle := "Load > " + ref
+	header := renderScreenHeader(l.styles, l.width, "", panelTitle)
 
 	if l.err != nil {
 		errContent := l.styles.errStyle.Render("Error: "+l.err.Error()) + "\n\n" +
 			l.styles.muted.Render("Press r to retry")
 		panel := renderPanel(l.styles, panelTitle, errContent, l.panelWidth(), true)
 		view.WriteString(panel)
-		view.WriteString("\n")
-		l.writeHelp(&view, "r", "retry", "esc", "back", "q", "quit")
 
-		return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
+		return renderScreenWithHeader(l.width, l.height, header, view.String(), l.renderFooter())
 	}
 
 	switch l.state {
-	case loadStateResolving, loadStatePulling, loadStateHarnessLoading:
-		content := l.renderProgressSteps()
+	case loadStatePreviewLoading:
+		content := l.renderResolving()
 		panel := renderPanel(l.styles, panelTitle, content, l.panelWidth(), true)
 		view.WriteString(panel)
-
-		return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
 
 	case loadStatePreview:
 		if classifyLayout(l.width) == layoutTwoPanel {
@@ -461,15 +604,15 @@ func (l *loadScreen) View() string {
 			view.WriteString(panel)
 		}
 
-		view.WriteString("\n")
-		l.writeHelp(&view, "tab/\u2190/\u2192", "switch", "enter", "select", "esc", "back", "q", "quit")
+	case loadStateHarnessLoading:
+		content := l.styles.stepActive.Render(l.spinner.View() + "  Checking harnesses…")
+		panel := renderPanel(l.styles, panelTitle, content, l.panelWidth(), true)
+		view.WriteString(panel)
 
 	case loadStateHarnessSelect:
 		content := l.renderHarnessContent()
 		panel := renderPanel(l.styles, panelTitle, content, l.panelWidth(), true)
 		view.WriteString(panel)
-		view.WriteString("\n")
-		l.writeHelp(&view, "\u2191\u2193", "navigate", "tab", "details", "enter", "select", "esc", "back", "q", "quit")
 
 	case loadStateAutoSelect:
 		content := l.renderAutoSelectContent()
@@ -477,7 +620,50 @@ func (l *loadScreen) View() string {
 		view.WriteString(panel)
 	}
 
-	return lipgloss.Place(l.width, l.height, lipgloss.Center, lipgloss.Center, view.String())
+	return renderScreen(l.width, l.height, view.String(), l.renderFooter())
+}
+
+func (l *loadScreen) renderFooter() string {
+	var bindings []key.Binding
+
+	switch {
+	case l.err != nil:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	case l.state == loadStatePreview:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("tab", "left", "right"), key.WithHelp("tab/←/→", "switch")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	case l.state == loadStateHarnessSelect:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "navigate")),
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "details")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	default:
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
+
+	width := l.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(l.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // panelWidth returns the panel content width for the current terminal size.
@@ -485,16 +671,21 @@ func (l *loadScreen) panelWidth() int {
 	return clampMenuWidth(l.width)
 }
 
+// renderResolving renders the brief inline spinner shown during the initial
+// resolve call.
+func (l *loadScreen) renderResolving() string {
+	return l.spinner.View() + "  " + l.styles.stepActive.Render("Loading bundle…")
+}
+
 // renderPreviewContent builds the inner content for the preview panel (single-panel layout).
 func (l *loadScreen) renderPreviewContent() string {
 	var view strings.Builder
 
-	// Status indicator.
-	view.WriteString(l.styles.success.Render("\u25CF") + " " + l.styles.title.Render("Bundle ready"))
+	view.WriteString(l.renderStatusLine())
 	view.WriteString("\n\n")
 
-	if l.detail != nil {
-		title := l.detail.DisplayName
+	if resolved := l.snapshot.Resolved; resolved != nil {
+		title := resolved.Name
 		if title == "" {
 			title = l.namespace + "/" + l.slug
 		}
@@ -502,13 +693,13 @@ func (l *loadScreen) renderPreviewContent() string {
 		view.WriteString(l.styles.title.Render(title))
 		view.WriteString("\n")
 
-		if l.detail.Summary != "" {
-			view.WriteString(l.styles.muted.Render(l.detail.Summary))
+		if resolved.Description != "" {
+			view.WriteString(l.styles.muted.Render(resolved.Description))
 			view.WriteString("\n")
 		}
 	}
 
-	if l.bundle != nil {
+	if l.snapshot.Resolved != nil {
 		view.WriteString("\n")
 		l.renderAssetGroups(&view, l.panelWidth()-panelContentOffset)
 		view.WriteString("\n")
@@ -519,64 +710,19 @@ func (l *loadScreen) renderPreviewContent() string {
 	return view.String()
 }
 
-// renderProgressSteps renders a stepped progress indicator for the loading pipeline.
-func (l *loadScreen) renderProgressSteps() string {
-	var view strings.Builder
-
-	ref := l.namespace + "/" + l.slug
-
-	type step struct {
-		done   bool
-		active bool
-		label  string
-		detail string
+// renderStatusLine returns the colored bullet + status text shown at the top
+// of the preview panel.
+func (l *loadScreen) renderStatusLine() string {
+	switch l.snapshot.Status {
+	case bundlefetch.StatusReady:
+		return l.styles.success.Render("\u25CF") + " " + l.styles.title.Render("Bundle ready")
+	case bundlefetch.StatusDownloading:
+		return l.spinner.View() + " " + l.styles.stepActive.Render("Downloading "+formatBytes(l.snapshot.BytesTotal)+"…")
+	case bundlefetch.StatusError:
+		return l.styles.errStyle.Render("\u25CF") + " " + l.styles.errStyle.Render("Error")
+	default:
+		return l.spinner.View() + " " + l.styles.stepActive.Render("Loading…")
 	}
-
-	steps := []step{
-		{
-			done:   l.state > loadStateResolving,
-			active: l.state == loadStateResolving,
-			label:  "Resolving bundle",
-			detail: ref,
-		},
-		{
-			done:   l.state > loadStatePulling,
-			active: l.state == loadStatePulling,
-			label:  "Downloading assets",
-		},
-		{
-			done:   false,
-			active: l.state == loadStateHarnessLoading,
-			label:  "Checking harnesses",
-		},
-	}
-
-	// Fill in details for completed steps.
-	if l.state > loadStateResolving && l.detail != nil {
-		steps[0].detail = l.namespace + "/" + l.slug + " v" + l.detail.LatestVersion
-	}
-
-	if l.state > loadStatePulling && l.bundle != nil {
-		steps[1].detail = fmt.Sprintf("%d assets", len(l.bundle.Assets))
-	}
-
-	for _, entry := range steps {
-		switch {
-		case entry.done:
-			line := l.styles.stepDone.Render("\u2713") + "  " + l.styles.stepDone.Render(entry.label)
-			if entry.detail != "" {
-				line += "  " + l.styles.muted.Render(entry.detail)
-			}
-
-			view.WriteString(line + "\n")
-		case entry.active:
-			view.WriteString(l.spinner.View() + "  " + l.styles.stepActive.Render(entry.label+"...") + "\n")
-		default:
-			view.WriteString(l.styles.stepPending.Render("\u25CB") + "  " + l.styles.stepPending.Render(entry.label) + "\n")
-		}
-	}
-
-	return view.String()
 }
 
 // renderPreviewTwoPanel renders side-by-side bundle info and assets panels.
@@ -591,8 +737,8 @@ func (l *loadScreen) renderPreviewTwoPanel(panelTitle string) string {
 	rightContent := l.renderPreviewAssets()
 
 	assetCount := 0
-	if l.bundle != nil {
-		assetCount = len(l.bundle.Assets)
+	if l.snapshot.Resolved != nil {
+		assetCount = len(l.snapshot.Resolved.Manifest.Layers)
 	}
 
 	rightTitle := fmt.Sprintf("Assets (%d)", assetCount)
@@ -607,12 +753,11 @@ func (l *loadScreen) renderPreviewTwoPanel(panelTitle string) string {
 func (l *loadScreen) renderPreviewMeta() string {
 	var view strings.Builder
 
-	// Status indicator.
-	view.WriteString(l.styles.success.Render("\u25CF") + " " + l.styles.title.Render("Bundle ready"))
+	view.WriteString(l.renderStatusLine())
 	view.WriteString("\n\n")
 
-	if l.detail != nil {
-		title := l.detail.DisplayName
+	if resolved := l.snapshot.Resolved; resolved != nil {
+		title := resolved.Name
 		if title == "" {
 			title = l.namespace + "/" + l.slug
 		}
@@ -620,8 +765,8 @@ func (l *loadScreen) renderPreviewMeta() string {
 		view.WriteString(l.styles.title.Render(title))
 		view.WriteString("\n")
 
-		if l.detail.Summary != "" {
-			view.WriteString(l.styles.muted.Render(l.detail.Summary))
+		if resolved.Description != "" {
+			view.WriteString(l.styles.muted.Render(resolved.Description))
 			view.WriteString("\n")
 		}
 
@@ -634,26 +779,8 @@ func (l *loadScreen) renderPreviewMeta() string {
 			view.WriteString(value + "\n")
 		}
 
-		writeField("Version", l.version)
-
-		publisher := l.detail.Publisher.Handle
-		if l.detail.Publisher.TrustTier == trustTierVerified {
-			publisher += " " + l.styles.success.Render("\u2713")
-		}
-
-		writeField("Publisher", publisher)
-
-		if l.detail.License != "" {
-			writeField("License", l.detail.License)
-		}
-
-		if l.detail.DownloadsTotal > 0 {
-			writeField("Downloads", formatCount(l.detail.DownloadsTotal))
-		}
-
-		if l.detail.StarsCount > 0 {
-			writeField("Stars", formatCount(l.detail.StarsCount))
-		}
+		writeField("Version", resolved.Version)
+		writeField("Namespace", resolved.Namespace)
 	}
 
 	view.WriteString("\n")
@@ -664,7 +791,7 @@ func (l *loadScreen) renderPreviewMeta() string {
 
 // renderPreviewAssets renders the asset inventory for the right panel.
 func (l *loadScreen) renderPreviewAssets() string {
-	if l.bundle == nil {
+	if l.snapshot.Resolved == nil {
 		return l.styles.muted.Render("No assets")
 	}
 
@@ -677,38 +804,48 @@ func (l *loadScreen) renderPreviewAssets() string {
 }
 
 // renderAssetGroups writes grouped, collapsed asset listings with per-category sizes.
+// Source of truth is the resolve manifest, so this works the moment the
+// resolve call returns — no asset bodies needed.
 func (l *loadScreen) renderAssetGroups(view *strings.Builder, contentWidth int) {
-	if l.bundle == nil {
+	if l.snapshot.Resolved == nil {
 		return
 	}
 
-	// Group assets by type.
-	assetsByType := make(map[string][]string)
+	layers := l.snapshot.Resolved.Manifest.Layers
 
-	for idx := range l.bundle.Assets {
-		asset := &l.bundle.Assets[idx]
-		assetsByType[asset.AssetType] = append(assetsByType[asset.AssetType], asset.LogicalPath)
+	// Group layers by asset type.
+	type groupedLayer struct {
+		path string
+		size int64
 	}
 
-	types := make([]string, 0, len(assetsByType))
-	for t := range assetsByType {
+	groups := make(map[string][]groupedLayer)
+
+	for _, layer := range layers {
+		groups[layer.AssetType] = append(groups[layer.AssetType], groupedLayer{
+			path: layer.LogicalPath,
+			size: layer.SizeBytes,
+		})
+	}
+
+	types := make([]string, 0, len(groups))
+	for t := range groups {
 		types = append(types, t)
 	}
 
 	sort.Strings(types)
 
 	for _, assetType := range types {
-		paths := assetsByType[assetType]
+		entries := groups[assetType]
 
-		// Compute total size for this category.
 		var totalSize int64
-		for _, p := range paths {
-			totalSize += l.assetSizes[p]
+		for _, e := range entries {
+			totalSize += e.size
 		}
 
 		// Category header: "Skills (11)    158.5 KB"
 		label := assetTypeLabel(assetType)
-		countStr := fmt.Sprintf("(%d)", len(paths))
+		countStr := fmt.Sprintf("(%d)", len(entries))
 		leftPart := label + " " + countStr
 		sizeStr := formatBytes(totalSize)
 
@@ -720,14 +857,14 @@ func (l *loadScreen) renderAssetGroups(view *strings.Builder, contentWidth int) 
 		view.WriteString(header + "\n")
 
 		// Show up to previewMaxAssetsPerType items.
-		showCount := min(previewMaxAssetsPerType, len(paths))
-		for _, path := range paths[:showCount] {
-			view.WriteString("  " + l.styles.muted.Render("\u25CF "+path) + "\n")
+		showCount := min(previewMaxAssetsPerType, len(entries))
+		for _, entry := range entries[:showCount] {
+			view.WriteString("  " + l.styles.muted.Render("\u25CF "+entry.path) + "\n")
 		}
 
 		// "+N more" collapse.
-		if len(paths) > previewMaxAssetsPerType {
-			remaining := len(paths) - previewMaxAssetsPerType
+		if len(entries) > previewMaxAssetsPerType {
+			remaining := len(entries) - previewMaxAssetsPerType
 			view.WriteString("  " + l.styles.muted.Render(fmt.Sprintf("+%d more", remaining)) + "\n")
 		}
 
@@ -735,7 +872,8 @@ func (l *loadScreen) renderAssetGroups(view *strings.Builder, contentWidth int) 
 	}
 }
 
-// renderActionButtons renders the Run/Install action buttons.
+// renderActionButtons renders the Run/Install action buttons plus a contextual
+// hint that surfaces an in-flight download or queued action.
 func (l *loadScreen) renderActionButtons(view *strings.Builder) {
 	runLabel := "Run"
 	installLabel := "Install"
@@ -755,14 +893,27 @@ func (l *loadScreen) renderActionButtons(view *strings.Builder) {
 	view.WriteString(lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, btnRow) + "\n")
 
 	// Context-sensitive help text.
-	var hint string
-	if l.actionFocus == 0 {
-		hint = l.styles.muted.Render("launch bundle with a harness")
-	} else {
-		hint = l.styles.muted.Render("copy assets into your project")
+	hint := l.actionButtonHint()
+	view.WriteString(lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, hint) + "\n")
+}
+
+// actionButtonHint returns the help text rendered below the Run/Install buttons.
+// It surfaces an in-flight download or a queued action so the user understands
+// why pressing Enter did not advance immediately.
+func (l *loadScreen) actionButtonHint() string {
+	if l.pendingAction != pendingNone {
+		return l.styles.muted.Render("Finishing download… will continue automatically")
 	}
 
-	view.WriteString(lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, hint) + "\n")
+	if l.snapshot.Status == bundlefetch.StatusDownloading {
+		return l.styles.muted.Render("Downloading in background — Run/Install will wait if pressed")
+	}
+
+	if l.actionFocus == 0 {
+		return l.styles.muted.Render("launch bundle with a harness")
+	}
+
+	return l.styles.muted.Render("copy assets into your project")
 }
 
 // buildInstallResult creates a result for the install action.
@@ -924,54 +1075,6 @@ func (l *loadScreen) renderInstallHint(view *strings.Builder, providerName strin
 	if prov.Spec.Status.InstallHint != "" {
 		view.WriteString("      " + l.styles.muted.Render(prov.Spec.Status.InstallHint) + "\n")
 	}
-}
-
-func (l *loadScreen) writeHelp(view *strings.Builder, pairs ...string) {
-	for i := 0; i+1 < len(pairs); i += 2 {
-		if i > 0 {
-			view.WriteString("  ")
-		}
-
-		view.WriteString(l.styles.hintKey.Render(pairs[i]))
-		view.WriteString(l.styles.hintDesc.Render(" " + pairs[i+1]))
-	}
-}
-
-func (l *loadScreen) resolve() tea.Cmd {
-	return func() tea.Msg {
-		detail, err := l.searcher.GetHubBundleDetail(l.ctx, l.namespace, l.slug)
-		if err != nil {
-			return loadErrorMsg{err: err}
-		}
-
-		return loadResolvedMsg{detail: detail}
-	}
-}
-
-func (l *loadScreen) pull() tea.Cmd {
-	return func() tea.Msg {
-		bundle, err := l.puller.PullPublicBundleVersion(l.ctx, l.namespace, l.slug, l.version)
-		if err != nil {
-			return loadErrorMsg{err: err}
-		}
-
-		return loadPulledMsg{bundle: bundle}
-	}
-}
-
-// loadResolvedMsg carries the resolved bundle detail.
-type loadResolvedMsg struct {
-	detail *client.HubBundleDetail
-}
-
-// loadPulledMsg carries the pulled bundle content.
-type loadPulledMsg struct {
-	bundle *client.PullBundleResponse
-}
-
-// loadErrorMsg carries a load-phase error.
-type loadErrorMsg struct {
-	err error
 }
 
 // assetTypeLabel converts a snake_case asset type to a human-friendly label.

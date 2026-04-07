@@ -336,16 +336,20 @@ func TestHomeScreenView_TwoPanel(t *testing.T) {
 
 	view := screen.View()
 
-	if !strings.Contains(view, "musher v1.0.0") {
-		t.Error("expected view to contain versioned title")
+	if !strings.Contains(view, "musher") {
+		t.Error("expected view to contain brand title")
 	}
 
-	if !strings.Contains(view, "Status") {
-		t.Error("expected view to contain 'Status' panel title")
+	if !strings.Contains(view, "v1.0.0") {
+		t.Error("expected view to contain version slug")
 	}
 
-	if !strings.Contains(view, "Auth") {
-		t.Error("expected view to contain 'Auth' section in context panel")
+	if !strings.Contains(view, "Environment") {
+		t.Error("expected view to contain 'Environment' panel title")
+	}
+
+	if !strings.Contains(view, "Menu") {
+		t.Error("expected view to contain 'Menu' panel title")
 	}
 
 	if !strings.Contains(view, "tab") {
@@ -622,19 +626,17 @@ func TestHomeScreenValidateDescription(t *testing.T) {
 	}
 }
 
-func TestHomeScreenSlashOpensSearch(t *testing.T) {
+// TestHomeScreenSlashIsHandledByDispatcher confirms the home screen does
+// NOT consume `/` itself — the App-level dispatcher intercepts it as the
+// global palette key, so home returns no command for that keypress.
+func TestHomeScreenSlashIsHandledByDispatcher(t *testing.T) {
 	t.Parallel()
 
 	screen, _, _ := newTestHomeScreen(nil)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: '/'})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd for / key")
-	}
-
-	msg := cmd()
-	if _, ok := msg.(pushScreenMsg); !ok {
-		t.Errorf("expected pushScreenMsg, got %T", msg)
+	if cmd != nil {
+		t.Errorf("expected home to ignore / (palette dispatcher owns it), got cmd %T", cmd())
 	}
 }
 

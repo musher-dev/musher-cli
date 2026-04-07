@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/musher-dev/musher-cli/internal/env"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
@@ -16,7 +17,6 @@ import (
 
 const (
 	keyringUser = "api-key"
-	envVarName  = "MUSHER_API_KEY"
 )
 
 // CredentialSource indicates where credentials were found.
@@ -33,7 +33,7 @@ const (
 // GetCredentials returns the API key and its source.
 // apiURL is used to determine the host-scoped keyring service and credential file.
 func GetCredentials(apiURL string) (source CredentialSource, apiKey string) {
-	if key := os.Getenv(envVarName); key != "" {
+	if key := env.Get(env.APIKey); key != "" {
 		return SourceEnv, key
 	}
 

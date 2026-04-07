@@ -9,7 +9,6 @@ type keyMap struct {
 	Enter   key.Binding
 	Back    key.Binding
 	Quit    key.Binding
-	Search  key.Binding
 	Tab     key.Binding
 	Load    key.Binding
 	Status  key.Binding
@@ -38,10 +37,6 @@ func defaultKeyMap() keyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
-		),
-		Search: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
 		),
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),

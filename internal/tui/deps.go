@@ -11,6 +11,8 @@ import (
 	"github.com/musher-dev/musher-cli/internal/client"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/harness"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 // BundleSearcher searches for bundles on the hub.
@@ -184,6 +186,8 @@ type HomeDeps struct {
 	Packer           BundlePacker          // nil when cache unavailable.
 	DefWriter        BundleDefWriter       // nil when workdir is read-only.
 	PublisherBundles PublisherBundleLister // nil when publisher listing unavailable.
+	Fetcher          *bundlefetch.Fetcher  // nil when cache/registry unavailable; required for the load screen.
+	HealthCache      *healthcache.Cache    // nil when no harness checker; populated at TUI startup.
 	APIURL           string                // API endpoint for auth operations.
 	CACertFile       string                // Optional CA cert for HTTP client.
 	Version          string

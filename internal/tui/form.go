@@ -63,11 +63,6 @@ func statusIcon(sty *styles, state ValState) string {
 	}
 }
 
-// renderHint renders a single key hint (e.g. "enter select").
-func renderHint(sty *styles, key, desc string) string {
-	return sty.hintKey.Render(key) + " " + sty.hintDesc.Render(desc)
-}
-
 // formSection groups form fields under a section header.
 type formSection struct {
 	name   string

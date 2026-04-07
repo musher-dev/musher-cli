@@ -1,12 +1,12 @@
 package bundledef
 
 import (
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 // RemoveResult describes what happened during asset removal.
@@ -34,7 +34,7 @@ func RemoveAssets(dir string, identifiers []string) (*RemoveResult, error) {
 		return nil, err
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, []byte(content), 0o644); err != nil {
 		return nil, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
@@ -55,7 +55,7 @@ func RemoveAllAssets(dir string) (int, error) {
 		return 0, err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return 0, repoerrors.Errorf("read bundle definition: %w", err)
 	}
@@ -74,7 +74,7 @@ func RemoveAllAssets(dir string) (int, error) {
 	content = replaceAssetsSection(content)
 	content = strings.TrimRight(content, "\n") + "\n"
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: bundle definition is not sensitive
+	if err := safeio.WriteFile(path, []byte(content), 0o644); err != nil {
 		return 0, repoerrors.Errorf("write bundle definition: %w", err)
 	}
 
@@ -89,7 +89,7 @@ func renderRemove(dir string, identifiers []string) (string, *RemoveResult, erro
 		return "", nil, err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path constructed from known directory + resolved filename
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		return "", nil, repoerrors.Errorf("read bundle definition: %w", err)
 	}

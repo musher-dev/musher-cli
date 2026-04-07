@@ -27,6 +27,7 @@ import (
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
+	"github.com/musher-dev/musher-cli/internal/env"
 	"github.com/musher-dev/musher-cli/internal/paths"
 	"github.com/musher-dev/musher-cli/internal/safeio"
 	"github.com/musher-dev/musher-cli/internal/update"
@@ -423,7 +424,7 @@ func checkProxyEnvironment(context.Context) Result {
 	var active []string
 
 	for _, key := range keys {
-		if strings.TrimSpace(os.Getenv(key)) != "" {
+		if strings.TrimSpace(env.Get(key)) != "" {
 			active = append(active, key)
 		}
 	}

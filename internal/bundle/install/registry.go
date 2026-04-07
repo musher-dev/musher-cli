@@ -12,6 +12,7 @@ import (
 	"time"
 
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/safeio"
 )
 
 const stateFile = "installed.json"
@@ -106,7 +107,7 @@ func (r *Registry) Remove(reference, harness string) error {
 func (r *Registry) load() ([]Entry, error) {
 	path := filepath.Join(r.dir, stateFile)
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is under project dir, not user input
+	data, err := safeio.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -124,7 +125,7 @@ func (r *Registry) load() ([]Entry, error) {
 }
 
 func (r *Registry) save(entries []Entry) error {
-	if err := os.MkdirAll(r.dir, 0o700); err != nil {
+	if err := safeio.MkdirAll(r.dir, 0o700); err != nil {
 		return repoerrors.Errorf("create .musher directory: %w", err)
 	}
 
@@ -134,7 +135,7 @@ func (r *Registry) save(entries []Entry) error {
 	}
 
 	path := filepath.Join(r.dir, stateFile)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := safeio.WriteFile(path, data, 0o600); err != nil {
 		return repoerrors.Errorf("write installed bundles: %w", err)
 	}
 

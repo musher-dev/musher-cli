@@ -30,6 +30,7 @@ var (
 		moduleRoot + "/internal/bundledef":     true,
 		moduleRoot + "/internal/client":        true,
 		moduleRoot + "/internal/config":        true,
+		moduleRoot + "/internal/env":           true,
 		moduleRoot + "/internal/errors":        true,
 		moduleRoot + "/internal/harness":       true,
 		moduleRoot + "/internal/oci":           true,
@@ -462,6 +463,91 @@ func TestConfirmCallersHandleNonInteractiveMode(t *testing.T) {
 
 		if !fileContainsIdentifier(file, "CanPrompt") && !fileContainsIdentifier(file, "NoInput") && !fileContainsIdentifier(file, "yes") {
 			t.Errorf("%s uses Confirm without explicit non-interactive handling", path)
+		}
+	}
+}
+
+// TestCmdUsesSafeio asserts that cmd/musher does not call file-I/O functions
+// on the os package directly — they must go through internal/safeio so that
+// permission, error wrapping, and gosec exemptions live in one place.
+func TestCmdUsesSafeio(t *testing.T) {
+	forbidden := []string{"ReadFile", "WriteFile", "MkdirAll", "Create", "OpenFile"}
+
+	for path, file := range parseGoFiles(t, "cmd/musher") {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+
+		for _, name := range forbidden {
+			if containsSelectorCall(file, "os", name) {
+				t.Errorf("%s uses os.%s; use internal/safeio instead", path, name)
+			}
+		}
+	}
+}
+
+// TestEnvVarsCentralized asserts that production code reads environment
+// variables only through internal/env (or via internal/config which binds env
+// vars through viper). Test files and the env package itself are exempt.
+func TestEnvVarsCentralized(t *testing.T) {
+	envPkgPrefix := filepath.Join("internal", "env") + string(filepath.Separator)
+
+	for _, dir := range []string{"cmd/musher", "internal"} {
+		for path, file := range parseGoTree(t, dir) {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+
+			rel, err := filepath.Rel(repoRoot(t), path)
+			if err == nil && strings.HasPrefix(rel, envPkgPrefix) {
+				continue
+			}
+
+			for _, name := range []string{"Getenv", "LookupEnv"} {
+				if containsSelectorCall(file, "os", name) {
+					t.Errorf("%s uses os.%s; use internal/env instead", path, name)
+				}
+			}
+		}
+	}
+}
+
+// TestCmdReturnsCLIError asserts that cmd/musher RunE functions surface
+// errors through internal/errors (CLIError) rather than constructing raw
+// stdlib errors. This is a heuristic check: it forbids errors.New and
+// errors.Unwrap-style construction inside cmd files. errors.Is / errors.As
+// remain allowed because they only inspect, never construct.
+//
+// This check is complemented at runtime by the cmd layer always wrapping
+// foreign errors via clierrors.Wrap before returning them from RunE.
+func TestCmdReturnsCLIError(t *testing.T) {
+	for path, file := range parseGoFiles(t, "cmd/musher") {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+
+		// Walk function bodies only — package-level `var X = errors.New(...)`
+		// declarations are sentinel errors used with errors.Is checks and are
+		// permitted (they never escape to the user as the *primary* return).
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+
+				if selectorMatches(call.Fun, "errors", "New") {
+					pos := fn.Name.Name
+					t.Errorf("%s: function %s constructs a stdlib errors.New; use internal/errors (clierrors.New / Wrap / Errorf) so cmd layer returns CLIError", path, pos)
+				}
+
+				return true
+			})
 		}
 	}
 }

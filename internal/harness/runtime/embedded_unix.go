@@ -31,9 +31,6 @@ func newEmbedded() Executor {
 	return &Embedded{}
 }
 
-// scrollLinesPerTick is how many lines each mouse wheel tick scrolls.
-const scrollLinesPerTick = 3
-
 // embeddedRuntime holds all mutable state for a single embedded session.
 type embeddedRuntime struct {
 	screen  tcell.Screen
@@ -102,7 +99,11 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 		vt10x.WithWriter(ptyFile),
 	)
 
-	screen.EnableMouse()
+	// Intentionally do NOT call screen.EnableMouse: any mouse capture mode
+	// (including SGR 1002 button+drag) routes click-and-drag to the application
+	// and prevents the terminal from performing its own native text selection.
+	// We keep selection working out of the box at the cost of mouse-wheel
+	// scrollback; keyboard scrollback (PgUp/PgDn/Home/End) remains available.
 
 	runtime := &embeddedRuntime{
 		screen:     screen,
@@ -307,8 +308,6 @@ func (r *embeddedRuntime) eventLoop(ctx context.Context) {
 			r.handleResize(typed)
 		case *tcell.EventKey:
 			r.handleKey(typed)
-		case *tcell.EventMouse:
-			r.handleMouse(typed)
 		}
 	}
 }
@@ -461,49 +460,6 @@ func (r *embeddedRuntime) handleScrollKey(event *tcell.EventKey) bool {
 	}
 
 	return false
-}
-
-// handleMouse processes mouse events for scroll wheel support.
-func (r *embeddedRuntime) handleMouse(event *tcell.EventMouse) {
-	// Check if child owns the mouse (alt screen or mouse capture mode).
-	r.term.Lock()
-	mode := r.term.Mode()
-	r.term.Unlock()
-
-	isAltScreen := mode&vt10x.ModeAltScreen != 0
-	isMouseCapture := mode&vt10x.ModeMouseMask != 0
-
-	if isAltScreen || isMouseCapture {
-		// Forward mouse events to child PTY (not implemented — requires
-		// encoding mouse events as escape sequences for the child).
-		return
-	}
-
-	r.uiMu.Lock()
-	defer r.uiMu.Unlock()
-
-	buttons := event.Buttons()
-
-	switch {
-	case buttons&tcell.WheelUp != 0:
-		if r.scrollback.Len() == 0 {
-			return
-		}
-
-		r.followTail = false
-		r.viewportTop -= scrollLinesPerTick
-		r.clampViewport()
-		r.draw()
-
-	case buttons&tcell.WheelDown != 0:
-		if r.scrollback.Len() == 0 {
-			return
-		}
-
-		r.viewportTop += scrollLinesPerTick
-		r.clampViewport()
-		r.draw()
-	}
 }
 
 // keyToBytes converts a tcell key event to the corresponding byte sequence.

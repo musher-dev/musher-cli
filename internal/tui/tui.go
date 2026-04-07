@@ -3,6 +3,14 @@
 // Design note on output interaction: when TUI is active, output.Writer calls
 // must not write directly to stdout (they would corrupt the bubbletea display).
 // All rendering goes through bubbletea's View() method.
+//
+// Error convention: errors that flow through tea.Msg values inside the
+// bubbletea program use stdlib errors.New / fmt.Errorf — they are internal
+// state, not user-facing diagnostics. Errors that escape the program back to
+// the caller in cmd/musher (i.e. the value returned by runScreen / runApp)
+// MUST be wrapped as *internal/errors.CLIError so the cmd layer can render
+// them with the standard exit code, hint, and error code surface. The wrap
+// happens at the program boundary (see runApp), not inside individual screens.
 package tui
 
 import (
@@ -11,14 +19,22 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
+	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
 	"github.com/musher-dev/musher-cli/internal/transcript"
+	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 var errUnexpectedModel = errors.New("unexpected model type from TUI program")
 
 // runScreen wraps a screen in an App, runs the BubbleTea program, and extracts the result.
 func runScreen(screen Screen) (*Result, error) {
-	app := NewApp(screen)
+	return runApp(NewApp(screen))
+}
+
+// runApp executes a pre-configured App. Use this overload when the caller
+// needs to install a palette factory or other App-level wiring before the
+// program starts.
+func runApp(app *App) (*Result, error) {
 	p := tea.NewProgram(app)
 
 	finalModel, err := p.Run()
@@ -69,20 +85,56 @@ func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
 	return runScreen(newHomeScreen(ctx, deps, &sty, &keys))
 }
 
+// RunHomeWithPalette launches the polished home screen as the root surface
+// and installs the command palette as a modal-over-home overlay reachable
+// from any pushed screen via `:`, `ctrl+k`, or `ctrl+p`. This is the entry
+// point used by bare `musher` invocation.
+func RunHomeWithPalette(ctx context.Context, homeDeps *HomeDeps, isAuthed func() bool) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+
+	cmdDeps := &CommandDeps{
+		Ctx:      ctx,
+		HomeDeps: homeDeps,
+		Styles:   &sty,
+		Keys:     &keys,
+		IsAuthed: isAuthed,
+	}
+
+	global := buildGlobalCommands(cmdDeps)
+
+	makePaletteDeps := func() *PaletteDeps {
+		return &PaletteDeps{
+			Global:  global,
+			Resume:  loadResumeTarget(homeDeps.WorkDir),
+			LoadMRU: loadPaletteMRU,
+			SaveMRU: savePaletteMRU,
+			Styles:  &sty,
+		}
+	}
+
+	home := newHomeScreen(ctx, homeDeps, &sty, &keys)
+	app := NewApp(home)
+	app.SetPaletteFactory(func() Screen { return NewPalette(makePaletteDeps()) })
+
+	return runApp(app)
+}
+
 // RunSearch launches the TUI in search mode and returns the user's selection.
 // Returns nil result if the user quit without selecting a bundle.
 func RunSearch(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnesses HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	initialQuery string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	return runScreen(newSearchScreen(ctx, searcher, puller, harnesses, healthChecker, initialQuery, &sty, &keys))
+	return runScreen(newSearchScreen(ctx, searcher, fetcher, harnesses, healthChecker, healthCache, initialQuery, &sty, &keys))
 }
 
 // RunNewBundle launches the TUI in new bundle creation mode.
@@ -126,13 +178,14 @@ func RunHistoryDetail(ctx context.Context, session *transcript.Session, events [
 func RunLoad(
 	ctx context.Context,
 	searcher BundleSearcher,
-	puller BundlePuller,
+	fetcher *bundlefetch.Fetcher,
 	harnessLister HarnessLister,
 	healthChecker HarnessHealthChecker,
+	healthCache *healthcache.Cache,
 	namespace, slug, version string,
 ) (*Result, error) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	return runScreen(newLoadScreen(ctx, searcher, puller, harnessLister, healthChecker, namespace, slug, version, &sty, &keys))
+	return runScreen(newLoadScreen(ctx, searcher, fetcher, harnessLister, healthChecker, healthCache, namespace, slug, version, &sty, &keys))
 }

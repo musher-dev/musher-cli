@@ -337,7 +337,10 @@ func TestRefInputScreenPanelWidth(t *testing.T) {
 	}
 }
 
-func TestRefInputScreenSlashPushesSearch(t *testing.T) {
+// TestRefInputScreenSlashIsHandledByDispatcher confirms that ref_input
+// does NOT consume `/` itself — the App-level dispatcher intercepts it as
+// the global palette key and never delivers it to the screen.
+func TestRefInputScreenSlashIsHandledByDispatcher(t *testing.T) {
 	t.Parallel()
 
 	sty := newStyles(true)
@@ -346,19 +349,14 @@ func TestRefInputScreenSlashPushesSearch(t *testing.T) {
 	screen := newRefInputScreen(t.Context(), deps, &sty, &keys)
 
 	_, cmd := screen.Update(tea.KeyPressMsg{Code: -1, Text: "/"})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd for / key")
-	}
-
-	msg := cmd()
-
-	pushMsg, ok := msg.(pushScreenMsg)
-	if !ok {
-		t.Fatalf("expected pushScreenMsg, got %T", msg)
-	}
-
-	if _, ok := pushMsg.screen.(*searchScreen); !ok {
-		t.Errorf("expected *searchScreen, got %T", pushMsg.screen)
+	if cmd != nil {
+		// Cursor blink commands are emitted for any keypress that reaches
+		// the textinput; what matters is that no pushScreenMsg is produced.
+		if msg := cmd(); msg != nil {
+			if _, ok := msg.(pushScreenMsg); ok {
+				t.Errorf("ref_input should not push search on /, dispatcher owns it")
+			}
+		}
 	}
 }
 
@@ -1043,8 +1041,8 @@ func TestRefInputEmptyStateMessage(t *testing.T) {
 	screen.height = 30
 
 	view := screen.View()
-	if !strings.Contains(view, "search the Hub") {
-		t.Error("empty state should suggest searching the Hub")
+	if !strings.Contains(view, "namespace/slug:version") {
+		t.Error("empty state should show the bundle reference example")
 	}
 }
 

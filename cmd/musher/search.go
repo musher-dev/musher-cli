@@ -51,7 +51,12 @@ falls back to batch output.`,
 			harnessReg := newHarnessRegistry()
 			healthChecker := newRegistryHealthChecker(harnessReg)
 
-			result, err := tui.RunSearch(cmd.Context(), apiClient, apiClient, harnessReg, healthChecker, query)
+			fetcher, healthCache, err := buildFetcherAndHealthCache(cmd.Context(), harnessReg)
+			if err != nil {
+				return err
+			}
+
+			result, err := tui.RunSearch(cmd.Context(), apiClient, fetcher, harnessReg, healthChecker, healthCache, query)
 			if err != nil {
 				return repoerrors.Errorf("search: %w", err)
 			}

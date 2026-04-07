@@ -16,7 +16,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/musher-dev/musher-cli/internal/bundledef"
 	"github.com/musher-dev/musher-cli/internal/client"
@@ -802,70 +801,37 @@ func (p *pushScreen) View() string {
 
 	switch layout {
 	case layoutMinimal:
-		content = p.renderMinimal()
+		content = p.renderBody()
 	default:
-		content = p.renderSinglePanel()
+		panelW := min(max(p.width-4, 30), pushPanelMax)
+		content = renderPanel(p.styles, "Push to Registry", p.renderBody(), panelW, true)
 	}
 
-	return lipgloss.Place(p.width, p.height, lipgloss.Center, lipgloss.Center, content)
+	return renderScreenWithHeader(p.width, p.height, p.renderHeader(), content, p.renderFooter())
 }
 
 func (p *pushScreen) validationMaxDetailLines() int {
-	// Reserve lines for: breadcrumb(1) + gaps(4) + 4 check lines + panel chrome(4) + footer(1) + extra status(2) + padding(2) = ~18
+	// Reserve lines for: header(3) + gaps(2) + 4 check lines + panel chrome(4) + footer(2) + padding(3) = ~18
 	const pushChrome = 18
 
 	return max(p.height-pushChrome, 3)
 }
 
-func (p *pushScreen) renderSinglePanel() string {
-	var view strings.Builder
-
-	view.WriteString(p.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	panelW := min(max(p.width-4, 30), pushPanelMax)
-	body := p.renderBody()
-
-	view.WriteString(renderPanel(p.styles, "Push to Registry", body, panelW, true))
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderFooter())
-
-	return view.String()
-}
-
-func (p *pushScreen) renderMinimal() string {
-	var view strings.Builder
-
-	view.WriteString(p.renderBreadcrumb())
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderBody())
-	view.WriteString("\n\n")
-
-	view.WriteString(p.renderFooter())
-
-	return view.String()
-}
-
-func (p *pushScreen) renderBreadcrumb() string {
-	trail := p.styles.breadcrumb.Render("Push")
+func (p *pushScreen) renderHeader() string {
+	trail := "Push"
 
 	switch p.state {
 	case pushStateValidating, pushStateValidateFailed:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Validate")
+		trail += " > Validate"
 	case pushStateReview:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Review")
+		trail += " > Review"
 	case pushStatePushing, pushStatePushSuccess, pushStatePushFailed:
-		trail += p.styles.breadcrumbSep.Render(" > ")
-		trail += p.styles.breadcrumb.Render("Execute")
+		trail += " > Execute"
 	default:
 		// No additional breadcrumb for auth, pre-check, visibility, or hub states.
 	}
 
-	return trail
+	return renderScreenHeader(p.styles, p.width, p.deps.Version, trail)
 }
 
 func (p *pushScreen) renderBody() string {
@@ -1184,51 +1150,57 @@ func (p *pushScreen) renderHubConfirm() string {
 }
 
 func (p *pushScreen) renderFooter() string {
-	sep := p.styles.hintSep.Render(" \u2022 ")
-
-	var hints []string
+	var bindings []key.Binding
 
 	switch p.state {
 	case pushStateAuthRequired:
-		hints = []string{
-			p.styles.hintKey.Render("a") + " " + p.styles.hintDesc.Render("log in"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "log in")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	case pushStateVersionConflict:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	case pushStateReview:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("ctrl+s") + " " + p.styles.hintDesc.Render("push"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "push")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	case pushStatePushSuccess:
-		hints = []string{
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("done"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}
 
 	case pushStateVisibilityRecovery, pushStateHubConfirm:
-		hints = []string{
-			p.styles.hintKey.Render("\u2191/\u2193") + " " + p.styles.hintDesc.Render("navigate"),
-			p.styles.hintKey.Render("enter") + " " + p.styles.hintDesc.Render("select"),
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("cancel"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 
 	default:
-		hints = []string{
-			p.styles.hintKey.Render("esc") + " " + p.styles.hintDesc.Render("back"),
-			p.styles.hintKey.Render("q") + " " + p.styles.hintDesc.Render("quit"),
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
 
-	return strings.Join(hints, sep)
+	width := p.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(p.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }

@@ -22,7 +22,6 @@ func TestDefaultKeyMap(t *testing.T) {
 		{"enter", keys.Enter, "enter"},
 		{"back is esc", keys.Back, "esc"},
 		{"quit includes q", keys.Quit, "q"},
-		{"search is slash", keys.Search, "/"},
 	}
 
 	for _, tt := range tests {

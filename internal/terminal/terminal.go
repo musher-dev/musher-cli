@@ -4,6 +4,7 @@ package terminal
 import (
 	"os"
 
+	"github.com/musher-dev/musher-cli/internal/env"
 	"golang.org/x/term"
 )
 
@@ -29,9 +30,9 @@ func Detect() *Info {
 		}
 	}
 
-	_, noColor := os.LookupEnv("NO_COLOR")
+	_, noColor := env.Lookup(env.NoColor)
 
-	if os.Getenv("TERM") == "dumb" {
+	if env.Get(env.Term) == "dumb" {
 		noColor = true
 	}
 

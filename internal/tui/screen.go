@@ -15,6 +15,52 @@ type Screen interface {
 	View() string
 }
 
+// Optional capability interfaces. The App-level dispatcher and the
+// help/palette overlays discover these via type assertion. Existing screens
+// remain unchanged; they receive sensible defaults (globals-only help, no
+// screen commands, no focus indicator).
+
+// KeyMapper exposes the screen's screen-scoped key bindings to the help
+// overlay and the contextual footer.
+type KeyMapper interface {
+	KeyMap() KeyMap
+}
+
+// CommandLister exposes screen-scoped commands to the command palette in
+// addition to the global registry.
+type CommandLister interface {
+	Commands() []Command
+}
+
+// PaneFocuser reports the currently focused pane within a multi-pane screen,
+// allowing the footer to render pane-specific bindings.
+type PaneFocuser interface {
+	FocusedPane() string
+}
+
+// Titler returns a human-readable screen title for the help overlay header.
+type Titler interface {
+	Title() string
+}
+
+// TextInputActive signals that the screen currently has a focused text
+// input. The App-level dispatcher consults this when deciding whether to
+// intercept the literal `/` and `:` characters as palette shortcuts: when
+// HasActiveInput returns true, those keys pass through to the screen so
+// the user can type them as part of their query.
+type TextInputActive interface {
+	HasActiveInput() bool
+}
+
+// OverlayScreen marks a screen as a modal overlay. When the topmost screen
+// implements this interface and returns true, the App's View() composites
+// it on top of the screen below using composeOverlay() instead of replacing
+// the underlying view. This is how the command palette and the help overlay
+// render as floating modals over the home screen rather than full pages.
+type OverlayScreen interface {
+	IsOverlay() bool
+}
+
 // pushScreenMsg instructs the App to push a new screen onto the stack.
 type pushScreenMsg struct {
 	screen Screen

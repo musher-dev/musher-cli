@@ -248,14 +248,9 @@ func (h *homeScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return h, nil
 	}
 
-	// "/" opens search directly.
-	if key.Matches(msg, h.keys.Search) {
-		cmd := h.pushSearchScreen()
-
-		return h, cmd
-	}
-
 	// Check hotkey runes (only on home screen, no text input conflict).
+	// `/` is reserved as the global palette key — the App-level dispatcher
+	// intercepts it before this method ever runs.
 	if r := msg.String(); len(r) == 1 {
 		for i, item := range h.items {
 			if rune(r[0]) == item.hotkey {
@@ -323,7 +318,7 @@ func (h *homeScreen) executeItem(item menuItem) (Screen, tea.Cmd) {
 
 func (h *homeScreen) pushSearchScreen() tea.Cmd {
 	return func() tea.Msg {
-		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Puller, h.deps.Harnesses, h.deps.HealthChecker, "", h.styles, h.keys)
+		screen := newSearchScreen(h.ctx, h.deps.Searcher, h.deps.Fetcher, h.deps.Harnesses, h.deps.HealthChecker, h.deps.HealthCache, "", h.styles, h.keys)
 
 		return pushScreenMsg{screen: screen}
 	}
@@ -407,26 +402,19 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 	menuW := clampMenuWidth(h.width)
 
 	leftContent := h.renderMenuContent(menuW)
-	leftTitle := "musher " + formatVersion(h.deps.Version)
-	leftPanel := renderPanel(h.styles, leftTitle, leftContent, menuW, h.focusArea == 0)
+	leftPanel := renderPanel(h.styles, "Menu", leftContent, menuW, h.focusArea == 0)
 
 	contextW := menuW
 	rightContent := h.renderContextContent()
-	rightPanel := renderPanel(h.styles, "Status", rightContent, contextW, h.focusArea == 1)
+	rightPanel := renderPanel(h.styles, "Environment", rightContent, contextW, h.focusArea == 1)
 
 	gap := strings.Repeat(" ", twoPanelGap)
 	topPanels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, gap, rightPanel)
 
 	desc := h.renderDescription(menuW)
-	footer := h.renderFooter(true)
+	content := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc)
 
-	topBlock := lipgloss.JoinVertical(lipgloss.Center, topPanels, desc, "", footer)
-
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		topBlock,
-	)
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), content, h.renderFooter(true))
 }
 
 // --- Single-panel layout (60–99 cols) ---
@@ -434,21 +422,12 @@ func (h *homeScreen) renderHomeTwoPanel() string {
 func (h *homeScreen) renderHomeSinglePanel() string {
 	menuW := clampMenuWidth(h.width)
 
-	header := h.renderBrand()
-	status := h.renderStatusLine()
 	menu := h.renderMenuBox(menuW)
 	desc := h.renderDescription(menuW)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		header, "", status, menu, desc, "", footer,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Center, menu, desc)
 
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), content, h.renderFooter(false))
 }
 
 // --- Compact layout (40–59 cols) ---
@@ -456,47 +435,57 @@ func (h *homeScreen) renderHomeSinglePanel() string {
 func (h *homeScreen) renderHomeCompact() string {
 	menuW := clampMenuWidth(h.width)
 
-	header := h.renderBrand()
 	menu := h.renderMenuBox(menuW)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		header, "", menu, "", footer,
-	)
-
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), menu, h.renderFooter(false))
 }
 
 // --- Minimal layout (< 40 cols) ---
 
 func (h *homeScreen) renderHomeMinimal() string {
-	header := h.styles.brand.Render("musher")
 	menu := h.renderMenuContent(h.width - 4)
-	footer := h.renderFooter(false)
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header, "", menu, "", footer,
-	)
-
-	return lipgloss.Place(
-		h.width, h.height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return renderScreenWithHeader(h.width, h.height, h.renderHeader(), menu, h.renderFooter(false))
 }
 
 // --- Rendering helpers ---
 
-func (h *homeScreen) renderBrand() string {
-	ver := formatVersion(h.deps.Version)
-	brand := h.styles.brand.Render("musher") + " " + h.styles.muted.Render(ver)
-	tagline := h.styles.tagline.Render("Discover, load, and manage agent bundles")
+// renderHeader builds the unified top header for the home screen. The
+// landing page has no breadcrumb (it is the root), but it carries the
+// brand, version, tagline, identity context, and the [?] help hint.
+func (h *homeScreen) renderHeader() string {
+	return NewHeader(h.styles, h.width).Render(HeaderContext{
+		Title:   "musher",
+		Version: h.deps.Version,
+		Tagline: "Discover, load, and manage agent bundles",
+		Context: h.identityContext(),
+	})
+}
 
-	return lipgloss.JoinVertical(lipgloss.Center, brand, tagline)
+// identityContext returns the right-zone slug shown in the header. It
+// reuses the existing greeting / identityName / identityOrg helpers so the
+// header stays in sync with the rest of the home state.
+func (h *homeScreen) identityContext() string {
+	if h.ctxInfo.loading {
+		return "…"
+	}
+
+	if h.ctxInfo.identity == nil {
+		return "not authenticated"
+	}
+
+	name := strings.TrimPrefix(h.identityName(), ", ")
+	if name == "" {
+		name = h.ctxInfo.greeting
+	} else {
+		name = h.ctxInfo.greeting + ", " + name
+	}
+
+	if org := h.identityOrg(); org != "" {
+		return name + " · " + org
+	}
+
+	return name
 }
 
 func formatVersion(ver string) string {
@@ -505,36 +494,6 @@ func formatVersion(ver string) string {
 	}
 
 	return "v" + ver
-}
-
-func (h *homeScreen) renderStatusLine() string {
-	if h.ctxInfo.loading {
-		return h.styles.placeholder.Render("Loading...")
-	}
-
-	if h.ctxInfo.identity == nil {
-		return renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("not authenticated")
-	}
-
-	parts := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
-
-	if org := h.identityOrg(); org != "" {
-		parts = append(parts, h.styles.subtitle.Render(org))
-	}
-
-	sep := h.styles.hintSep.Render(" \u00B7 ")
-
-	return strings.Join(parts, sep)
-}
-
-func renderStatusDot(sty *styles, ok bool) string {
-	dot := "\u25CF" // ●
-
-	if ok {
-		return sty.success.Render(dot)
-	}
-
-	return sty.warning.Render(dot)
 }
 
 func (h *homeScreen) identityName() string {
@@ -645,10 +604,12 @@ func (h *homeScreen) renderDescription(menuW int) string {
 	return h.styles.description.Width(menuW).Render(desc)
 }
 
-// renderContextContent renders the right panel content (auth + project + cache + harnesses + links).
+// renderContextContent renders the right panel content. Identity now
+// lives in the top header, so this panel is purely environmental:
+// project · cache · harnesses. Social links live in the shared Footer
+// primitive.
 func (h *homeScreen) renderContextContent() string {
 	sections := []string{
-		h.renderContextAuth(),
 		h.renderContextProject(),
 		h.renderContextCache(),
 	}
@@ -657,32 +618,7 @@ func (h *homeScreen) renderContextContent() string {
 		sections = append(sections, h.renderContextHarnesses())
 	}
 
-	sections = append(sections, h.renderSocialLinks())
-
 	return strings.Join(sections, "\n\n")
-}
-
-func (h *homeScreen) renderContextAuth() string {
-	title := h.styles.contextLabel.Render("Auth")
-
-	var body string
-
-	switch {
-	case h.ctxInfo.loading:
-		body = h.styles.placeholder.Render("Loading...")
-	case h.ctxInfo.identity != nil:
-		lines := []string{h.styles.accent.Render(h.ctxInfo.greeting + h.identityName())}
-
-		if org := h.identityOrg(); org != "" {
-			lines = append(lines, h.styles.subtitle.Render("Organization: "+org))
-		}
-
-		body = strings.Join(lines, "\n")
-	default:
-		body = renderStatusDot(h.styles, false) + " " + h.styles.warning.Render("Not authenticated")
-	}
-
-	return title + "\n" + body
 }
 
 func (h *homeScreen) renderContextHarnesses() string {
@@ -756,17 +692,6 @@ func (h *homeScreen) renderContextCache() string {
 	return title + "\n" + body
 }
 
-func (h *homeScreen) renderSocialLinks() string {
-	sep := h.styles.hintSep.Render(" \u00B7 ")
-	linkStyle := h.styles.accent
-
-	links := hyperlink("https://discord.gg/SaVMzMgX2c", linkStyle.Render("Discord")) + sep +
-		hyperlink("https://github.com/musher-dev", linkStyle.Render("GitHub")) + sep +
-		hyperlink("https://x.com/musherdev", linkStyle.Render("X"))
-
-	return links
-}
-
 // hyperlink wraps text with OSC 8 terminal hyperlink escape sequences.
 func hyperlink(url, text string) string {
 	return ansi.SetHyperlink(url) + text + ansi.ResetHyperlink()
@@ -833,27 +758,30 @@ func renderBorderTitle(title string, outerWidth int, borderColor, titleStyle *li
 	return builder.String()
 }
 
-// renderFooter returns the context-sensitive key hint bar.
+// renderFooter returns the context-sensitive key hint bar via the shared
+// Footer primitive so the L1 help (?) and L2 command palette (:) hints are
+// always advertised next to the screen-local bindings.
 func (h *homeScreen) renderFooter(twoPanel bool) string {
-	sep := h.styles.hintSep.Render(" \u2022 ")
-
-	hints := []string{
-		h.styles.hintKey.Render("\u2191/\u2193") + " " + h.styles.hintDesc.Render("navigate"),
-		h.styles.hintKey.Render("enter") + " " + h.styles.hintDesc.Render("select"),
-		h.styles.hintKey.Render("/") + " " + h.styles.hintDesc.Render("search"),
+	bindings := []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 	}
 
 	if twoPanel {
-		hints = append(hints,
-			h.styles.hintKey.Render("tab")+" "+h.styles.hintDesc.Render("switch"),
-		)
+		bindings = append(bindings, key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch")))
 	}
 
-	hints = append(hints,
-		h.styles.hintKey.Render("q")+" "+h.styles.hintDesc.Render("quit"),
-	)
+	bindings = append(bindings, key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")))
 
-	return strings.Join(hints, sep)
+	width := h.width
+	if width <= 0 {
+		width = 80
+	}
+
+	return NewFooter(h.styles, width).Render(FooterContext{
+		Bindings:  bindings,
+		ShowHints: true,
+	})
 }
 
 // --- Async auth loading ---

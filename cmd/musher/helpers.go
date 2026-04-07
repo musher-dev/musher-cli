@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
@@ -77,7 +76,7 @@ func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
 
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
-		return nil, errors.New("API key is empty")
+		return nil, clierrors.Errorf("API key is empty")
 	}
 
 	spin := out.Spinner("Validating credentials")
