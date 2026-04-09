@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.14](https://github.com/musher-dev/musher-cli/compare/v0.3.13...v0.3.14) (2026-04-09)
+
+
+### Bug Fixes
+
+* **deps:** bump Go to 1.26.2 to resolve stdlib vulnerabilities ([da5353a](https://github.com/musher-dev/musher-cli/commit/da5353a266b6928b378bbff0e94fab087324d099))
+
+
+### Performance Improvements
+
+* **hooks:** parallelize pre-push checks and upgrade lefthook to v2 ([d4a1707](https://github.com/musher-dev/musher-cli/commit/d4a1707f0195bd30b81672c08724c514a9b67502))
+
 ## [0.3.13](https://github.com/musher-dev/musher-cli/compare/v0.3.12...v0.3.13) (2026-04-07)
 
 
