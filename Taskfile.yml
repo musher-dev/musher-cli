@@ -7,7 +7,7 @@ version: '3'
 vars:
   BINARY: musher
   MODULE: github.com/musher-dev/musher-cli
-  GO_VERSION: 1.26.1
+  GO_VERSION: 1.26.2
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
   NILAWAY_VERSION: v0.0.0-20260318203545-ad240b12fb4c

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Go 1.26.1+** — see `GO_VERSION` in `Taskfile.yml` for the exact version used in CI
+- **Go 1.26.2+** — see `GO_VERSION` in `Taskfile.yml` for the exact version used in CI
 - **[Task](https://taskfile.dev/)** — task runner (replaces Make)
 - **shellcheck** — must be on `PATH` for shell script linting (`task check:shell`)
 
