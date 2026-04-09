@@ -34,6 +34,11 @@ type Config struct {
 	// WorkDir is the working directory for the subprocess.
 	WorkDir string
 
+	// ExtraEnv is a list of "KEY=VALUE" entries appended to the inherited
+	// environment for the harness subprocess. Used to point harnesses like
+	// OpenCode at a session-scoped config directory via OPENCODE_CONFIG_DIR.
+	ExtraEnv []string
+
 	// BundleRef is the fully-qualified bundle reference for status display
 	// (e.g. "acme/code-review:1.0.0").
 	BundleRef string

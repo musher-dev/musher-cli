@@ -79,6 +79,7 @@ func (e *Embedded) Run(ctx context.Context, cfg *Config) (int, error) {
 	cmd := exec.CommandContext(ctx, cfg.Binary, cfg.Args...) //nolint:gosec // binary from trusted harness spec
 	cmd.Dir = cfg.WorkDir
 	cmd.Env = buildSubprocessEnv(cols, subRows)
+	cmd.Env = append(cmd.Env, cfg.ExtraEnv...)
 
 	// Start the subprocess in a PTY.
 	ptyFile, err := pty.StartWithSize(cmd, &pty.Winsize{

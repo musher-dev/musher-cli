@@ -37,16 +37,20 @@ func TestModuleSpecFields(t *testing.T) {
 
 	spec := opencode.Module.Spec
 
-	if spec.BundleDir.Mode != "cwd" {
-		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "cwd")
+	if spec.BundleDir.Mode != "add_dir" {
+		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "add_dir")
 	}
 
-	if spec.Assets.SkillDir != ".opencode/skills" {
-		t.Errorf("spec.Assets.SkillDir = %q, want %q", spec.Assets.SkillDir, ".opencode/skills")
+	if spec.BundleDir.EnvVar != "OPENCODE_CONFIG_DIR" {
+		t.Errorf("spec.BundleDir.EnvVar = %q, want %q", spec.BundleDir.EnvVar, "OPENCODE_CONFIG_DIR")
 	}
 
-	if spec.Assets.AgentDir != ".opencode/agents" {
-		t.Errorf("spec.Assets.AgentDir = %q, want %q", spec.Assets.AgentDir, ".opencode/agents")
+	if spec.Assets.SkillDir != "skills" {
+		t.Errorf("spec.Assets.SkillDir = %q, want %q", spec.Assets.SkillDir, "skills")
+	}
+
+	if spec.Assets.AgentDir != "agents" {
+		t.Errorf("spec.Assets.AgentDir = %q, want %q", spec.Assets.AgentDir, "agents")
 	}
 
 	if spec.MCP.Format != "json" {

@@ -83,6 +83,12 @@ func PrepareLoadSession(
 		return nil, err
 	}
 
+	// If the spec asks us to expose the bundle directory via an env var
+	// (e.g. OPENCODE_CONFIG_DIR), inject it for the harness subprocess.
+	if spec.BundleDir.EnvVar != "" {
+		sess.Env = append(sess.Env, spec.BundleDir.EnvVar+"="+sess.BundleDir)
+	}
+
 	if err := materializeLayers(sess, store, spec, agentTransform, manifest, mode, baseDir, projectDir); err != nil {
 		sess.Cleanup()
 

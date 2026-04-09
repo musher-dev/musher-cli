@@ -3,6 +3,7 @@ package session_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/bundle/cache"
@@ -426,6 +427,53 @@ func TestPrepareLoadSession_WithToolConfig(t *testing.T) {
 	// The config file should exist.
 	if _, err := os.Stat(args[1]); err != nil {
 		t.Errorf("tool config file not found: %v", err)
+	}
+}
+
+func TestPrepareLoadSession_EnvVarInjection(t *testing.T) {
+	t.Parallel()
+
+	store, manifest := setupCachedBundle(t)
+	projectDir := t.TempDir()
+
+	// Simulate the OpenCode-style spec: add_dir mode with no CLI flag,
+	// pointing the harness at the bundle dir via OPENCODE_CONFIG_DIR.
+	spec := &harness.Spec{
+		Name:        "opencode-like",
+		DisplayName: "OpenCode-like",
+		Binary:      "opencode",
+		BundleDir: harness.BundleDirSpec{
+			Mode:   "add_dir",
+			EnvVar: "OPENCODE_CONFIG_DIR",
+		},
+		Assets: harness.AssetPaths{
+			SkillDir: "skills",
+			AgentDir: "agents",
+		},
+	}
+
+	sess, err := session.PrepareLoadSession(store, spec, nil, "", manifest, projectDir)
+	if err != nil {
+		t.Fatalf("PrepareLoadSession: %v", err)
+	}
+
+	defer sess.Cleanup()
+
+	// BundleDir should be a temp dir distinct from the project dir.
+	if sess.BundleDir == projectDir {
+		t.Fatal("BundleDir should differ from projectDir in add_dir mode")
+	}
+
+	// Env should contain OPENCODE_CONFIG_DIR=<bundle dir>.
+	want := "OPENCODE_CONFIG_DIR=" + sess.BundleDir
+	if !slices.Contains(sess.Env, want) {
+		t.Errorf("sess.Env = %v, want entry %q", sess.Env, want)
+	}
+
+	// Project dir must NOT have any harness files written to it.
+	entries, _ := os.ReadDir(projectDir)
+	if len(entries) != 0 {
+		t.Errorf("projectDir was modified, entries = %v", entries)
 	}
 }
 

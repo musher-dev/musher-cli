@@ -37,8 +37,12 @@ func TestModuleSpecFields(t *testing.T) {
 
 	spec := gemini.Module.Spec
 
-	if spec.BundleDir.Mode != "cwd" {
-		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "cwd")
+	if spec.BundleDir.Mode != "add_dir" {
+		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "add_dir")
+	}
+
+	if spec.BundleDir.Flag != "--include-directories" {
+		t.Errorf("spec.BundleDir.Flag = %q, want %q", spec.BundleDir.Flag, "--include-directories")
 	}
 
 	if spec.Assets.SkillDir != ".gemini/commands" {
