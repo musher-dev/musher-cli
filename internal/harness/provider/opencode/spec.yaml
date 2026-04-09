@@ -8,11 +8,12 @@ directories:
   user: "~/.config/opencode"
 
 bundleDir:
-  mode: cwd
+  mode: add_dir
+  envVar: "OPENCODE_CONFIG_DIR"
 
 assets:
-  skillDir: ".opencode/skills"
-  agentDir: ".opencode/agents"
+  skillDir: "skills"
+  agentDir: "agents"
   toolConfigFile: "opencode.json"
 
 mcp:

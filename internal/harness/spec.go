@@ -37,8 +37,9 @@ type Directories struct {
 
 // BundleDirSpec describes how to inject a bundle directory into the harness.
 type BundleDirSpec struct {
-	Mode string `yaml:"mode"` // "add_dir", "cd_flag", "cwd"
-	Flag string `yaml:"flag"` // e.g. "--add-dir"
+	Mode   string `yaml:"mode"`             // "add_dir" or "cwd"
+	Flag   string `yaml:"flag,omitempty"`   // CLI flag, e.g. "--add-dir"
+	EnvVar string `yaml:"envVar,omitempty"` // env var to point at the bundle dir, e.g. "OPENCODE_CONFIG_DIR"
 }
 
 // AssetPaths maps asset types to harness-specific directories.

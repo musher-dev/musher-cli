@@ -37,12 +37,12 @@ func TestModuleSpecFields(t *testing.T) {
 
 	spec := codex.Module.Spec
 
-	if spec.BundleDir.Mode != "cwd" {
-		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "cwd")
+	if spec.BundleDir.Mode != "add_dir" {
+		t.Errorf("spec.BundleDir.Mode = %q, want %q", spec.BundleDir.Mode, "add_dir")
 	}
 
-	if spec.BundleDir.Flag != "" {
-		t.Errorf("spec.BundleDir.Flag = %q, want empty", spec.BundleDir.Flag)
+	if spec.BundleDir.Flag != "--add-dir" {
+		t.Errorf("spec.BundleDir.Flag = %q, want %q", spec.BundleDir.Flag, "--add-dir")
 	}
 
 	if spec.Assets.SkillDir != ".agents/skills" {

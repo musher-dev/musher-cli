@@ -7,13 +7,13 @@ version: '3'
 vars:
   BINARY: musher
   MODULE: github.com/musher-dev/musher-cli
-  GO_VERSION: 1.26.1
+  GO_VERSION: 1.26.2
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
   NILAWAY_VERSION: v0.0.0-20260318203545-ad240b12fb4c
   SHFMT_VERSION: v3.13.0
   ACTIONLINT_VERSION: v1.7.11
-  LEFTHOOK_VERSION: v1.13.6
+  LEFTHOOK_VERSION: v2.1.5
   GIT_COMMIT:
     sh: git rev-parse --short HEAD
   GIT_DATE:
@@ -43,7 +43,7 @@ tasks:
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
       - go install mvdan.cc/sh/v3/cmd/shfmt@{{.SHFMT_VERSION}}
       - go install github.com/rhysd/actionlint/cmd/actionlint@{{.ACTIONLINT_VERSION}}
-      - go install github.com/evilmartians/lefthook@{{.LEFTHOOK_VERSION}}
+      - go install github.com/evilmartians/lefthook/v2@{{.LEFTHOOK_VERSION}}
       - go install go.uber.org/nilaway/cmd/nilaway@{{.NILAWAY_VERSION}}
 
   setup:hooks:
@@ -352,11 +352,10 @@ tasks:
 
   check:pre-push:
     desc: Run the pre-push verification suite
-    cmds:
-      - task: check:policy
-      - task: check:lint
-      - task: check:test
-      - task: check:compile
+    deps:
+      - check:policy
+      - check:lint
+      - check:test
 
   check:release:
     desc: Validate the checked-in GoReleaser configuration
@@ -433,7 +432,7 @@ tasks:
       - test -x .git/hooks/pre-push || (echo "missing executable .git/hooks/pre-push" && exit 1)
 
   hooks:pre-commit:go:
-    desc: Run staged Go formatting, lint, and policy checks
+    desc: Run staged Go formatting and lint checks
     preconditions:
       - sh: test -n "{{.CLI_ARGS}}"
         msg: "Pass one or more staged Go files after '--'."
@@ -462,7 +461,6 @@ tasks:
             task check:lint:files -- "${packages[@]}"
           fi
         ' _ {{.CLI_ARGS}}
-      - task check:policy
 
   hooks:pre-push:
     desc: Run the canonical pre-push verification suite

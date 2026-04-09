@@ -34,7 +34,7 @@ curl -fsSL https://get.musher.dev | sh
 irm https://get.musher.dev/install.ps1 | iex
 ```
 
-**From source** (requires Go 1.26.1+):
+**From source** (requires Go 1.26.2+):
 
 ```bash
 go install github.com/musher-dev/musher-cli/cmd/musher@latest

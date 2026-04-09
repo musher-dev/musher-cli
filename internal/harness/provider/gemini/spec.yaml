@@ -8,7 +8,8 @@ directories:
   user: "~/.gemini"
 
 bundleDir:
-  mode: cwd
+  mode: add_dir
+  flag: "--include-directories"
 
 assets:
   skillDir: ".gemini/commands"

@@ -21,6 +21,11 @@ type Passthrough struct{}
 func (p *Passthrough) Run(ctx context.Context, cfg *Config) (int, error) {
 	cmd := exec.CommandContext(ctx, cfg.Binary, cfg.Args...) //nolint:gosec // binary from trusted harness spec
 	cmd.Dir = cfg.WorkDir
+
+	if len(cfg.ExtraEnv) > 0 {
+		cmd.Env = append(os.Environ(), cfg.ExtraEnv...)
+	}
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = transcriptTee(os.Stdout, cfg.Transcript, "stdout")
 	cmd.Stderr = transcriptTee(os.Stderr, cfg.Transcript, "stderr")

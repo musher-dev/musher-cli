@@ -94,6 +94,7 @@ func RunSingleSession(ctx context.Context, deps *SessionDeps, ref string, force 
 		Binary:          prov.Spec.Binary,
 		Args:            args,
 		WorkDir:         deps.ProjectDir,
+		ExtraEnv:        loadSession.Env,
 		BundleRef:       versionRef,
 		HarnessName:     prov.Spec.DisplayName,
 		Transcript:      transcriptWriter,

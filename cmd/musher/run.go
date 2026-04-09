@@ -214,6 +214,7 @@ func runSingleSession(
 		Binary:      prov.Spec.Binary,
 		Args:        args,
 		WorkDir:     projectDir,
+		ExtraEnv:    loadSession.Env,
 		BundleRef:   versionRef,
 		HarnessName: prov.Spec.DisplayName,
 		Transcript:  transcriptWriter,

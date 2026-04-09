@@ -53,3 +53,11 @@ bin/
 # Personal shell customizations (use *.shared.sh for team defaults)
 .devcontainer/config/shell/*.local.sh
 .codex
+
+# Harness session leftovers — should always be cleaned up by musher,
+# but ignored as defense-in-depth in case a run is interrupted.
+.agents
+.gemini
+.opencode
+.cursor
+*.musher-backup

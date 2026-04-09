@@ -1,22 +1,22 @@
 pre-commit:
   parallel: true
-  commands:
-    go-checks:
+  jobs:
+    - name: go-checks
       glob: "*.go"
       run: task hooks:pre-commit:go -- {staged_files}
-    mod-check:
+    - name: mod-check
       glob: "{go.mod,go.sum}"
       run: task check:mod
-    shell:
+    - name: shell
       glob: "*.sh"
       run: task check:shell:files -- {staged_files}
-    workflow:
+    - name: workflow
       glob: ".github/workflows/*.{yml,yaml}"
       run: task check:workflow:files -- {staged_files}
 
 commit-msg:
-  commands:
-    conventional-commits:
+  jobs:
+    - name: conventional-commits
       run: |
         sh -ceu '
         first_line=$(head -n 1 "$1")
@@ -36,6 +36,6 @@ commit-msg:
         ' -- {1}
 
 pre-push:
-  commands:
-    verify:
+  jobs:
+    - name: verify
       run: task hooks:pre-push
