@@ -64,17 +64,3 @@ func TestAuthCommandRunsHelpByDefault(t *testing.T) {
 		t.Fatalf("auth help execution failed: %v", err)
 	}
 }
-
-func TestAuthStatusCommandPath(t *testing.T) {
-	root := newRootCmd()
-	root.SetArgs([]string{"auth", "status"})
-
-	cmd, _, err := root.Find([]string{"auth", "status"})
-	if err != nil {
-		t.Fatalf("Find(auth status) error = %v", err)
-	}
-
-	if got := cmd.CommandPath(); got != "musher auth status" {
-		t.Fatalf("CommandPath() = %q, want %q", got, "musher auth status")
-	}
-}

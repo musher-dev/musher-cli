@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ const (
 	configBoolFalse = "false"
 )
 
+// ConfigManager is the config screen's view of the configuration store.
+// *config.Config satisfies it.
+type ConfigManager interface {
+	GetString(key string) string
+	Set(key string, value any) error
+}
+
 // configInputType classifies config item editing behavior.
 type configInputType int
 
@@ -22,6 +30,7 @@ const (
 	configInputText     configInputType = iota // Free text.
 	configInputBool                            // Toggle true/false.
 	configInputDuration                        // Duration string validated on save.
+	configInputInt                             // Integer validated on save.
 )
 
 // configItem describes a single configuration entry.
@@ -46,7 +55,6 @@ const (
 // configScreen displays and edits configuration settings.
 type configScreen struct {
 	config ConfigManager
-	apiURL string
 	styles *styles
 	keys   *keyMap
 
@@ -64,17 +72,35 @@ type configScreen struct {
 	editErr   string
 }
 
+// configItemDefs is the editable key set surfaced by the screen. It mirrors
+// the recognized keys in internal/config; keys that are not meant to be hand
+// edited (e.g. "experimental") are deliberately omitted.
 func configItemDefs() []configItem {
 	return []configItem{
 		{key: "api.url", displayName: "API URL", description: "The base URL for the Musher API.", section: "API", defaultValue: "https://api.musher.dev", inputType: configInputText},
+		{key: "api.retries", displayName: "API Retries", description: "Retry attempts for retryable API requests.", section: "API", defaultValue: "4", inputType: configInputInt},
 		{key: "network.ca_cert_file", displayName: "CA Certificate", description: "Path to a custom CA certificate bundle.", section: "NETWORK", defaultValue: "", inputType: configInputText},
+		{key: "context.organization", displayName: "Organization", description: "Default organization for platform commands.", section: "CONTEXT", defaultValue: "", inputType: configInputText},
+		{key: "context.environment", displayName: "Environment", description: "Default environment for platform commands.", section: "CONTEXT", defaultValue: "", inputType: configInputText},
+		{key: "deploy.wait", displayName: "Wait for Deploy", description: "Watch a deployment until it settles.", section: "DEPLOY", defaultValue: configBoolTrue, inputType: configInputBool},
+		{key: "deploy.timeout", displayName: "Deploy Timeout", description: "How long to watch a deployment before giving up.", section: "DEPLOY", defaultValue: "15m", inputType: configInputDuration},
+		{key: "deploy.size", displayName: "Deploy Size", description: "Default instance size for new deployments.", section: "DEPLOY", defaultValue: "", inputType: configInputText},
 		{key: "update.auto_apply", displayName: "Auto-apply Updates", description: "Automatically apply CLI updates.", section: "UPDATES", defaultValue: configBoolTrue, inputType: configInputBool},
 		{key: "update.check_interval", displayName: "Update Interval", description: "How often to check for updates.", section: "UPDATES", defaultValue: "24h", inputType: configInputDuration},
-		{key: "tui.enabled", displayName: "TUI Mode", description: "Enable the interactive TUI on launch.", section: "DISPLAY", defaultValue: configBoolTrue, inputType: configInputBool},
 	}
 }
 
-func newConfigScreen(config ConfigManager, apiURL string, sty *styles, keys *keyMap) *configScreen {
+// RunConfig launches the configuration screen as a standalone TUI program.
+// It is the entry point a `musher config` command wires up; the screen itself
+// is reusable inside a larger stack via newConfigScreen.
+func RunConfig(config ConfigManager) (*Result, error) {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+
+	return Run(newConfigScreen(config, &sty, &keys))
+}
+
+func newConfigScreen(config ConfigManager, sty *styles, keys *keyMap) *configScreen {
 	items := configItemDefs()
 
 	// Populate current values from config.
@@ -99,7 +125,6 @@ func newConfigScreen(config ConfigManager, apiURL string, sty *styles, keys *key
 
 	return &configScreen{
 		config:    config,
-		apiURL:    apiURL,
 		styles:    sty,
 		keys:      keys,
 		state:     configStateView,
@@ -264,17 +289,36 @@ func (c *configScreen) handleEditKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	return c, cmd
 }
 
+// validateConfigValue returns a human-readable error message when value is
+// not well-formed for the given input type, or "" when it is acceptable. An
+// empty value is always acceptable — it means "unset, fall back to default".
+func validateConfigValue(inputType configInputType, value string) string {
+	if value == "" {
+		return ""
+	}
+
+	switch inputType { //nolint:exhaustive // text and bool have nothing to validate
+	case configInputDuration:
+		if _, err := time.ParseDuration(value); err != nil {
+			return "Invalid duration: " + value
+		}
+	case configInputInt:
+		if _, err := strconv.Atoi(value); err != nil {
+			return "Invalid number: " + value
+		}
+	}
+
+	return ""
+}
+
 func (c *configScreen) saveEdit() (Screen, tea.Cmd) {
 	item := &c.items[c.cursor]
 	newVal := strings.TrimSpace(c.editInput.Value())
 
-	// Validate duration values.
-	if item.inputType == configInputDuration && newVal != "" {
-		if _, err := time.ParseDuration(newVal); err != nil {
-			c.editErr = "Invalid duration: " + newVal
+	if msg := validateConfigValue(item.inputType, newVal); msg != "" {
+		c.editErr = msg
 
-			return c, nil
-		}
+		return c, nil
 	}
 
 	item.value = newVal

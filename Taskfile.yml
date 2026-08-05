@@ -7,7 +7,7 @@ version: '3'
 vars:
   BINARY: musher
   MODULE: github.com/musher-dev/musher-cli
-  GO_VERSION: 1.26.2
+  GO_VERSION: 1.26.5
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
   NILAWAY_VERSION: v0.0.0-20260318203545-ad240b12fb4c
@@ -247,12 +247,16 @@ tasks:
       - GOCACHE="$(pwd)/.gocache" GOTMPDIR=/tmp go test ./internal/policy
 
   check:vuln:
-    desc: Run govulncheck
+    desc: Run govulncheck, failing on any called vulnerability that is not explicitly accepted
     preconditions:
       - sh: command -v govulncheck >/dev/null 2>&1
         msg: "govulncheck is required. Run 'task setup:tools' first."
     cmds:
-      - govulncheck ./...
+      # Wrapped rather than run bare: govulncheck has no ignore mechanism, and
+      # one unfixable advisory would otherwise force the whole scan off. The
+      # wrapper narrows failure to an auditable allowlist and still fails on
+      # everything else. See .govulncheck-allow.yml.
+      - python3 scripts/vulncheck.py
 
   check:nilaway:
     desc: Run NilAway nil-safety analysis (advisory — does not block CI)
@@ -291,14 +295,55 @@ tasks:
       CONTRACTS_BIN: '{{.BINARY}}-contracts-check'
     cmds:
       - go build -o {{.CONTRACTS_BIN}} ./cmd/musher
+      # Commands that must exist.
       - ./{{.CONTRACTS_BIN}} --help > /dev/null
       - ./{{.CONTRACTS_BIN}} auth --help > /dev/null
-      - ./{{.CONTRACTS_BIN}} bundle --help > /dev/null
-      - ./{{.CONTRACTS_BIN}} cache --help > /dev/null
       - ./{{.CONTRACTS_BIN}} config --help > /dev/null
-      - ./{{.CONTRACTS_BIN}} hub --help > /dev/null
       - ./{{.CONTRACTS_BIN}} doctor > /dev/null 2>&1 || true
       - ./{{.CONTRACTS_BIN}} version > /dev/null
+      # The deployment verbs. --help is enough: it proves the command is
+      # routable and its flag set parses, without touching the network.
+      - ./{{.CONTRACTS_BIN}} deploy --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} list --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} ls --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} status --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} logs --help > /dev/null
+      # Flags that scripts and CI pipelines depend on.
+      - |
+        for flag in --image --port --name --env --env-file --replicas --size \
+                    --environment --kind --file --detach --watch --timeout \
+                    --degraded-grace --wait-for --yes; do
+          if ! ./{{.CONTRACTS_BIN}} deploy --help | grep -q -- "$flag"; then
+            echo "FAIL: musher deploy is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --follow --stream --replica --severity --tail --timestamps; do
+          if ! ./{{.CONTRACTS_BIN}} logs --help | grep -q -- "$flag"; then
+            echo "FAIL: musher logs is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --watch --replicas --conditions; do
+          if ! ./{{.CONTRACTS_BIN}} status --help | grep -q -- "$flag"; then
+            echo "FAIL: musher status is missing $flag"
+            exit 1
+          fi
+        done
+      # Commands that must NOT come back. The bundle registry was removed from
+      # the platform (ADR 0062); reintroducing these would ship dead endpoints.
+      #
+      # Invoked WITHOUT --help on purpose: cobra services --help before it
+      # validates the command name, so `musher bundle --help` exits 0 even when
+      # no such command exists. Bare `musher bundle` is what actually reports
+      # the unknown command.
+      - |
+        for removed in bundle hub cache search load run history; do
+          if ./{{.CONTRACTS_BIN}} "$removed" > /dev/null 2>&1; then
+            echo "FAIL: removed command '$removed' is routable again"
+            exit 1
+          fi
+        done
       - rm -f ./{{.CONTRACTS_BIN}}
 
   check:install:

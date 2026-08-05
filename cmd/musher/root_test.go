@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -85,22 +86,41 @@ func TestRequireOneArgRejectsTwoArgs(t *testing.T) {
 	}
 }
 
-func TestApplyOverridesEmpty(t *testing.T) {
-	if err := applyOverrides("", ""); err != nil {
-		t.Fatalf("applyOverrides() error = %v", err)
+func newOverridesCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("profile", "", "Configuration profile")
+
+	return cmd
+}
+
+func TestBuildConfigOverridesEmpty(t *testing.T) {
+	got, err := buildConfigOverrides(newOverridesCmd(), "", "")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
+
+	if got.APIURL != "" {
+		t.Errorf("APIURL = %q, want empty", got.APIURL)
+	}
+
+	if got.APIKey != "" {
+		t.Errorf("APIKey = %q, want empty", got.APIKey)
 	}
 }
 
-func TestApplyOverridesAPIURL(t *testing.T) {
-	t.Setenv("MUSHER_API_URL", "http://original.example.com")
+func TestBuildConfigOverridesAPIURL(t *testing.T) {
+	got, err := buildConfigOverrides(newOverridesCmd(), "https://custom.example.com", "")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
 
-	if err := applyOverrides("https://custom.example.com", ""); err != nil {
-		t.Fatalf("applyOverrides() error = %v", err)
+	if !strings.Contains(got.APIURL, "custom.example.com") {
+		t.Errorf("APIURL = %q, want it to carry the flag value", got.APIURL)
 	}
 }
 
-func TestApplyOverridesInvalidURL(t *testing.T) {
-	err := applyOverrides("not-a-valid-url", "")
+func TestBuildConfigOverridesInvalidURL(t *testing.T) {
+	_, err := buildConfigOverrides(newOverridesCmd(), "not-a-valid-url", "")
 	if err == nil {
 		t.Fatal("expected error for invalid URL")
 	}
@@ -115,17 +135,60 @@ func TestApplyOverridesInvalidURL(t *testing.T) {
 	}
 }
 
-func TestApplyOverridesAPIKey(t *testing.T) {
-	t.Setenv("MUSHER_API_KEY", "original")
+func TestBuildConfigOverridesAPIKey(t *testing.T) {
+	got, err := buildConfigOverrides(newOverridesCmd(), "", "new-key")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
 
-	if err := applyOverrides("", "new-key"); err != nil {
-		t.Fatalf("applyOverrides() error = %v", err)
+	if got.APIKey != "new-key" {
+		t.Errorf("APIKey = %q, want %q", got.APIKey, "new-key")
 	}
 }
 
-func TestApplyOverridesWhitespaceOnly(t *testing.T) {
-	if err := applyOverrides("   ", "   "); err != nil {
-		t.Fatalf("applyOverrides() error = %v", err)
+func TestBuildConfigOverridesWhitespaceOnly(t *testing.T) {
+	got, err := buildConfigOverrides(newOverridesCmd(), "   ", "   ")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
+
+	if got.APIURL != "" {
+		t.Errorf("APIURL = %q, want empty for whitespace-only flag", got.APIURL)
+	}
+
+	if got.APIKey != "" {
+		t.Errorf("APIKey = %q, want empty for whitespace-only flag", got.APIKey)
+	}
+}
+
+// TestBuildConfigOverridesProfile is the regression guard for --profile being
+// parsed but ignored: the flag must reach config.Overrides.
+func TestBuildConfigOverridesProfile(t *testing.T) {
+	cmd := newOverridesCmd()
+	if err := cmd.Flags().Set("profile", "staging"); err != nil {
+		t.Fatalf("set --profile: %v", err)
+	}
+
+	got, err := buildConfigOverrides(cmd, "", "")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
+
+	if got.Profile != "staging" {
+		t.Errorf("Profile = %q, want %q", got.Profile, "staging")
+	}
+}
+
+func TestBuildConfigOverridesProfileDefaultsWhenUnset(t *testing.T) {
+	t.Setenv(config.ProfileEnvVar, "")
+
+	got, err := buildConfigOverrides(newOverridesCmd(), "", "")
+	if err != nil {
+		t.Fatalf("buildConfigOverrides() error = %v", err)
+	}
+
+	if got.Profile != config.DefaultProfile {
+		t.Errorf("Profile = %q, want %q", got.Profile, config.DefaultProfile)
 	}
 }
 
@@ -153,9 +216,13 @@ func TestRootCmdPersistentFlags(t *testing.T) {
 	root := newRootCmd()
 
 	flags := []string{
-		"json", "quiet", "no-color", "no-input", "no-tui",
+		"json", "quiet", "no-color", "no-input",
 		"log-level", "log-format", "log-file", "log-stderr",
-		"api-url", "api-key",
+		"api-url", "api-key", "profile",
+	}
+
+	if root.PersistentFlags().Lookup("no-tui") != nil {
+		t.Error("--no-tui should have been removed along with the TUI")
 	}
 
 	for _, name := range flags {
@@ -179,11 +246,13 @@ func TestRootCmdGroups(t *testing.T) {
 
 	groups := root.Groups()
 	wantGroups := map[string]bool{
+		groupDeploy:      false,
 		groupAuth:        false,
-		groupConsumer:    false,
-		groupBundle:      false,
-		groupHub:         false,
 		groupMaintenance: false,
+	}
+
+	if len(groups) != len(wantGroups) {
+		t.Errorf("len(groups) = %d, want %d", len(groups), len(wantGroups))
 	}
 
 	for _, g := range groups {
@@ -203,13 +272,12 @@ func TestRootCmdRegistersAllTopLevelCommands(t *testing.T) {
 	root := newRootCmd()
 
 	want := map[string]bool{
+		"deploy":     false,
+		"list":       false,
+		"status":     false,
+		"logs":       false,
 		"auth":       false,
-		"search":     false,
-		"load":       false,
-		"bundle":     false,
-		"hub":        false,
 		"config":     false,
-		"cache":      false,
 		"doctor":     false,
 		"update":     false,
 		"version":    false,
@@ -226,73 +294,5 @@ func TestRootCmdRegistersAllTopLevelCommands(t *testing.T) {
 		if !found {
 			t.Errorf("missing top-level command %q", name)
 		}
-	}
-}
-
-func TestParseBundleRefOptionalVersionFull(t *testing.T) {
-	ns, slug, ver, err := parseBundleRefOptionalVersion("acme/my-bundle:1.0.0")
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-
-	if ns != "acme" {
-		t.Errorf("namespace = %q, want %q", ns, "acme")
-	}
-
-	if slug != "my-bundle" {
-		t.Errorf("slug = %q, want %q", slug, "my-bundle")
-	}
-
-	if ver != "1.0.0" {
-		t.Errorf("version = %q, want %q", ver, "1.0.0")
-	}
-}
-
-func TestParseBundleRefOptionalVersionNoVersion(t *testing.T) {
-	ns, slug, ver, err := parseBundleRefOptionalVersion("acme/my-bundle")
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-
-	if ns != "acme" || slug != "my-bundle" {
-		t.Errorf("got %s/%s, want acme/my-bundle", ns, slug)
-	}
-
-	if ver != "" {
-		t.Errorf("version = %q, want empty", ver)
-	}
-}
-
-func TestParseBundleRefOptionalVersionInvalid(t *testing.T) {
-	_, _, _, err := parseBundleRefOptionalVersion("invalid")
-	if err == nil {
-		t.Fatal("expected error for invalid ref")
-	}
-
-	var cliErr *clierrors.CLIError
-	if !clierrors.As(err, &cliErr) {
-		t.Fatalf("error is not CLIError: %T", err)
-	}
-
-	if cliErr.Code != clierrors.ExitUsage {
-		t.Errorf("code = %d, want %d", cliErr.Code, clierrors.ExitUsage)
-	}
-}
-
-func TestParseBundleRefNoVersion(t *testing.T) {
-	ns, slug, err := parseBundleRef("acme/my-bundle")
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-
-	if ns != "acme" || slug != "my-bundle" {
-		t.Errorf("got %s/%s, want acme/my-bundle", ns, slug)
-	}
-}
-
-func TestParseBundleRefInvalid(t *testing.T) {
-	_, _, err := parseBundleRef("invalid")
-	if err == nil {
-		t.Fatal("expected error for invalid ref")
 	}
 }

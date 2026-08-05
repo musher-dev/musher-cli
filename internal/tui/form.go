@@ -63,10 +63,13 @@ func statusIcon(sty *styles, state ValState) string {
 	}
 }
 
-// formSection groups form fields under a section header.
-type formSection struct {
-	name   string
-	fields []FormField
+// FormSection groups form fields under a section header. Sections are
+// rendered in declaration order, separated by a divider rule.
+type FormSection struct {
+	// Name labels the section in the rendered form.
+	Name string
+	// Fields are the section's fields, in tab order.
+	Fields []FormField
 }
 
 // renderSectionDivider renders a section separator line.

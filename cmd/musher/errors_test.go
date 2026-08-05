@@ -148,7 +148,12 @@ func TestHandleErrorCLIErrorReturnsCodes(t *testing.T) {
 		{"ExitUsage", clierrors.ExitUsage},
 		{"ExitTimeout", clierrors.ExitTimeout},
 		{"ExitExecution", clierrors.ExitExecution},
-		{"ExitHarness", clierrors.ExitHarness},
+		{"ExitDeployFailed", clierrors.ExitDeployFailed},
+		{"ExitPermission", clierrors.ExitPermission},
+		{"ExitConflict", clierrors.ExitConflict},
+		{"ExitInvalidSpec", clierrors.ExitInvalidSpec},
+		{"ExitEntitlement", clierrors.ExitEntitlement},
+		{"ExitRateLimited", clierrors.ExitRateLimited},
 	}
 
 	for _, tt := range tests {

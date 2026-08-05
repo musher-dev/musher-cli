@@ -1,13 +1,10 @@
 package main
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/config"
 	"github.com/musher-dev/musher-cli/internal/doctor"
-	"github.com/musher-dev/musher-cli/internal/harness"
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
@@ -23,39 +20,24 @@ Checks performed:
   - Credential file security
   - API connectivity and response time
   - Authentication status
-  - CLI version
-  - Harness provider availability`,
+  - CLI version`,
 		Example: `  musher doctor`,
 		Args:    noArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := output.FromContext(cmd.Context())
 
 			out.Println("Musher Doctor")
 			out.Println("=============")
 			out.Println()
 
-			// Run core diagnostics.
 			runner := doctor.New()
-			coreResults := runner.Run(cmd.Context())
+			results := runner.Run(cmd.Context())
 
-			doctor.RenderResults(coreResults, out.Print, out.Success, out.Warning, out.Failure, out.Muted)
+			doctor.RenderResults(results, out.Print, out.Success, out.Warning, out.Failure, out.Muted)
 
-			// Run harness provider checks.
-			out.Println()
-			out.Println("Harness Providers")
-			out.Println("-----------------")
-			out.Println()
+			reportRetiredConfigKeys(cmd, out)
 
-			reg := newHarnessRegistry()
-			harnessResults := runHarnessChecks(cmd.Context(), reg)
-
-			doctor.RenderResults(harnessResults, out.Print, out.Success, out.Warning, out.Failure, out.Muted)
-
-			// Combined summary.
-			allResults := make([]doctor.Result, 0, len(coreResults)+len(harnessResults))
-			allResults = append(allResults, coreResults...)
-			allResults = append(allResults, harnessResults...)
-			passed, failed, warnings := doctor.Summary(allResults)
+			passed, failed, warnings := doctor.Summary(results)
 
 			out.Println()
 			out.Print("%d passed", passed)
@@ -75,53 +57,26 @@ Checks performed:
 	}
 }
 
-// runHarnessChecks converts harness health reports into doctor results.
-func runHarnessChecks(ctx context.Context, reg *harness.Registry) []doctor.Result {
-	reports := harness.CheckAllHealth(ctx, reg)
+// reportRetiredConfigKeys tells the user when config.yaml still holds keys this
+// version no longer reads, so their removal is explained rather than silent.
+func reportRetiredConfigKeys(cmd *cobra.Command, out *output.Writer) {
+	cfg := config.FromContext(cmd.Context())
 
-	var results []doctor.Result
+	stale := cfg.UnrecognizedKeys()
+	if len(stale) == 0 {
+		return
+	}
 
-	for _, report := range reports {
-		for _, check := range report.Checks {
-			name := fmt.Sprintf("%s / %s", report.DisplayName, check.Name)
+	out.Println()
+	out.Warning("Your config contains %d key(s) this version no longer uses:", len(stale))
 
-			var status doctor.Status
-
-			switch check.Status {
-			case harness.CheckPass:
-				status = doctor.StatusPass
-			case harness.CheckWarn:
-				status = doctor.StatusWarn
-			case harness.CheckFail:
-				status = doctor.StatusFail
-			}
-
-			r := doctor.Result{
-				Name:    name,
-				Status:  status,
-				Message: check.Message,
-			}
-
-			// Add install hint for binary failures.
-			if check.Status == harness.CheckFail && check.Name == "binary" {
-				if hint := findInstallHint(reg, report.ProviderName); hint != "" {
-					r.Detail = hint
-				}
-			}
-
-			results = append(results, r)
+	for _, key := range stale {
+		if reason, ok := config.RetiredKeyReason(key); ok {
+			out.Muted("  %s — %s", key, reason)
+		} else {
+			out.Muted("  %s", key)
 		}
 	}
 
-	return results
-}
-
-// findInstallHint returns the install hint for a provider, if configured.
-func findInstallHint(reg *harness.Registry, name string) string {
-	prov, ok := reg.Get(name)
-	if !ok {
-		return ""
-	}
-
-	return prov.Spec.Status.InstallHint
+	out.Muted("  These are ignored and safe to delete.")
 }

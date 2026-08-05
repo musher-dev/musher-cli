@@ -106,12 +106,7 @@ func TestAppQuitWithResult(t *testing.T) {
 	screen := &stubScreen{viewContent: "test"}
 	app := NewApp(screen)
 
-	result := &Result{
-		Action:    "load",
-		Namespace: "acme",
-		Slug:      "bundle",
-		Version:   "1.0.0",
-	}
+	result := &Result{Action: "selected"}
 
 	_, _ = app.Update(quitWithResultMsg{result: result})
 
@@ -119,12 +114,8 @@ func TestAppQuitWithResult(t *testing.T) {
 		t.Fatal("expected non-nil result after quitWithResult")
 	}
 
-	if app.Result().Action != "load" {
-		t.Errorf("result.Action = %q, want %q", app.Result().Action, "load")
-	}
-
-	if app.Result().Namespace != "acme" {
-		t.Errorf("result.Namespace = %q, want %q", app.Result().Namespace, "acme")
+	if app.Result().Action != "selected" {
+		t.Errorf("result.Action = %q, want %q", app.Result().Action, "selected")
 	}
 }
 

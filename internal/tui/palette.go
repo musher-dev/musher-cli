@@ -20,7 +20,8 @@ type PaletteDeps struct {
 	// Global is the always-available command set.
 	Global []Command
 
-	// Resume is the most-recently-used bundle entry; nil on first run.
+	// Resume is an optional pinned "pick up where you left off" row; nil
+	// when there is nothing to resume.
 	Resume *ResumeTarget
 
 	// LoadMRU returns the persisted MRU command-id list. May be nil; the
@@ -33,6 +34,15 @@ type PaletteDeps struct {
 	SaveMRU func([]string) error
 
 	Styles *styles
+}
+
+// ResumeTarget describes the optional row pinned to the top of the palette's
+// empty-query list. Label is the human-readable text rendered after the
+// "Resume: " prefix; CommandID names the command in PaletteDeps.Global that
+// the row activates, so the resume row never duplicates that command's logic.
+type ResumeTarget struct {
+	Label     string
+	CommandID string
 }
 
 // paletteScreen is the bubbletea Screen implementing the command palette
@@ -284,8 +294,8 @@ func (p *paletteScreen) orderedDefault() []Command {
 	if p.deps.Resume != nil {
 		out = append(out, Command{
 			ID:       "resume",
-			Title:    "Resume: " + p.deps.Resume.Reference,
-			Subtitle: "load last used bundle",
+			Title:    "Resume: " + p.deps.Resume.Label,
+			Subtitle: "pick up where you left off",
 			Group:    CmdGroupResume,
 			Run: func() tea.Cmd {
 				// Wire-up: dispatch the underlying load command. We look it

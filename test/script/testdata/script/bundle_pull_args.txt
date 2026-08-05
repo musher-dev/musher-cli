@@ -1,8 +1,0 @@
-# bundle pull validates arguments and reports API errors clearly
-
-# no arguments produces a usage error
-! exec $MUSHER_BIN --no-color --no-input bundle pull
-
-# valid ref format but unreachable API reports a pull failure
-! exec $MUSHER_BIN --no-color --no-input bundle pull acme/test:1.0.0
-stderr 'Pull failed'

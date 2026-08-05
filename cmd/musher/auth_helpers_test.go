@@ -32,29 +32,3 @@ func TestNewAuthStatusCmdUse(t *testing.T) {
 		t.Errorf("Use = %q, want %q", cmd.Use, "status")
 	}
 }
-
-func TestAuthLoginCommandPath(t *testing.T) {
-	root := newRootCmd()
-
-	cmd, _, err := root.Find([]string{"auth", "login"})
-	if err != nil {
-		t.Fatalf("Find(auth login) error = %v", err)
-	}
-
-	if got := cmd.CommandPath(); got != "musher auth login" {
-		t.Fatalf("CommandPath() = %q, want %q", got, "musher auth login")
-	}
-}
-
-func TestAuthLogoutCommandPath(t *testing.T) {
-	root := newRootCmd()
-
-	cmd, _, err := root.Find([]string{"auth", "logout"})
-	if err != nil {
-		t.Fatalf("Find(auth logout) error = %v", err)
-	}
-
-	if got := cmd.CommandPath(); got != "musher auth logout" {
-		t.Fatalf("CommandPath() = %q, want %q", got, "musher auth logout")
-	}
-}

@@ -17,6 +17,10 @@ import (
 
 const (
 	keyringUser = "api-key"
+	// DefaultProfile matches config.DefaultProfile. It is duplicated here rather
+	// than imported because internal/config depends on nothing in this package
+	// and importing it back would create a cycle.
+	DefaultProfile = "default"
 )
 
 // CredentialSource indicates where credentials were found.
@@ -24,27 +28,39 @@ type CredentialSource string
 
 // Credential source values.
 const (
+	SourceFlag    CredentialSource = "--api-key flag"
 	SourceEnv     CredentialSource = "environment variable"
 	SourceKeyring CredentialSource = "keyring"
 	SourceFile    CredentialSource = "credentials file"
+	SourceSession CredentialSource = "session"
 	SourceNone    CredentialSource = ""
 )
 
 // GetCredentials returns the API key and its source.
-// apiURL is used to determine the host-scoped keyring service and credential file.
-func GetCredentials(apiURL string) (source CredentialSource, apiKey string) {
+//
+// apiURL determines the host-scoped keyring service and credential file; profile
+// scopes them further, so two profiles pointing at the same host do not share one
+// credential. Pass "" or DefaultProfile for the unscoped location.
+func GetCredentials(apiURL, profile string) (source CredentialSource, apiKey string) {
 	if key := env.Get(env.APIKey); key != "" {
 		return SourceEnv, key
 	}
 
+	return storedAPIKey(apiURL, profile)
+}
+
+// storedAPIKey returns the API key held on this machine, ignoring the
+// environment. Resolve needs the stored key separately because a session
+// outranks it while the environment outranks both.
+func storedAPIKey(apiURL, profile string) (source CredentialSource, apiKey string) {
 	service, err := paths.KeyringServiceFromURL(apiURL)
 	if err == nil {
-		if key, keyErr := keyring.Get(service, keyringUser); keyErr == nil && key != "" {
+		if key, keyErr := keyring.Get(service, keyringUserFor(profile)); keyErr == nil && key != "" {
 			return SourceKeyring, key
 		}
 	}
 
-	if key := readCredentialsFile(apiURL); key != "" {
+	if key := readCredentialsFile(apiURL, profile); key != "" {
 		slog.Debug("using credentials file (keyring unavailable)", "source", SourceFile)
 
 		return SourceFile, key
@@ -54,34 +70,34 @@ func GetCredentials(apiURL string) (source CredentialSource, apiKey string) {
 }
 
 // StoreAPIKey stores the API key in the OS keyring, falling back to a file.
-func StoreAPIKey(apiURL, apiKey string) error {
+func StoreAPIKey(apiURL, profile, apiKey string) error {
 	service, err := paths.KeyringServiceFromURL(apiURL)
 	if err != nil {
-		return writeCredentialsFile(apiURL, apiKey)
+		return writeCredentialsFile(apiURL, profile, apiKey)
 	}
 
-	if keyErr := keyring.Set(service, keyringUser, apiKey); keyErr == nil {
+	if keyErr := keyring.Set(service, keyringUserFor(profile), apiKey); keyErr == nil {
 		return nil
 	}
 
 	slog.Warn("OS keyring unavailable, storing credentials in file",
 		"hint", "file permissions restricted to 0600")
 
-	return writeCredentialsFile(apiURL, apiKey)
+	return writeCredentialsFile(apiURL, profile, apiKey)
 }
 
 // DeleteAPIKey removes the stored API key from both keyring and file.
-func DeleteAPIKey(apiURL string) error {
+func DeleteAPIKey(apiURL, profile string) error {
 	var keyringErr, fileErr error
 
 	service, svcErr := paths.KeyringServiceFromURL(apiURL)
 	if svcErr != nil {
 		keyringErr = svcErr
 	} else {
-		keyringErr = keyring.Delete(service, keyringUser)
+		keyringErr = keyring.Delete(service, keyringUserFor(profile))
 	}
 
-	fileErr = deleteCredentialsFile(apiURL)
+	fileErr = deleteCredentialsFile(apiURL, profile)
 
 	if keyringErr != nil && fileErr != nil {
 		return errors.New("no stored credentials found")
@@ -90,10 +106,24 @@ func DeleteAPIKey(apiURL string) error {
 	return nil
 }
 
-func credentialFilePath(apiURL string) string {
+// keyringUserFor scopes the keyring entry to a profile. The default profile keeps
+// the bare "api-key" username so existing installs keep working across upgrade.
+func keyringUserFor(profile string) string {
+	if profile == "" || profile == DefaultProfile {
+		return keyringUser
+	}
+
+	return keyringUser + "@" + profile
+}
+
+func credentialFilePath(apiURL, profile string) string {
 	hostID, err := paths.HostIDFromURL(apiURL)
 	if err != nil {
 		return ""
+	}
+
+	if profile != "" && profile != DefaultProfile {
+		hostID = filepath.Join(hostID, profile)
 	}
 
 	path, err := paths.CredentialFilePath(hostID)
@@ -104,8 +134,8 @@ func credentialFilePath(apiURL string) string {
 	return filepath.Clean(path)
 }
 
-func readCredentialsFile(apiURL string) string {
-	path := credentialFilePath(apiURL)
+func readCredentialsFile(apiURL, profile string) string {
+	path := credentialFilePath(apiURL, profile)
 	if path == "" {
 		return ""
 	}
@@ -131,8 +161,8 @@ func readCredentialsFile(apiURL string) string {
 	return strings.TrimSpace(string(data))
 }
 
-func writeCredentialsFile(apiURL, apiKey string) error {
-	path := credentialFilePath(apiURL)
+func writeCredentialsFile(apiURL, profile, apiKey string) error {
+	path := credentialFilePath(apiURL, profile)
 	if path == "" {
 		return errors.New("could not determine credential file path")
 	}
@@ -149,8 +179,8 @@ func writeCredentialsFile(apiURL, apiKey string) error {
 	return nil
 }
 
-func deleteCredentialsFile(apiURL string) error {
-	path := credentialFilePath(apiURL)
+func deleteCredentialsFile(apiURL, profile string) error {
+	path := credentialFilePath(apiURL, profile)
 	if path == "" {
 		return errors.New("could not determine credential file path")
 	}

@@ -20,7 +20,7 @@ const (
 // FormContainer orchestrates an ordered list of form fields organized into sections.
 // It handles navigation between fields and delegates to focused fields in edit mode.
 type FormContainer struct {
-	sections []formSection
+	sections []FormSection
 	fields   []FormField // flattened view of all fields across sections
 	cursor   int         // index into fields
 	mode     FormMode
@@ -29,11 +29,11 @@ type FormContainer struct {
 }
 
 // NewFormContainer creates a new form container.
-func NewFormContainer(sections []formSection, sty *styles, keys *keyMap) *FormContainer {
+func NewFormContainer(sections []FormSection, sty *styles, keys *keyMap) *FormContainer {
 	var fields []FormField
 
 	for _, sec := range sections {
-		fields = append(fields, sec.fields...)
+		fields = append(fields, sec.Fields...)
 	}
 
 	return &FormContainer{
@@ -65,15 +65,6 @@ func (container *FormContainer) FieldByLabel(label string) FormField {
 	}
 
 	return nil
-}
-
-// fieldValue returns the value of a field by label, or empty string if not found.
-func (container *FormContainer) fieldValue(label string) string {
-	if f := container.FieldByLabel(label); f != nil {
-		return f.Value()
-	}
-
-	return ""
 }
 
 // SubmitAll runs validation on all fields and returns error messages.
@@ -193,7 +184,12 @@ func (container *FormContainer) View(width, height int) string {
 			view.WriteString("\n")
 		}
 
-		for _, field := range sec.fields {
+		if sec.Name != "" {
+			view.WriteString("\n")
+			view.WriteString(container.sty.sectionHeader.Render(sec.Name))
+		}
+
+		for _, field := range sec.Fields {
 			active := fieldIdx == container.cursor
 
 			view.WriteString("\n")

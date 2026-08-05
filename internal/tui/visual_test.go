@@ -11,32 +11,29 @@ import (
 // TestPaletteVisualSnapshot is a debug snapshot — it logs the rendered
 // palette so a developer can `go test -run TestPaletteVisual -v` to inspect
 // the layout. It also asserts the structural invariants that matter for
-// the user experience: the brand, the panel border, all section headers,
-// and the footer all appear in the right order.
+// the user experience: the panel title, every section header, the resume
+// row, and the footer hints all appear.
 func TestPaletteVisualSnapshot(t *testing.T) {
+	t.Parallel()
+
 	commands := []Command{
-		{ID: "bundle.load", Title: "Load bundle", Subtitle: "open a bundle by reference", Group: CmdGroupUse},
-		{ID: "bundle.search", Title: "Find bundles", Subtitle: "search the Hub", Group: CmdGroupUse},
-		{ID: "bundle.new", Title: "New bundle", Subtitle: "scaffold a musher.yaml", Group: CmdGroupCreate},
-		{ID: "bundle.validate", Title: "Validate bundle", Subtitle: "check definition and assets", Group: CmdGroupCreate},
-		{ID: "bundle.pack", Title: "Pack bundle", Subtitle: "validate and cache", Group: CmdGroupCreate},
-		{ID: "bundle.push", Title: "Push to registry", Subtitle: "publish a bundle version", Group: CmdGroupCreate},
-		{ID: "auth.signIn", Title: "Sign in", Subtitle: "store an API key", Group: CmdGroupManage},
+		{ID: "deployment.list", Title: "Deployments", Subtitle: "browse deployments", Group: CmdGroupUse},
+		{ID: "deployment.logs", Title: "Logs", Subtitle: "stream deployment logs", Group: CmdGroupUse},
+		{ID: "deployment.create", Title: "New deployment", Subtitle: "deploy from this directory", Group: CmdGroupCreate},
 		{ID: "screen.config", Title: "Configuration", Subtitle: "view and edit settings", Group: CmdGroupManage},
-		{ID: "system.help", Title: "Keyboard help", Subtitle: "show all available shortcuts", Group: CmdGroupSystem},
 		{ID: "system.quit", Title: "Quit musher", Subtitle: "exit the TUI", Group: CmdGroupSystem},
 	}
 
 	sty := newStyles(true)
 	deps := &PaletteDeps{
 		Global: commands,
-		Resume: &ResumeTarget{Reference: "acme/widget@1.0", CommandID: "bundle.load"},
+		Resume: &ResumeTarget{Label: "acme/api", CommandID: "deployment.logs"},
 		Styles: &sty,
 	}
 
 	p, _ := NewPalette(deps).(*paletteScreen)
 	updated, _ := p.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
-	p = updated.(*paletteScreen)
+	p, _ = updated.(*paletteScreen)
 
 	view := ansi.Strip(p.View())
 	t.Logf("\n%s", view)
@@ -44,8 +41,8 @@ func TestPaletteVisualSnapshot(t *testing.T) {
 	for _, want := range []string{
 		"Command palette",
 		"USE", "CREATE", "MANAGE", "SYSTEM",
-		"Load bundle", "New bundle", "Quit musher",
-		"Resume: acme/widget@1.0",
+		"Deployments", "New deployment", "Quit musher",
+		"Resume: acme/api",
 		"navigate", "esc close",
 	} {
 		if !strings.Contains(view, want) {

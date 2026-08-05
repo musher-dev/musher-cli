@@ -1,5 +1,24 @@
 # root help stays stable and readable in a real process
 exec $MUSHER_BIN --no-color --no-input --help
-stdout 'Discover, load, publish, and manage agent bundles'
-stdout 'Authoring:'
-stdout 'bundle      Create, manage, and publish bundles'
+stdout 'Deploy and manage containerized applications on the Musher platform'
+
+# only two command groups survive the deployment-CLI conversion
+stdout 'Authentication:'
+stdout 'Maintenance:'
+
+# the surviving verbs are listed under them
+stdout 'auth        Manage authentication'
+stdout 'config      Manage Musher configuration'
+stdout 'doctor      Diagnose common issues'
+
+# the bundle-publishing surface is gone from help entirely
+! stdout 'Authoring:'
+! stdout 'bundle'
+! stdout 'hub'
+! stdout 'cache'
+! stdout 'harness'
+
+# and the commands themselves are unroutable
+! exec $MUSHER_BIN --no-color --no-input bundle
+! exec $MUSHER_BIN --no-color --no-input hub
+! exec $MUSHER_BIN --no-color --no-input cache

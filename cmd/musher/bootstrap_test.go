@@ -144,7 +144,7 @@ func TestConfigureRootRuntimeDefaults(t *testing.T) {
 	cmd.SetContext(t.Context())
 
 	state, err := configureRootRuntime(cmd, out,
-		false, false, false, false, false,
+		false, false, false, false,
 		"", "", "", "")
 	if err != nil {
 		t.Fatalf("configureRootRuntime() error = %v", err)
@@ -169,7 +169,7 @@ func TestConfigureRootRuntimeWithFlags(t *testing.T) {
 	cmd.SetContext(t.Context())
 
 	state, err := configureRootRuntime(cmd, out,
-		true, true, true, true, true,
+		true, true, true, true,
 		"debug", "text", "", "off")
 	if err != nil {
 		t.Fatalf("configureRootRuntime() error = %v", err)
@@ -192,8 +192,8 @@ func TestConfigureRootRuntimeWithFlags(t *testing.T) {
 		t.Error("expected NoInput=true")
 	}
 
-	if !state.noTUI {
-		t.Error("expected noTUI=true")
+	if state.out != out {
+		t.Error("state.out does not match provided writer")
 	}
 }
 
@@ -207,7 +207,7 @@ func TestConfigureRootRuntimeInvalidLogLevel(t *testing.T) {
 	cmd.SetContext(t.Context())
 
 	_, err := configureRootRuntime(cmd, out,
-		false, false, false, false, false,
+		false, false, false, false,
 		"INVALID_LEVEL", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid log level")

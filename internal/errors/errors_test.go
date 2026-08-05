@@ -5,7 +5,11 @@ import (
 	"testing"
 )
 
-func TestExitCodeConstants(t *testing.T) {
+// TestExitCodesAreStable pins every exit code to its literal value. These
+// codes are a public contract with scripts and CI; changing one is a breaking
+// change, so this test is deliberately written as a literal table rather than
+// deriving anything from the constants.
+func TestExitCodesAreStable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -20,7 +24,12 @@ func TestExitCodeConstants(t *testing.T) {
 		{"ExitConfig", ExitConfig, 4},
 		{"ExitTimeout", ExitTimeout, 5},
 		{"ExitExecution", ExitExecution, 6},
-		{"ExitHarness", ExitHarness, 7},
+		{"ExitDeployFailed", ExitDeployFailed, 8},
+		{"ExitPermission", ExitPermission, 9},
+		{"ExitConflict", ExitConflict, 10},
+		{"ExitInvalidSpec", ExitInvalidSpec, 11},
+		{"ExitEntitlement", ExitEntitlement, 12},
+		{"ExitRateLimited", ExitRateLimited, 13},
 		{"ExitUsage", ExitUsage, 64},
 	}
 
@@ -32,6 +41,36 @@ func TestExitCodeConstants(t *testing.T) {
 				t.Errorf("got %d, want %d", tt.code, tt.want)
 			}
 		})
+	}
+}
+
+// TestExitCode7IsRetired guards the one value that must never come back. It
+// used to mean "harness failure"; reassigning it would silently change the
+// meaning of every script still branching on 7.
+func TestExitCode7IsRetired(t *testing.T) {
+	t.Parallel()
+
+	codes := map[string]int{
+		"ExitSuccess":      ExitSuccess,
+		"ExitGeneral":      ExitGeneral,
+		"ExitAuth":         ExitAuth,
+		"ExitNetwork":      ExitNetwork,
+		"ExitConfig":       ExitConfig,
+		"ExitTimeout":      ExitTimeout,
+		"ExitExecution":    ExitExecution,
+		"ExitDeployFailed": ExitDeployFailed,
+		"ExitPermission":   ExitPermission,
+		"ExitConflict":     ExitConflict,
+		"ExitInvalidSpec":  ExitInvalidSpec,
+		"ExitEntitlement":  ExitEntitlement,
+		"ExitRateLimited":  ExitRateLimited,
+		"ExitUsage":        ExitUsage,
+	}
+
+	for name, code := range codes {
+		if code == 7 {
+			t.Errorf("%s = 7, but exit code 7 is retired and must never be reassigned", name)
+		}
 	}
 }
 
@@ -383,274 +422,6 @@ func TestConfigFailed(t *testing.T) {
 
 	if !errors.Is(err, cause) {
 		t.Error("cause not preserved")
-	}
-}
-
-func TestPublishFailed(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		cause    error
-		wantHint string
-	}{
-		{
-			name:     "generic",
-			cause:    errors.New("server error"),
-			wantHint: "Check your bundle definition file and credentials, then try again",
-		},
-		{
-			name:     "visibility restriction",
-			cause:    errors.New("plan allows only public bundles"),
-			wantHint: "Set 'visibility: public' in musher.yaml, or upgrade your plan for more private bundles",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := PublishFailed(tt.cause)
-
-			if err.Hint != tt.wantHint {
-				t.Errorf("Hint = %q, want %q", err.Hint, tt.wantHint)
-			}
-		})
-	}
-}
-
-func TestVersionConflict(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("409 conflict")
-	err := VersionConflict("ns/slug@1.0.0", cause)
-
-	if err.Message != "Version ns/slug@1.0.0 already exists" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.ErrorCode != "ERR-PUBLISH-CONFLICT" {
-		t.Errorf("ErrorCode = %q", err.ErrorCode)
-	}
-}
-
-func TestValidateFailed(t *testing.T) {
-	t.Parallel()
-
-	err := ValidateFailed("missing name field")
-
-	if err.Message != "Validation failed: missing name field" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.Code != ExitGeneral {
-		t.Errorf("Code = %d, want %d", err.Code, ExitGeneral)
-	}
-}
-
-func TestInvalidBundleDef(t *testing.T) {
-	t.Parallel()
-
-	err := InvalidBundleDef("bad schema version")
-
-	if err.Message != "Invalid bundle definition: bad schema version" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.Code != ExitConfig {
-		t.Errorf("Code = %d, want %d", err.Code, ExitConfig)
-	}
-}
-
-func TestPullFailed(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		cause    error
-		wantHint string
-	}{
-		{
-			name:     "generic",
-			cause:    errors.New("timeout"),
-			wantHint: "Check the bundle reference and your credentials, then try again",
-		},
-		{
-			name:     "not found",
-			cause:    errors.New("bundle not found"),
-			wantHint: "Verify the namespace, slug, and version are correct",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := PullFailed(tt.cause)
-
-			if err.Hint != tt.wantHint {
-				t.Errorf("Hint = %q, want %q", err.Hint, tt.wantHint)
-			}
-		})
-	}
-}
-
-func TestYankFailed(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("forbidden")
-	err := YankFailed("1.2.3", cause)
-
-	if err.Message != "Failed to yank version 1.2.3" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.Code != ExitGeneral {
-		t.Errorf("Code = %d, want %d", err.Code, ExitGeneral)
-	}
-}
-
-func TestUnyankFailed(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("not yanked")
-	err := UnyankFailed("2.0.0", cause)
-
-	if err.Message != "Failed to unyank version 2.0.0" {
-		t.Errorf("Message = %q", err.Message)
-	}
-}
-
-func TestBundleNotFound(t *testing.T) {
-	t.Parallel()
-
-	err := BundleNotFound("acme/foo")
-
-	if err.Message != "Bundle not found: acme/foo" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.ErrorCode != "ERR-BUNDLE-001" {
-		t.Errorf("ErrorCode = %q", err.ErrorCode)
-	}
-}
-
-func TestBundleResolveFailed(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		cause    error
-		wantHint string
-	}{
-		{
-			name:     "generic",
-			cause:    errors.New("server error"),
-			wantHint: "Check the bundle reference and version, then try again",
-		},
-		{
-			name:     "not found",
-			cause:    errors.New("version not found"),
-			wantHint: "Verify the namespace, slug, and version are correct",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := BundleResolveFailed(tt.cause)
-
-			if err.ErrorCode != "ERR-BUNDLE-002" {
-				t.Errorf("ErrorCode = %q", err.ErrorCode)
-			}
-
-			if err.Hint != tt.wantHint {
-				t.Errorf("Hint = %q, want %q", err.Hint, tt.wantHint)
-			}
-		})
-	}
-}
-
-func TestCacheCorrupt(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("sha mismatch")
-	err := CacheCorrupt("/cache/abc123", cause)
-
-	if err.Message != "Cache integrity error: /cache/abc123" {
-		t.Errorf("Message = %q", err.Message)
-	}
-}
-
-func TestHarnessNotFound(t *testing.T) {
-	t.Parallel()
-
-	err := HarnessNotFound("foobar")
-
-	if err.Message != "Unknown harness: foobar" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.Code != ExitHarness {
-		t.Errorf("Code = %d, want %d", err.Code, ExitHarness)
-	}
-
-	if err.ErrorCode != "ERR-HARNESS-001" {
-		t.Errorf("ErrorCode = %q", err.ErrorCode)
-	}
-}
-
-func TestHarnessNotInstalled(t *testing.T) {
-	t.Parallel()
-
-	t.Run("with install hint", func(t *testing.T) {
-		t.Parallel()
-
-		err := HarnessNotInstalled("claude", "pip install claude-harness")
-
-		if err.Hint != "pip install claude-harness" {
-			t.Errorf("Hint = %q", err.Hint)
-		}
-	})
-
-	t.Run("without install hint", func(t *testing.T) {
-		t.Parallel()
-
-		err := HarnessNotInstalled("claude", "")
-
-		if err.Hint != "Install the harness and ensure it is on your PATH" {
-			t.Errorf("Hint = %q", err.Hint)
-		}
-	})
-}
-
-func TestHarnessExecFailed(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("exit code 1")
-	err := HarnessExecFailed("claude", cause)
-
-	if err.Message != "Harness execution failed: claude" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.ErrorCode != "ERR-HARNESS-003" {
-		t.Errorf("ErrorCode = %q", err.ErrorCode)
-	}
-}
-
-func TestInstallConflict(t *testing.T) {
-	t.Parallel()
-
-	err := InstallConflict("/usr/local/bin/thing")
-
-	if err.Message != "Install conflict: file already exists: /usr/local/bin/thing" {
-		t.Errorf("Message = %q", err.Message)
-	}
-
-	if err.Code != ExitGeneral {
-		t.Errorf("Code = %d, want %d", err.Code, ExitGeneral)
 	}
 }
 

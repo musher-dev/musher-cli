@@ -14,8 +14,7 @@ import (
 )
 
 type rootRuntimeState struct {
-	out   *output.Writer
-	noTUI bool
+	out *output.Writer
 }
 
 func configureRootRuntime(
@@ -25,25 +24,24 @@ func configureRootRuntime(
 	quiet bool,
 	noInput bool,
 	noColor bool,
-	noTUI bool,
 	logLevel string,
 	logFormat string,
 	logFile string,
 	logStderr string,
 ) (*rootRuntimeState, error) {
-	out.JSON = pickBoolFlagOrEnv(jsonOutput, "MUSHER_JSON")
-	out.Quiet = pickBoolFlagOrEnv(quiet, "MUSHER_QUIET")
-	out.NoInput = pickBoolFlagOrEnv(noInput, "MUSHER_NO_INPUT") || pickBoolFlagOrEnv(false, "CI")
+	out.JSON = pickBoolFlagOrEnv(jsonOutput, env.JSON)
+	out.Quiet = pickBoolFlagOrEnv(quiet, env.Quiet)
+	out.NoInput = pickBoolFlagOrEnv(noInput, env.NoInput) || pickBoolFlagOrEnv(false, env.CI)
 
 	if noColor {
 		out.SetNoColor(true)
 	}
 
 	logCfg := observability.Config{
-		Level:          pickFlagOrEnv(logLevel, "MUSHER_LOG_LEVEL", "info"),
-		Format:         pickFlagOrEnv(logFormat, "MUSHER_LOG_FORMAT", "json"),
-		LogFile:        pickFlagOrEnv(logFile, "MUSHER_LOG_FILE", ""),
-		StderrMode:     pickFlagOrEnv(logStderr, "MUSHER_LOG_STDERR", "auto"),
+		Level:          pickFlagOrEnv(logLevel, env.LogLevel, "info"),
+		Format:         pickFlagOrEnv(logFormat, env.LogFormat, "json"),
+		LogFile:        pickFlagOrEnv(logFile, env.LogFile, ""),
+		StderrMode:     pickFlagOrEnv(logStderr, env.LogStderr, "auto"),
 		InteractiveTTY: false,
 		SessionID:      uuid.NewString(),
 		CommandPath:    cmd.CommandPath(),
@@ -68,10 +66,7 @@ func configureRootRuntime(
 		cmd.PostRunE = wrapPostRunCleanup(cmd.PostRunE, cleanup)
 	}
 
-	return &rootRuntimeState{
-		out:   out,
-		noTUI: pickBoolFlagOrEnv(noTUI, "MUSHER_NO_TUI"),
-	}, nil
+	return &rootRuntimeState{out: out}, nil
 }
 
 func wrapPostRunCleanup(postRun func(*cobra.Command, []string) error, cleanup func() error) func(*cobra.Command, []string) error {

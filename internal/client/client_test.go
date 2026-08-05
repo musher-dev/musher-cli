@@ -10,6 +10,20 @@ import (
 	"github.com/musher-dev/musher-cli/internal/testutil"
 )
 
+// orgsPath is the single identity endpoint the CLI depends on. The former
+// /v1/publisher/me and /v1/runner/me routes were removed from the platform.
+const orgsPath = "/v1/organizations"
+
+// mockClient wraps testutil.NewMockClient with retries disabled. Retry
+// behavior has its own suite in retry_test.go; these tests assert decoding and
+// header behavior and must not spend real time backing off.
+func mockClient(apiKey string, fn testutil.RoundTripFunc) *client.Client {
+	created := testutil.NewMockClient(apiKey, fn)
+	client.SetRetryHooks(created, client.BackoffPolicy{MaxAttempts: 1}, nil)
+
+	return created
+}
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -47,135 +61,188 @@ func TestNewWithHTTPClient_NilClient(t *testing.T) {
 	}
 }
 
-func TestValidateKey(t *testing.T) {
+func TestListOrganizations(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("success parses data envelope", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("test-key", func(req *http.Request) (*http.Response, error) {
-			if req.URL.Path != "/v1/runner/me" {
-				t.Errorf("path = %q, want /v1/runner/me", req.URL.Path)
+		c := mockClient("test-key", func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path != orgsPath {
+				t.Errorf("path = %q, want %q", req.URL.Path, orgsPath)
 			}
 
-			auth := req.Header.Get("Authorization")
-			if auth != "Bearer test-key" {
-				t.Errorf("auth = %q, want %q", auth, "Bearer test-key")
+			if req.Method != http.MethodGet {
+				t.Errorf("method = %q, want GET", req.Method)
 			}
 
 			return testutil.JSONResponse(http.StatusOK, `{
-				"credentialType": "api_key",
-				"credentialId": "cred-1",
-				"credentialName": "My Key",
-				"runnerId": "runner-1",
-				"organizationId": "org-1",
-				"organizationName": "Acme"
+				"data": [
+					{"id": "org-1", "name": "Acme", "handle": "acme"},
+					{"id": "org-2", "name": "Globex"}
+				],
+				"meta": {"hasMore": false}
 			}`), nil
 		})
 
-		identity, err := c.ValidateKey(t.Context())
+		orgs, err := c.ListOrganizations(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if identity.RunnerID != "runner-1" {
-			t.Errorf("runnerId = %q, want %q", identity.RunnerID, "runner-1")
+		if len(orgs) != 2 {
+			t.Fatalf("expected 2 organizations, got %d", len(orgs))
 		}
 
-		if identity.OrganizationName != "Acme" {
-			t.Errorf("orgName = %q, want %q", identity.OrganizationName, "Acme")
+		if orgs[0].ID != "org-1" {
+			t.Errorf("id = %q, want %q", orgs[0].ID, "org-1")
+		}
+
+		if orgs[0].Name != "Acme" {
+			t.Errorf("name = %q, want %q", orgs[0].Name, "Acme")
+		}
+
+		if orgs[0].Handle != "acme" {
+			t.Errorf("handle = %q, want %q", orgs[0].Handle, "acme")
+		}
+
+		if orgs[1].Handle != "" {
+			t.Errorf("handle = %q, want empty for org without a handle", orgs[1].Handle)
 		}
 	})
 
-	t.Run("unauthorized", func(t *testing.T) {
+	t.Run("empty data is not an error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad-key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
+			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {"hasMore": false}}`), nil
+		})
+
+		orgs, err := c.ListOrganizations(t.Context())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(orgs) != 0 {
+			t.Errorf("expected 0 organizations, got %d", len(orgs))
+		}
+	})
+
+	t.Run("unauthorized maps to ErrUnauthenticated", func(t *testing.T) {
+		t.Parallel()
+
+		c := mockClient("bad-key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusUnauthorized, `{}`), nil
 		})
 
-		_, err := c.ValidateKey(t.Context())
-		if err == nil {
-			t.Fatal("expected error for 401")
-		}
-
-		if !strings.Contains(err.Error(), "invalid or expired") {
-			t.Errorf("error = %q, want to contain 'invalid or expired'", err.Error())
+		_, err := c.ListOrganizations(t.Context())
+		if !errors.Is(err, client.ErrUnauthenticated) {
+			t.Fatalf("error = %v, want ErrUnauthenticated", err)
 		}
 	})
 
-	t.Run("forbidden", func(t *testing.T) {
+	t.Run("forbidden maps to ErrForbidden", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad-key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("scopeless-key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
-		_, err := c.ValidateKey(t.Context())
-		if err == nil {
-			t.Fatal("expected error for 403")
+		_, err := c.ListOrganizations(t.Context())
+		if !errors.Is(err, client.ErrForbidden) {
+			t.Fatalf("error = %v, want ErrForbidden", err)
 		}
 
-		if !strings.Contains(err.Error(), "runner permissions") {
-			t.Errorf("error = %q, want to contain 'runner permissions'", err.Error())
+		// A valid credential that merely lacks a scope must never be reported
+		// as an authentication failure.
+		if errors.Is(err, client.ErrUnauthenticated) {
+			t.Error("403 must not be reported as an authentication failure")
 		}
 	})
 
 	t.Run("server error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{"detail":"db down"}`), nil
 		})
 
-		_, err := c.ValidateKey(t.Context())
+		_, err := c.ListOrganizations(t.Context())
 		if err == nil {
 			t.Fatal("expected error for 500")
+		}
+
+		var statusErr *client.HTTPStatusError
+		if !errors.As(err, &statusErr) {
+			t.Fatalf("error = %v, want *client.HTTPStatusError", err)
+		}
+
+		if statusErr.Status != http.StatusInternalServerError {
+			t.Errorf("status = %d, want 500", statusErr.Status)
+		}
+
+		if statusErr.Detail != "db down" {
+			t.Errorf("detail = %q, want %q", statusErr.Detail, "db down")
+		}
+	})
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		t.Parallel()
+
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
+			return testutil.JSONResponse(http.StatusOK, `{"data": [`), nil
+		})
+
+		_, err := c.ListOrganizations(t.Context())
+		if err == nil {
+			t.Fatal("expected error for malformed JSON")
+		}
+
+		if !strings.Contains(err.Error(), "failed to parse /v1/organizations response") {
+			t.Errorf("error = %q, want to mention parse failure", err.Error())
 		}
 	})
 
 	t.Run("transport error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return nil, errors.New("connection refused")
 		})
 
-		_, err := c.ValidateKey(t.Context())
+		_, err := c.ListOrganizations(t.Context())
 		if err == nil {
 			t.Fatal("expected error on transport failure")
+		}
+
+		var reqErr *client.RequestError
+		if !errors.As(err, &reqErr) {
+			t.Fatalf("error = %v, want *client.RequestError", err)
 		}
 	})
 }
 
-func TestValidateKeyWithMeta(t *testing.T) {
+func TestListOrganizationsPage(t *testing.T) {
 	t.Parallel()
 
 	t.Run("captures response metadata", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
-			resp := testutil.JSONResponse(http.StatusOK, `{
-				"credentialType": "api_key",
-				"credentialId": "cred-1",
-				"credentialName": "My Key",
-				"runnerId": "runner-1",
-				"organizationId": "org-1",
-				"organizationName": "Acme"
-			}`)
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
+			resp := testutil.JSONResponse(http.StatusOK, `{"data": [{"id":"org-1","name":"Acme"}], "meta": {}}`)
 			resp.Header.Set("X-Request-Id", "req-abc")
 			resp.Header.Set("X-Trace-Id", "trace-xyz")
 
 			return resp, nil
 		})
 
-		identity, meta, err := c.ValidateKeyWithMeta(t.Context())
+		page, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if identity == nil {
-			t.Fatal("expected non-nil identity")
+		if len(page.Data) != 1 {
+			t.Fatalf("expected 1 organization, got %d", len(page.Data))
 		}
 
 		if meta.RequestID != "req-abc" {
@@ -187,19 +254,39 @@ func TestValidateKeyWithMeta(t *testing.T) {
 		}
 	})
 
+	t.Run("trace ID falls back to traceparent", func(t *testing.T) {
+		t.Parallel()
+
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
+			resp := testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`)
+			resp.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+
+			return resp, nil
+		})
+
+		_, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if meta.TraceID != "4bf92f3577b34da6a3ce929d0e0e4736" {
+			t.Errorf("traceID = %q, want the traceparent trace segment", meta.TraceID)
+		}
+	})
+
 	t.Run("unauthorized includes meta", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("bad", func(_ *http.Request) (*http.Response, error) {
 			resp := testutil.JSONResponse(http.StatusUnauthorized, `{}`)
 			resp.Header.Set("X-Request-Id", "req-fail")
 
 			return resp, nil
 		})
 
-		_, meta, err := c.ValidateKeyWithMeta(t.Context())
-		if err == nil {
-			t.Fatal("expected error")
+		_, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
+		if !errors.Is(err, client.ErrUnauthenticated) {
+			t.Fatalf("error = %v, want ErrUnauthenticated", err)
 		}
 
 		if meta == nil {
@@ -212,78 +299,62 @@ func TestValidateKeyWithMeta(t *testing.T) {
 	})
 }
 
-func TestGetPublisherIdentity(t *testing.T) {
+func TestRequestHeaders(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("authenticated request", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("pub-key", func(req *http.Request) (*http.Response, error) {
-			if req.URL.Path != "/v1/publisher/me" {
-				t.Errorf("path = %q, want /v1/publisher/me", req.URL.Path)
-			}
+		var got http.Header
 
-			return testutil.JSONResponse(http.StatusOK, `{
-				"credentialType": "api_key",
-				"credentialId": "cred-2",
-				"credentialName": "Pub Key",
-				"user": {"email": "user@example.com", "fullName": "Test User"},
-				"organization": {"id": "org-1", "name": "Acme"},
-				"namespaces": [
-					{"handle": "acme", "displayName": "Acme Corp"}
-				]
-			}`), nil
+		c := mockClient("test-key", func(req *http.Request) (*http.Response, error) {
+			got = req.Header.Clone()
+
+			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`), nil
 		})
 
-		identity, err := c.GetPublisherIdentity(t.Context())
-		if err != nil {
+		if _, err := c.ListOrganizations(t.Context()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if identity.User.Email != "user@example.com" {
-			t.Errorf("email = %q, want %q", identity.User.Email, "user@example.com")
+		if auth := got.Get("Authorization"); auth != "Bearer test-key" {
+			t.Errorf("Authorization = %q, want %q", auth, "Bearer test-key")
 		}
 
-		if identity.Organization.Name != "Acme" {
-			t.Errorf("orgName = %q, want %q", identity.Organization.Name, "Acme")
+		if ct := got.Get("Content-Type"); ct != "" {
+			t.Errorf("Content-Type = %q, want empty on a request with no body", ct)
 		}
 
-		if len(identity.Namespaces) != 1 {
-			t.Fatalf("expected 1 namespace, got %d", len(identity.Namespaces))
+		if accept := got.Get("Accept"); accept != "application/json, application/problem+json" {
+			t.Errorf("Accept = %q, want both JSON media types", accept)
 		}
 
-		if identity.Namespaces[0].Handle != "acme" {
-			t.Errorf("namespace = %q, want %q", identity.Namespaces[0].Handle, "acme")
+		if ua := got.Get("User-Agent"); !strings.HasPrefix(ua, "musher/") {
+			t.Errorf("User-Agent = %q, want musher/ prefix", ua)
 		}
-	})
 
-	t.Run("unauthorized", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("bad", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusUnauthorized, `{}`), nil
-		})
-
-		_, err := c.GetPublisherIdentity(t.Context())
-		if err == nil {
-			t.Fatal("expected error for 401")
+		if got.Get("X-Request-Id") == "" {
+			t.Error("X-Request-Id was not generated")
 		}
 	})
 
-	t.Run("forbidden", func(t *testing.T) {
+	t.Run("unauthenticated client omits Authorization", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
+		var got http.Header
+
+		c := mockClient("", func(req *http.Request) (*http.Response, error) {
+			got = req.Header.Clone()
+
+			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`), nil
 		})
 
-		_, err := c.GetPublisherIdentity(t.Context())
-		if err == nil {
-			t.Fatal("expected error for 403")
+		if _, err := c.ListOrganizations(t.Context()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if !strings.Contains(err.Error(), "publisher permissions") {
-			t.Errorf("error = %q, want to contain 'publisher permissions'", err.Error())
+		if auth := got.Get("Authorization"); auth != "" {
+			t.Errorf("Authorization = %q, want empty", auth)
 		}
 	})
 }
@@ -298,28 +369,28 @@ func TestHTTPStatusError(t *testing.T) {
 	}{
 		{
 			name:     "basic error",
-			err:      client.HTTPStatusError{Operation: "push", Status: 500},
-			contains: []string{"push", "500"},
+			err:      client.HTTPStatusError{Operation: "list organizations", Status: 500},
+			contains: []string{"list organizations", "500"},
 		},
 		{
 			name:     "with request ID",
-			err:      client.HTTPStatusError{Operation: "push", Status: 403, RequestID: "req-1"},
-			contains: []string{"push", "403", "request_id=req-1"},
+			err:      client.HTTPStatusError{Operation: "deploy", Status: 403, RequestID: "req-1"},
+			contains: []string{"deploy", "403", "request_id=req-1"},
 		},
 		{
 			name:     "with trace ID",
-			err:      client.HTTPStatusError{Operation: "push", Status: 403, TraceID: "trace-1"},
-			contains: []string{"push", "403", "trace_id=trace-1"},
+			err:      client.HTTPStatusError{Operation: "deploy", Status: 403, TraceID: "trace-1"},
+			contains: []string{"deploy", "403", "trace_id=trace-1"},
 		},
 		{
 			name:     "with detail",
-			err:      client.HTTPStatusError{Operation: "push", Status: 422, Detail: "invalid version"},
-			contains: []string{"push", "422", "invalid version"},
+			err:      client.HTTPStatusError{Operation: "deploy", Status: 422, Detail: "invalid size"},
+			contains: []string{"deploy", "422", "invalid size"},
 		},
 		{
 			name:     "all fields",
-			err:      client.HTTPStatusError{Operation: "yank", Status: 404, RequestID: "r1", TraceID: "t1", Detail: "not found"},
-			contains: []string{"yank", "404", "request_id=r1", "trace_id=t1", "not found"},
+			err:      client.HTTPStatusError{Operation: "deploy", Status: 404, RequestID: "r1", TraceID: "t1", Detail: "not found"},
+			contains: []string{"deploy", "404", "request_id=r1", "trace_id=t1", "not found"},
 		},
 	}
 
@@ -383,200 +454,6 @@ func TestRequestError(t *testing.T) {
 
 		if err.RequestIDValue() != "req-123" {
 			t.Errorf("RequestIDValue() = %q, want %q", err.RequestIDValue(), "req-123")
-		}
-	})
-}
-
-func TestCheckBundleVersionExists(t *testing.T) {
-	t.Parallel()
-
-	t.Run("exists", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("key", func(req *http.Request) (*http.Response, error) {
-			want := "/v1/namespaces/acme/bundles/tool/versions/1.0.0"
-			if req.URL.Path != want {
-				t.Errorf("path = %q, want %q", req.URL.Path, want)
-			}
-
-			return testutil.JSONResponse(http.StatusOK, `{}`), nil
-		})
-
-		exists, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "1.0.0")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !exists {
-			t.Error("expected exists = true")
-		}
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
-		})
-
-		exists, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "9.9.9")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if exists {
-			t.Error("expected exists = false")
-		}
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusInternalServerError, `{}`), nil
-		})
-
-		_, err := c.CheckBundleVersionExists(t.Context(), "acme", "tool", "1.0.0")
-		if err == nil {
-			t.Fatal("expected error for 500")
-		}
-	})
-}
-
-func TestPullBundleVersion(t *testing.T) {
-	t.Parallel()
-
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-
-		var gotPath string
-
-		c := testutil.NewMockClient("key", func(req *http.Request) (*http.Response, error) {
-			gotPath = req.URL.Path
-
-			return testutil.JSONResponse(http.StatusOK, `{
-				"namespace": "acme",
-				"slug": "tool",
-				"version": "1.0.0",
-				"manifest": [
-					{"logicalPath": "skills/review.md", "assetType": "skill", "contentText": "# Review"}
-				]
-			}`), nil
-		})
-
-		result, err := c.PullBundleVersion(t.Context(), "acme", "tool", "1.0.0")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if gotPath != "/v1/namespaces/acme/bundles/tool/versions/1.0.0:pull" {
-			t.Errorf("path = %q", gotPath)
-		}
-
-		if result.Version != "1.0.0" {
-			t.Errorf("version = %q, want %q", result.Version, "1.0.0")
-		}
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
-		})
-
-		_, err := c.PullBundleVersion(t.Context(), "acme", "tool", "9.9.9")
-		if err == nil {
-			t.Fatal("expected error for not found")
-		}
-
-		if !strings.Contains(err.Error(), "not found") {
-			t.Errorf("error = %q, want 'not found'", err.Error())
-		}
-	})
-}
-
-func TestPullPublicBundleVersion(t *testing.T) {
-	t.Parallel()
-
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-
-		var gotPath string
-
-		c := testutil.NewMockClient("", func(req *http.Request) (*http.Response, error) {
-			gotPath = req.URL.Path
-
-			if auth := req.Header.Get("Authorization"); auth != "" {
-				t.Errorf("expected no auth for public endpoint, got %q", auth)
-			}
-
-			return testutil.JSONResponse(http.StatusOK, `{
-				"namespace": "acme",
-				"slug": "tool",
-				"version": "1.0.0",
-				"manifest": []
-			}`), nil
-		})
-
-		result, err := c.PullPublicBundleVersion(t.Context(), "acme", "tool", "1.0.0")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if gotPath != "/v1/hub/bundles/acme/tool/versions/1.0.0:pull" {
-			t.Errorf("path = %q", gotPath)
-		}
-
-		if result.Namespace != "acme" {
-			t.Errorf("namespace = %q, want %q", result.Namespace, "acme")
-		}
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("", func(_ *http.Request) (*http.Response, error) {
-			return testutil.JSONResponse(http.StatusNotFound, `{}`), nil
-		})
-
-		_, err := c.PullPublicBundleVersion(t.Context(), "acme", "missing", "1.0.0")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-}
-
-func TestGetMyNamespaces(t *testing.T) {
-	t.Parallel()
-
-	t.Run("delegates to GetPublisherIdentity", func(t *testing.T) {
-		t.Parallel()
-
-		c := testutil.NewMockClient("key", func(req *http.Request) (*http.Response, error) {
-			if req.URL.Path != "/v1/publisher/me" {
-				t.Errorf("path = %q, want /v1/publisher/me", req.URL.Path)
-			}
-
-			return testutil.JSONResponse(http.StatusOK, `{
-				"credentialType": "api_key",
-				"credentialId": "c1",
-				"credentialName": "k",
-				"namespaces": [{"handle": "ns1", "displayName": "NS 1"}]
-			}`), nil
-		})
-
-		ns, err := c.GetMyNamespaces(t.Context())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if len(ns) != 1 {
-			t.Fatalf("expected 1 namespace, got %d", len(ns))
-		}
-
-		if ns[0].Handle != "ns1" {
-			t.Errorf("handle = %q, want %q", ns[0].Handle, "ns1")
 		}
 	})
 }

@@ -1,40 +1,45 @@
 // Package tui provides the bubbletea-based interactive terminal interface.
 //
+// The package is the reusable chrome and plumbing that individual screens are
+// built on: the App screen stack, the command palette, the header/footer
+// primitives, the form widgets, the layout helpers, and the styling. Screens
+// themselves live next to the feature they serve and declare their own narrow
+// dependency interfaces — there is deliberately no central deps type.
+//
 // Design note on output interaction: when TUI is active, output.Writer calls
 // must not write directly to stdout (they would corrupt the bubbletea display).
 // All rendering goes through bubbletea's View() method.
 //
 // Error convention: errors that flow through tea.Msg values inside the
-// bubbletea program use stdlib errors.New / fmt.Errorf — they are internal
-// state, not user-facing diagnostics. Errors that escape the program back to
-// the caller in cmd/musher (i.e. the value returned by runScreen / runApp)
-// MUST be wrapped as *internal/errors.CLIError so the cmd layer can render
-// them with the standard exit code, hint, and error code surface. The wrap
-// happens at the program boundary (see runApp), not inside individual screens.
+// bubbletea program use stdlib errors.New — they are internal state, not
+// user-facing diagnostics. Errors that escape the program back to the caller
+// in cmd/musher (i.e. the value returned by Run / RunApp) MUST be wrapped as
+// *internal/errors.CLIError so the cmd layer can render them with the standard
+// exit code, hint, and error code surface. The wrap happens at the program
+// boundary (see RunApp), not inside individual screens.
 package tui
 
 import (
-	"context"
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/harness/healthcache"
-	"github.com/musher-dev/musher-cli/internal/transcript"
-	"github.com/musher-dev/musher-cli/internal/tui/bundlefetch"
 )
 
 var errUnexpectedModel = errors.New("unexpected model type from TUI program")
 
-// runScreen wraps a screen in an App, runs the BubbleTea program, and extracts the result.
-func runScreen(screen Screen) (*Result, error) {
-	return runApp(NewApp(screen))
+// Run wraps a screen in an App, runs the BubbleTea program, and extracts the
+// result. It is the entry point every command-level TUI launcher should use
+// unless it needs App-level wiring, in which case it builds an App itself and
+// calls RunApp.
+func Run(screen Screen) (*Result, error) {
+	return RunApp(NewApp(screen))
 }
 
-// runApp executes a pre-configured App. Use this overload when the caller
+// RunApp executes a pre-configured App. Use this overload when the caller
 // needs to install a palette factory or other App-level wiring before the
 // program starts.
-func runApp(app *App) (*Result, error) {
+func RunApp(app *App) (*Result, error) {
 	p := tea.NewProgram(app)
 
 	finalModel, err := p.Run()
@@ -62,8 +67,6 @@ const (
 	ModeDisabled Mode = iota
 	// ModeInteractive is the default TUI with discovery and navigation.
 	ModeInteractive
-	// ModeBrowse opens the TUI at the browse/search screen.
-	ModeBrowse
 )
 
 // ShouldEnable determines the TUI mode based on terminal state and flags.
@@ -74,118 +77,4 @@ func ShouldEnable(isTerminal, noTUIFlag, quietFlag, jsonFlag bool) Mode {
 	}
 
 	return ModeInteractive
-}
-
-// RunHome launches the TUI at the home screen and returns the user's selection.
-// Returns nil result if the user quit without selecting an action.
-func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newHomeScreen(ctx, deps, &sty, &keys))
-}
-
-// RunHomeWithPalette launches the polished home screen as the root surface
-// and installs the command palette as a modal-over-home overlay reachable
-// from any pushed screen via `:`, `ctrl+k`, or `ctrl+p`. This is the entry
-// point used by bare `musher` invocation.
-func RunHomeWithPalette(ctx context.Context, homeDeps *HomeDeps, isAuthed func() bool) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	cmdDeps := &CommandDeps{
-		Ctx:      ctx,
-		HomeDeps: homeDeps,
-		Styles:   &sty,
-		Keys:     &keys,
-		IsAuthed: isAuthed,
-	}
-
-	global := buildGlobalCommands(cmdDeps)
-
-	makePaletteDeps := func() *PaletteDeps {
-		return &PaletteDeps{
-			Global:  global,
-			Resume:  loadResumeTarget(homeDeps.WorkDir),
-			LoadMRU: loadPaletteMRU,
-			SaveMRU: savePaletteMRU,
-			Styles:  &sty,
-		}
-	}
-
-	home := newHomeScreen(ctx, homeDeps, &sty, &keys)
-	app := NewApp(home)
-	app.SetPaletteFactory(func() Screen { return NewPalette(makePaletteDeps()) })
-
-	return runApp(app)
-}
-
-// RunSearch launches the TUI in search mode and returns the user's selection.
-// Returns nil result if the user quit without selecting a bundle.
-func RunSearch(
-	ctx context.Context,
-	searcher BundleSearcher,
-	fetcher *bundlefetch.Fetcher,
-	harnesses HarnessLister,
-	healthChecker HarnessHealthChecker,
-	healthCache *healthcache.Cache,
-	initialQuery string,
-) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newSearchScreen(ctx, searcher, fetcher, harnesses, healthChecker, healthCache, initialQuery, &sty, &keys))
-}
-
-// RunNewBundle launches the TUI in new bundle creation mode.
-// Returns a result with Action "init" on success, or nil if canceled.
-func RunNewBundle(ctx context.Context, deps *HomeDeps, workDir string) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newNewBundleScreen(ctx, deps, workDir, &sty, &keys))
-}
-
-// RunPack launches the TUI in pack mode for the bundle in the working directory.
-// Returns nil result on quit without action.
-func RunPack(ctx context.Context, deps *HomeDeps) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newPackScreen(ctx, deps, deps.Packer, &sty, &keys))
-}
-
-// RunHistory launches the TUI for browsing session history.
-// Returns nil result if the user quit without taking an action.
-func RunHistory(ctx context.Context, store SessionLister) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newHistoryScreen(ctx, store, &sty, &keys))
-}
-
-// RunHistoryDetail launches the TUI for viewing a single session's events.
-// Returns nil result when the user navigates back.
-func RunHistoryDetail(ctx context.Context, session *transcript.Session, events []transcript.Event) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newHistoryDetailScreen(ctx, session, events, &sty, &keys))
-}
-
-// RunLoad launches the TUI in load mode for a specific bundle.
-// Returns the user's action (harness selection) or nil if canceled.
-func RunLoad(
-	ctx context.Context,
-	searcher BundleSearcher,
-	fetcher *bundlefetch.Fetcher,
-	harnessLister HarnessLister,
-	healthChecker HarnessHealthChecker,
-	healthCache *healthcache.Cache,
-	namespace, slug, version string,
-) (*Result, error) {
-	sty := newStyles(true)
-	keys := defaultKeyMap()
-
-	return runScreen(newLoadScreen(ctx, searcher, fetcher, harnessLister, healthChecker, healthCache, namespace, slug, version, &sty, &keys))
 }

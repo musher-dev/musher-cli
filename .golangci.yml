@@ -125,23 +125,35 @@ linters:
       rules:
         internal_no_cmd_import:
           files:
-            - internal/**/*.go
+            - "**/internal/*.go"
+            - "**/internal/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/cmd/musher
               desc: internal packages must not import cmd/musher
         platform_no_presentation:
           files:
-            - internal/client/**/*.go
-            - internal/auth/**/*.go
-            - internal/config/**/*.go
-            - internal/update/**/*.go
-            - internal/errors/**/*.go
-            - internal/buildinfo/**/*.go
-            - internal/terminal/**/*.go
-            - internal/paths/**/*.go
-            - internal/observability/**/*.go
-            - internal/bundle/**/*.go
-            - internal/transcript/**/*.go
+            - "**/internal/client/*.go"
+            - "**/internal/client/**/*.go"
+            - "**/internal/auth/*.go"
+            - "**/internal/auth/**/*.go"
+            - "**/internal/config/*.go"
+            - "**/internal/config/**/*.go"
+            - "**/internal/update/*.go"
+            - "**/internal/update/**/*.go"
+            - "**/internal/errors/*.go"
+            - "**/internal/errors/**/*.go"
+            - "**/internal/buildinfo/*.go"
+            - "**/internal/buildinfo/**/*.go"
+            - "**/internal/terminal/*.go"
+            - "**/internal/terminal/**/*.go"
+            - "**/internal/paths/*.go"
+            - "**/internal/paths/**/*.go"
+            - "**/internal/observability/*.go"
+            - "**/internal/observability/**/*.go"
+            - "**/internal/workflow/*.go"
+            - "**/internal/workflow/**/*.go"
+            - "**/internal/deployspec/*.go"
+            - "**/internal/deployspec/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: platform/core packages must not depend on output
@@ -155,96 +167,62 @@ linters:
               desc: testutil is for tests only and must not be imported by production code
         doctor_no_output:
           files:
-            - internal/doctor/**/*.go
+            - "**/internal/doctor/*.go"
+            - "**/internal/doctor/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: doctor package must remain output-agnostic
-        bundledef_no_consumer:
+        client_isolation:
           files:
-            - internal/bundledef/**/*.go
+            - "**/internal/client/*.go"
+            - "**/internal/client/**/*.go"
           deny:
-            - pkg: github.com/musher-dev/musher-cli/internal/bundle
-              desc: bundledef must not import consumer bundle packages
-            - pkg: github.com/musher-dev/musher-cli/internal/harness
-              desc: bundledef must not import harness
-            - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: bundledef must not import TUI
-            - pkg: github.com/musher-dev/musher-cli/internal/transcript
-              desc: bundledef must not import transcript
+            - pkg: github.com/musher-dev/musher-cli/internal/deploy
+              desc: client is transport only and must not import use-case packages
+            - pkg: github.com/musher-dev/musher-cli/internal/workflow
+              desc: client is transport only and must not import use-case packages
+        stream_isolation:
+          # depguard matches absolute paths, so scoped globs need a `**` prefix.
+          files:
+            - "**/internal/client/stream/*.go"
+            - "**/internal/client/stream/**/*.go"
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/output
+              desc: the SSE stream client is transport only and must not depend on output
+            - pkg: github.com/musher-dev/musher-cli/internal/prompt
+              desc: the SSE stream client is transport only and must not depend on prompt
+            - pkg: github.com/musher-dev/musher-cli/internal/workflow
+              desc: the SSE stream client is transport only and must not import use-case packages
+        cmd_no_net_http:
+          files:
+            - "**/cmd/musher/*.go"
+            - "**/cmd/musher/**/*.go"
+          deny:
+            - pkg: net/http
+              desc: cmd/ must use internal/client for HTTP, not net/http directly
         tui_isolation:
           files:
-            - internal/tui/**/*.go
+            - "**/internal/tui/*.go"
+            - "**/internal/tui/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: TUI has own rendering via bubbletea
             - pkg: github.com/musher-dev/musher-cli/internal/prompt
               desc: TUI has own prompting via bubbletea
-        harness_isolation:
-          files:
-            - internal/harness/**/*.go
-          deny:
-            - pkg: github.com/musher-dev/musher-cli/cmd/musher
-              desc: harness must not import cmd
-            - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: harness must not import TUI
-            - pkg: github.com/musher-dev/musher-cli/internal/output
-              desc: harness must not import output
-            - pkg: github.com/musher-dev/musher-cli/internal/prompt
-              desc: harness must not import prompt
-        client_isolation:
-          files:
-            - internal/client/**/*.go
-          deny:
-            - pkg: github.com/musher-dev/musher-cli/internal/bundle
-              desc: client must not import consumer bundle packages
-            - pkg: github.com/musher-dev/musher-cli/internal/harness
-              desc: client must not import harness
-            - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: client must not import TUI
-            - pkg: github.com/musher-dev/musher-cli/internal/transcript
-              desc: client must not import transcript
-        oci_isolation:
-          files:
-            - internal/oci/**/*.go
-          deny:
-            - pkg: github.com/musher-dev/musher-cli/cmd/musher
-              desc: oci must not import cmd
-            - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: oci must not import TUI
-            - pkg: github.com/musher-dev/musher-cli/internal/output
-              desc: oci must not import output
-            - pkg: github.com/musher-dev/musher-cli/internal/prompt
-              desc: oci must not import prompt
-        skills_isolation:
-          files:
-            - internal/skills/**/*.go
-          deny:
-            - pkg: github.com/musher-dev/musher-cli/cmd/musher
-              desc: skills must not import cmd
-            - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: skills must not import TUI
-            - pkg: github.com/musher-dev/musher-cli/internal/output
-              desc: skills must not import output
-            - pkg: github.com/musher-dev/musher-cli/internal/prompt
-              desc: skills must not import prompt
         output_no_tui:
           files:
-            - internal/output/**/*.go
+            - "**/internal/output/*.go"
+            - "**/internal/output/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: output must not import TUI (separate rendering systems)
+              desc: output must not depend on the TUI layer
         prompt_no_tui:
           files:
-            - internal/prompt/**/*.go
+            - "**/internal/prompt/*.go"
+            - "**/internal/prompt/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/tui
-              desc: prompt must not import TUI (separate rendering systems)
-        cmd_no_net_http:
-          files:
-            - cmd/musher/**/*.go
-          deny:
-            - pkg: net/http
-              desc: cmd/ must use internal/client for HTTP, not net/http directly
+              desc: prompt must not depend on the TUI layer
     forbidigo:
       analyze-types: true
       forbid:
@@ -366,12 +344,6 @@ linters:
       - path: internal/env/env\.go
         linters:
           - forbidigo    # env wraps os.Getenv/LookupEnv (the single allowed site)
-      - path: internal/tui/
-        linters:
-          - forbidigo    # TUI uses bubbletea rendering, not fmt.Print to stdout
-      - path: internal/tui/
-        linters:
-          - containedctx # bubbletea models may pass context via messages
 
 formatters:
   enable:

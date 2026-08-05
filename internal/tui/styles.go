@@ -1,9 +1,7 @@
 package tui
 
 import (
-	"fmt"
 	"image/color"
-	"strconv"
 
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
@@ -32,15 +30,6 @@ const (
 	panelContentOffset = 6  // border(2) + padding(4)
 	menuLabelOffset    = 12 // cursor(2) + badge(3) + padding + border
 	twoPanelGap        = 3  // gap between panels in two-panel mode
-
-	searchMaxVisibleMin = 5   // minimum visible results in sliding window
-	searchMaxVisibleMax = 8   // maximum visible results on tall terminals
-	searchPanelMax      = 80  // max width for search/detail panels
-	validationPanelMax  = 100 // max width for validation panel
-	pushPanelMax        = 80  // max width for push review panel
-
-	// Publisher trust tier values.
-	trustTierVerified = "verified"
 )
 
 // layoutMode classifies the current terminal width for responsive rendering.
@@ -77,14 +66,6 @@ func clampMenuWidth(termWidth int) int {
 	default:
 		return max(termWidth-4, 20)
 	}
-}
-
-// adaptiveMaxVisible returns the number of result items to show based on terminal height.
-// Each result card is ~5 lines (display name, ref, summary, stats, separator). Chrome
-// (breadcrumb, input panel, footer, borders) uses ~12 lines.
-func adaptiveMaxVisible(termHeight int) int {
-	available := (termHeight - 12) / 5
-	return max(searchMaxVisibleMin, min(available, searchMaxVisibleMax))
 }
 
 // styles holds the TUI color and layout styles, adapting to light/dark terminals.
@@ -193,38 +174,6 @@ type styles struct {
 	headerTagline    lipgloss.Style
 	headerBg         lipgloss.Style
 	headerSep        lipgloss.Style
-}
-
-// formatCount abbreviates large numbers for display (e.g. 1200 → "1.2K", 2500000 → "2.5M").
-func formatCount(count int) string {
-	switch {
-	case count >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(count)/1_000_000)
-	case count >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(count)/1_000)
-	default:
-		return strconv.Itoa(count)
-	}
-}
-
-// formatBytes formats byte counts for display (e.g. 1024 → "1.0 KB", 5242880 → "5.0 MB").
-func formatBytes(bytes int64) string {
-	const (
-		kiloByte = 1024
-		megaByte = kiloByte * 1024
-		gigaByte = megaByte * 1024
-	)
-
-	switch {
-	case bytes >= gigaByte:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gigaByte))
-	case bytes >= megaByte:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(megaByte))
-	case bytes >= kiloByte:
-		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kiloByte))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
 }
 
 // applyInputStyles sets the placeholder style on a textinput to match the TUI palette.
