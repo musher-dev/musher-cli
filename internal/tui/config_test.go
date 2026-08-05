@@ -15,10 +15,14 @@ func newMockConfig() *mockConfigManager {
 	return &mockConfigManager{
 		values: map[string]string{
 			"api.url":               "https://api.musher.dev",
+			"api.retries":           "4",
 			"network.ca_cert_file":  "",
+			"context.organization":  "",
+			"context.environment":   "",
+			"deploy.wait":           "true",
+			"deploy.timeout":        "15m",
 			"update.auto_apply":     "true",
 			"update.check_interval": "24h",
-			"tui.enabled":           "true",
 		},
 	}
 }
@@ -33,21 +37,11 @@ func (m *mockConfigManager) Set(key string, value any) error {
 	return nil
 }
 
-func (m *mockConfigManager) All() map[string]any {
-	result := make(map[string]any)
-
-	for k, v := range m.values {
-		result[k] = v
-	}
-
-	return result
-}
-
 func newTestConfigScreen(cfg *mockConfigManager) *configScreen {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	screen := newConfigScreen(cfg, "https://api.musher.dev", &sty, &keys)
+	screen := newConfigScreen(cfg, &sty, &keys)
 	screen.width = 80
 	screen.height = 24
 
@@ -350,7 +344,7 @@ func TestConfigScreen_NilConfig(t *testing.T) {
 	sty := newStyles(true)
 	keys := defaultKeyMap()
 
-	screen := newConfigScreen(nil, "", &sty, &keys)
+	screen := newConfigScreen(nil, &sty, &keys)
 	screen.width = 80
 	screen.height = 24
 
@@ -410,7 +404,7 @@ func TestConfigScreen_SectionHeaders(t *testing.T) {
 
 	view := screen.View()
 
-	for _, section := range []string{"API", "NETWORK", "UPDATES", "DISPLAY"} {
+	for _, section := range []string{"API", "NETWORK", "CONTEXT", "DEPLOY", "UPDATES"} {
 		if !strings.Contains(view, section) {
 			t.Errorf("expected section header %q in view", section)
 		}
@@ -430,5 +424,69 @@ func TestConfigScreen_DetailPane_ModifiedIndicator(t *testing.T) {
 	view := screen.View()
 	if !strings.Contains(view, "Modified") {
 		t.Error("expected 'Modified' indicator for changed value")
+	}
+}
+
+func TestValidateConfigValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		inputType configInputType
+		value     string
+		wantErr   bool
+	}{
+		{"empty is always allowed", configInputDuration, "", false},
+		{"valid duration", configInputDuration, "30m", false},
+		{"invalid duration", configInputDuration, "later", true},
+		{"valid int", configInputInt, "4", false},
+		{"invalid int", configInputInt, "many", true},
+		{"text is never rejected", configInputText, "anything at all", false},
+		{"bool is never rejected", configInputBool, "true", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := validateConfigValue(tt.inputType, tt.value)
+			if (got != "") != tt.wantErr {
+				t.Errorf("validateConfigValue(%d, %q) = %q, wantErr %v", tt.inputType, tt.value, got, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConfigScreen_RejectsInvalidDurationOnSave(t *testing.T) {
+	t.Parallel()
+
+	cfg := newMockConfig()
+	screen := newTestConfigScreen(cfg)
+
+	for i, item := range screen.items {
+		if item.inputType == configInputDuration {
+			screen.cursor = i
+
+			break
+		}
+	}
+
+	original := screen.items[screen.cursor].value
+
+	// Enter edit mode, replace the value with garbage, and try to save.
+	screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	screen.editInput.SetValue("not-a-duration")
+	screen.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if screen.state != configStateEdit {
+		t.Error("expected to stay in edit mode after an invalid value")
+	}
+
+	if screen.editErr == "" {
+		t.Error("expected an inline error message")
+	}
+
+	if screen.items[screen.cursor].value != original {
+		t.Errorf("value should be unchanged, got %q", screen.items[screen.cursor].value)
 	}
 }

@@ -1,0 +1,54 @@
+# --profile must actually select a profile's config, not just parse.
+#
+# Regression test: the flag was registered and read, but its value never reached
+# the config loader, so every command silently used the base profile.
+
+# MUSHER_API_URL is set by the harness and would outrank both config files.
+env MUSHER_API_URL=
+
+mkdir $MUSHER_CONFIG_HOME/profiles/staging
+cp $WORK/base-config.yaml $MUSHER_CONFIG_HOME/config.yaml
+cp $WORK/staging-config.yaml $MUSHER_CONFIG_HOME/profiles/staging/config.yaml
+
+# without the flag, the base config wins
+exec $MUSHER_BIN --no-color --no-input config get api.url
+stdout '^https://base\.example\.com$'
+
+# with the flag, the profile's value wins
+exec $MUSHER_BIN --no-color --no-input --profile staging config get api.url
+stdout '^https://staging\.example\.com$'
+! stdout 'base\.example\.com'
+
+# MUSHER_PROFILE selects the same profile
+env MUSHER_PROFILE=staging
+exec $MUSHER_BIN --no-color --no-input config get api.url
+stdout '^https://staging\.example\.com$'
+
+# the flag outranks the env var
+env MUSHER_PROFILE=staging
+exec $MUSHER_BIN --no-color --no-input --profile default config get api.url
+stdout '^https://base\.example\.com$'
+
+env MUSHER_PROFILE=
+
+# the profile is reported as active and listed
+exec $MUSHER_BIN --no-color --no-input --profile staging config profile active
+stdout '^staging$'
+
+# 'profile list' marks the active profile on stderr and the rest on stdout
+exec $MUSHER_BIN --no-color --no-input config profile list
+stderr 'default \(active\)'
+stdout 'staging'
+
+# keys absent from the profile still fall through to the base config
+exec $MUSHER_BIN --no-color --no-input --profile staging config get network.ca_cert_file
+stdout '^/tmp/base-ca\.pem$'
+
+-- base-config.yaml --
+api:
+  url: https://base.example.com
+network:
+  ca_cert_file: /tmp/base-ca.pem
+-- staging-config.yaml --
+api:
+  url: https://staging.example.com

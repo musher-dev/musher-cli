@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func newTestContainer() *FormContainer {
@@ -11,16 +13,16 @@ func newTestContainer() *FormContainer {
 	keys := defaultKeyMap()
 
 	nameField := NewTextField("Name", &sty, WithRequired())
-	nameField.SetValue("My Bundle")
+	nameField.SetValue("My Deployment")
 
 	slugField := NewTextField("Slug", &sty, WithRequired())
-	slugField.SetValue("my-bundle")
+	slugField.SetValue("my-deployment")
 
 	visField := NewSelectField("Visibility", "", []string{"private", "public"}, 0, &sty, &keys)
 
-	sections := []formSection{
-		{name: "Identity", fields: []FormField{nameField, slugField}},
-		{name: "Metadata", fields: []FormField{visField}},
+	sections := []FormSection{
+		{Name: "Identity", Fields: []FormField{nameField, slugField}},
+		{Name: "Metadata", Fields: []FormField{visField}},
 	}
 
 	return NewFormContainer(sections, &sty, &keys)
@@ -131,8 +133,8 @@ func TestFormContainer_SubmitAll_Invalid(t *testing.T) {
 	keys := defaultKeyMap()
 
 	emptyField := NewTextField("Name", &sty, WithRequired())
-	sections := []formSection{
-		{name: "Test", fields: []FormField{emptyField}},
+	sections := []FormSection{
+		{Name: "Test", Fields: []FormField{emptyField}},
 	}
 	fc := NewFormContainer(sections, &sty, &keys)
 
@@ -152,8 +154,8 @@ func TestFormContainer_FieldByLabel(t *testing.T) {
 		t.Fatal("expected to find Slug field")
 	}
 
-	if field.Value() != "my-bundle" {
-		t.Errorf("Slug value = %q, want %q", field.Value(), "my-bundle")
+	if field.Value() != "my-deployment" {
+		t.Errorf("Slug value = %q, want %q", field.Value(), "my-deployment")
 	}
 
 	// Non-existent field.
@@ -173,17 +175,16 @@ func TestFormContainer_View(t *testing.T) {
 	}
 }
 
-func TestFormContainer_fieldValue(t *testing.T) {
+func TestFormContainer_ViewRendersSectionNames(t *testing.T) {
 	t.Parallel()
 
 	fc := newTestContainer()
+	view := ansi.Strip(fc.View(60, 30))
 
-	if got := fc.fieldValue("Name"); got != "My Bundle" {
-		t.Errorf("fieldValue(Name) = %q, want %q", got, "My Bundle")
-	}
-
-	if got := fc.fieldValue("NonExistent"); got != "" {
-		t.Errorf("fieldValue(NonExistent) = %q, want empty", got)
+	for _, want := range []string{"Identity", "Metadata", "Name", "Slug", "Visibility"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in form view, got:\n%s", want, view)
+		}
 	}
 }
 

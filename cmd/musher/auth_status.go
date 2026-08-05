@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/client"
+	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/output"
 )
@@ -14,37 +16,35 @@ import (
 func newAuthStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show current authentication status and writable namespaces",
-		Long: `Display the authenticated identity, credential source, and writable namespaces.
+		Short: "Show current authentication status",
+		Long: `Display the authenticated identity and credential source.
 
-Validates the stored credentials against the API and shows
-which namespaces are available for publishing.`,
+Validates the stored credentials against the API and shows the
+organization the credential is bound to.`,
 		Example: `  musher auth status`,
 		Args:    noArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := output.FromContext(cmd.Context())
+
 			return runAuthStatus(cmd, out)
 		},
 	}
 }
 
 type authStatusResult struct {
-	Authenticated  bool                  `json:"authenticated"`
-	CredentialName string                `json:"credentialName"`
-	Source         string                `json:"source"`
-	User           *authStatusUser       `json:"user,omitempty"`
-	Organization   string                `json:"organization,omitempty"`
-	Namespaces     []authStatusNamespace `json:"namespaces"`
+	Authenticated bool            `json:"authenticated"`
+	Source        string          `json:"source"`
+	APIURL        string          `json:"apiUrl"`
+	Profile       string          `json:"profile"`
+	Organizations []authStatusOrg `json:"organizations"`
+	Organization  *authStatusOrg  `json:"organization,omitempty"`
+	Warning       string          `json:"warning,omitempty"`
 }
 
-type authStatusUser struct {
-	Email    string `json:"email,omitempty"`
-	FullName string `json:"fullName,omitempty"`
-}
-
-type authStatusNamespace struct {
-	Handle      string `json:"handle"`
-	DisplayName string `json:"displayName,omitempty"`
+type authStatusOrg struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Handle string `json:"handle,omitempty"`
 }
 
 func runAuthStatus(cmd *cobra.Command, out *output.Writer) error {
@@ -53,85 +53,91 @@ func runAuthStatus(cmd *cobra.Command, out *output.Writer) error {
 		return err
 	}
 
-	ctx := cmd.Context()
+	cfg := config.FromContext(cmd.Context())
 
-	// Fetch publisher identity (single call)
 	spin := out.Spinner("Checking credentials")
 	spin.Start()
 
-	identity, err := c.GetPublisherIdentity(ctx)
+	orgs, err := c.ListOrganizations(cmd.Context())
 	if err != nil {
+		// Forbidden means the credential is genuinely valid but lacks
+		// organizations:read. Reporting that as invalid would be wrong.
+		if errors.Is(err, client.ErrForbidden) {
+			spin.StopWithWarning("Authenticated, but cannot read organizations")
+
+			return reportAuthStatus(out, cfg, source, nil,
+				"The credential lacks the 'organizations:read' permission")
+		}
+
 		spin.StopWithFailure("Authentication failed")
+
 		return clierrors.CredentialsInvalid(err)
 	}
 
-	displayName := identity.CredentialName
-	spin.StopWithSuccess(fmt.Sprintf("Authenticated as %s (via %s)", displayName, source))
+	spin.StopWithSuccess(fmt.Sprintf("Authenticated (via %s)", source))
+
+	return reportAuthStatus(out, cfg, source, orgs, "")
+}
+
+func reportAuthStatus(
+	out *output.Writer,
+	cfg *config.Config,
+	source auth.CredentialSource,
+	orgs []client.Organization,
+	warning string,
+) error {
+	result := authStatusResult{
+		Authenticated: true,
+		Source:        string(source),
+		APIURL:        cfg.APIURL(),
+		Profile:       cfg.ActiveProfileName(),
+		Organizations: make([]authStatusOrg, 0, len(orgs)),
+		Warning:       warning,
+	}
+
+	for _, org := range orgs {
+		result.Organizations = append(result.Organizations, authStatusOrg{
+			ID:     org.ID,
+			Name:   org.Name,
+			Handle: org.Handle,
+		})
+	}
+
+	if len(result.Organizations) > 0 {
+		result.Organization = &result.Organizations[0]
+	}
 
 	if out.JSON {
 		//nolint:wrapcheck // PrintJSON is an internal helper, wrapping adds noise
-		return out.PrintJSON(buildAuthStatusJSON(identity, displayName, source))
+		return out.PrintJSON(result)
 	}
 
-	if identity.User != nil {
-		if identity.User.Email != "" {
-			if identity.User.FullName != "" {
-				out.Muted("User: %s (%s)", identity.User.FullName, identity.User.Email)
-			} else {
-				out.Muted("User: %s", identity.User.Email)
-			}
-		}
+	out.Muted("API:     %s", result.APIURL)
+	out.Muted("Profile: %s", result.Profile)
+
+	if warning != "" {
+		out.Warning("%s", warning)
+		out.Muted("Set the organization explicitly with --org or MUSHER_ORG.")
+
+		return nil
 	}
 
-	if identity.Organization != nil && identity.Organization.Name != "" {
-		out.Muted("Organization: %s", identity.Organization.Name)
-	}
+	if len(orgs) == 0 {
+		out.Muted("No organizations are visible to this credential")
 
-	if len(identity.Namespaces) == 0 {
-		out.Muted("No writable namespaces associated with this account")
 		return nil
 	}
 
 	out.Println()
-	out.Print("Writable namespaces:\n")
+	out.Print("Organizations:\n")
 
-	for _, ns := range identity.Namespaces {
-		if ns.DisplayName != "" {
-			out.Print("  %s (%s)\n", ns.Handle, ns.DisplayName)
+	for _, org := range orgs {
+		if org.Handle != "" {
+			out.Print("  %s (%s)\n", org.Name, org.Handle)
 		} else {
-			out.Print("  %s\n", ns.Handle)
+			out.Print("  %s\n", org.Name)
 		}
 	}
 
 	return nil
-}
-
-func buildAuthStatusJSON(identity *client.PublisherIdentity, displayName string, source auth.CredentialSource) authStatusResult {
-	result := authStatusResult{
-		Authenticated:  true,
-		CredentialName: displayName,
-		Source:         string(source),
-	}
-
-	if identity.User != nil {
-		result.User = &authStatusUser{
-			Email:    identity.User.Email,
-			FullName: identity.User.FullName,
-		}
-	}
-
-	if identity.Organization != nil {
-		result.Organization = identity.Organization.Name
-	}
-
-	result.Namespaces = make([]authStatusNamespace, 0, len(identity.Namespaces))
-
-	for _, ns := range identity.Namespaces {
-		result.Namespaces = append(result.Namespaces, authStatusNamespace{
-			Handle:      ns.Handle,
-			DisplayName: ns.DisplayName,
-		})
-	}
-
-	return result
 }

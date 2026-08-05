@@ -93,50 +93,23 @@ func (e *RequestError) Unwrap() error { return e.Cause }
 // RequestIDValue returns the request correlation ID when available.
 func (e *RequestError) RequestIDValue() string { return e.RequestID }
 
-// Identity represents the authenticated runner identity.
-type Identity struct {
-	CredentialType   string `json:"credentialType"`
-	CredentialID     string `json:"credentialId"`
-	CredentialName   string `json:"credentialName"`
-	RunnerID         string `json:"runnerId"`
-	OrganizationID   string `json:"organizationId"`
-	OrganizationName string `json:"organizationName"`
+// Organization is a Musher organization as returned by GET /v1/organizations.
+type Organization struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Handle string `json:"handle,omitempty"`
 }
 
-// UnmarshalJSON decodes the identity JSON payload.
-func (i *Identity) UnmarshalJSON(data []byte) error {
-	type identityAlias Identity
-
-	var aux identityAlias
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return repoerrors.Errorf("unmarshal identity: %w", err)
-	}
-
-	*i = Identity(aux)
-
-	return nil
+// PageMeta is the cursor-pagination envelope shared by every list endpoint.
+type PageMeta struct {
+	HasMore    bool   `json:"hasMore"`
+	NextCursor string `json:"nextCursor,omitempty"`
 }
 
-// PublisherIdentityUser represents the user associated with a publisher credential.
-type PublisherIdentityUser struct {
-	Email    string `json:"email"`
-	FullName string `json:"fullName"`
-}
-
-// PublisherIdentityOrg represents the organization associated with a publisher credential.
-type PublisherIdentityOrg struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// PublisherIdentity represents the authenticated publisher identity from /v1/publisher/me.
-type PublisherIdentity struct {
-	CredentialType string                 `json:"credentialType"`
-	CredentialID   string                 `json:"credentialId"`
-	CredentialName string                 `json:"credentialName"`
-	User           *PublisherIdentityUser `json:"user"`
-	Organization   *PublisherIdentityOrg  `json:"organization"`
-	Namespaces     []NamespaceHandle      `json:"namespaces"`
+// Page is the standard {data, meta} list envelope.
+type Page[T any] struct {
+	Data []T      `json:"data"`
+	Meta PageMeta `json:"meta"`
 }
 
 // ResponseMeta contains correlation metadata from an API response.
@@ -178,23 +151,35 @@ func (c *Client) IsAuthenticated() bool {
 	return c.apiKey != ""
 }
 
-// ValidateKey validates the API key and returns the runner identity.
-func (c *Client) ValidateKey(ctx context.Context) (*Identity, error) {
-	identity, _, err := c.ValidateKeyWithMeta(ctx)
-	return identity, err
+// ErrForbidden signals an authenticated credential that lacks the required
+// permission. It is deliberately distinct from an authentication failure: a
+// valid key that simply lacks a scope must not be reported as a bad key.
+var ErrForbidden = errors.New("credential lacks the required permission")
+
+// ErrUnauthenticated signals a missing, invalid, or expired credential.
+var ErrUnauthenticated = errors.New("invalid or expired credential")
+
+// ListOrganizations returns the organizations the credential can act in.
+//
+// This is the CLI's identity endpoint. It is one of the few public routes that
+// accepts a mush_* API key (via CurrentPlatformCredential); for a key it returns
+// the single bound organization. The former /v1/publisher/me and /v1/runner/me
+// endpoints were removed from the platform and now 404.
+func (c *Client) ListOrganizations(ctx context.Context) ([]Organization, error) {
+	page, _, err := c.ListOrganizationsWithMeta(ctx)
+
+	return page, err
 }
 
-// ValidateKeyWithMeta validates the API key and returns identity plus
-// request/trace metadata from the response headers.
-//
-//nolint:dupl // intentionally parallel to GetPublisherIdentityWithMeta (different endpoint, type, and error messages)
-func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseMeta, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/runner/me", http.NoBody)
+// ListOrganizationsWithMeta returns the organizations plus response correlation
+// metadata from the response headers.
+func (c *Client) ListOrganizationsWithMeta(ctx context.Context) ([]Organization, *ResponseMeta, error) {
+	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/organizations", http.NoBody)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	resp, err := c.do(req, "/v1/runner/me")
+	resp, err := c.do(req, "/v1/organizations")
 	if err != nil {
 		return nil, nil, repoerrors.Errorf("failed to connect to API: %w", err)
 	}
@@ -205,71 +190,22 @@ func (c *Client) ValidateKeyWithMeta(ctx context.Context) (*Identity, *ResponseM
 		TraceID:   responseTraceID(resp),
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, meta, errors.New("invalid or expired API key")
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return nil, meta, ErrUnauthenticated
+	case http.StatusForbidden:
+		return nil, meta, ErrForbidden
+	default:
+		return nil, meta, unexpectedStatus("list organizations", resp)
 	}
 
-	if resp.StatusCode == http.StatusForbidden {
-		return nil, meta, errors.New("API key does not have runner permissions")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, meta, unexpectedStatus("validate key", resp)
-	}
-
-	var identity Identity
-	if err := decodeJSON(resp.Body, &identity, "failed to parse identity"); err != nil {
+	var page Page[Organization]
+	if err := decodeJSON(resp.Body, &page, "failed to parse organizations"); err != nil {
 		return nil, meta, err
 	}
 
-	return &identity, meta, nil
-}
-
-// GetPublisherIdentity returns the publisher identity for the authenticated credential.
-func (c *Client) GetPublisherIdentity(ctx context.Context) (*PublisherIdentity, error) {
-	identity, _, err := c.GetPublisherIdentityWithMeta(ctx)
-	return identity, err
-}
-
-// GetPublisherIdentityWithMeta returns the publisher identity plus
-// request/trace metadata from the response headers.
-//
-//nolint:dupl // intentionally parallel to ValidateKeyWithMeta (different endpoint, type, and error messages)
-func (c *Client) GetPublisherIdentityWithMeta(ctx context.Context) (*PublisherIdentity, *ResponseMeta, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/publisher/me", http.NoBody)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp, err := c.do(req, "/v1/publisher/me")
-	if err != nil {
-		return nil, nil, repoerrors.Errorf("failed to connect to API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	meta := &ResponseMeta{
-		RequestID: strings.TrimSpace(resp.Header.Get("X-Request-Id")),
-		TraceID:   responseTraceID(resp),
-	}
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, meta, errors.New("invalid or expired API key")
-	}
-
-	if resp.StatusCode == http.StatusForbidden {
-		return nil, meta, errors.New("API key does not have publisher permissions")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, meta, unexpectedStatus("get publisher identity", resp)
-	}
-
-	var identity PublisherIdentity
-	if err := decodeJSON(resp.Body, &identity, "failed to parse publisher identity"); err != nil {
-		return nil, meta, err
-	}
-
-	return &identity, meta, nil
+	return page.Data, meta, nil
 }
 
 func (c *Client) setRequestHeaders(req *http.Request) {
@@ -299,25 +235,6 @@ func (c *Client) newRequest(ctx context.Context, method, url string, body io.Rea
 	}
 
 	c.setRequestHeaders(req)
-
-	return req, nil
-}
-
-// newPublicRequest creates a request without the Authorization header (for public endpoints).
-func (c *Client) newPublicRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, repoerrors.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "musher/"+buildinfo.Version)
-	req.Header.Set("X-Request-Id", uuid.NewString())
-
-	spanCtx := trace.SpanContextFromContext(ctx)
-	if spanCtx.IsValid() {
-		req.Header.Set("X-Trace-Id", spanCtx.TraceID().String())
-	}
 
 	return req, nil
 }
@@ -374,25 +291,12 @@ func (c *Client) do(req *http.Request, route string) (*http.Response, error) {
 	return resp, nil
 }
 
-func encodeJSON(v any) ([]byte, error) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, repoerrors.Errorf("marshal json: %w", err)
-	}
-
-	return data, nil
-}
-
 func decodeJSON(body io.Reader, dst any, msg string) error {
 	if err := json.NewDecoder(body).Decode(dst); err != nil {
 		return repoerrors.Errorf("%s: %w", msg, err)
 	}
 
 	return nil
-}
-
-func emptyJSONBody() io.Reader {
-	return strings.NewReader("{}")
 }
 
 // unexpectedStatus creates a formatted error from an unexpected HTTP status code.

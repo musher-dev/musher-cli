@@ -69,13 +69,15 @@ type pushScreenMsg struct {
 // popScreenMsg instructs the App to pop the current screen off the stack.
 type popScreenMsg struct{}
 
-// Result holds the outcome of a TUI session.
+// Result holds the outcome of a TUI session. A screen signals its outcome by
+// emitting a quitWithResultMsg; the App stores it and Run returns it to the
+// caller in cmd/musher, which decides what to do next. Action is the only
+// universally meaningful field — screens that need to hand richer data back
+// add their own fields here as the need becomes concrete.
 type Result struct {
-	Action    string // "load", "cancel".
-	Namespace string
-	Slug      string
-	Version   string
-	Harness   string
+	// Action names what the user chose before the program exited. An empty
+	// Action (or a nil *Result) means the user quit without choosing.
+	Action string
 }
 
 // quitWithResultMsg instructs the App to exit with a result.

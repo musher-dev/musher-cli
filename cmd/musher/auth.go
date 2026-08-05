@@ -5,8 +5,8 @@ import "github.com/spf13/cobra"
 func newAuthCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Manage authentication for the Musher Hub",
-		Long: `Manage authentication credentials for the Musher Hub registry.
+		Short: "Manage authentication for the Musher platform",
+		Long: `Manage authentication credentials for the Musher platform.
 
 Log in, log out, and check your current authentication status.`,
 		Args: noArgs,

@@ -104,24 +104,7 @@ func ActiveProfile() string {
 }
 
 func loadFromProfile(profile string) *Config {
-	cfg := Load()
-
-	profileDir, err := ProfileConfigDir(profile)
-	if err != nil {
-		return cfg
-	}
-
-	// Layer profile config on top of defaults.
-	cfg.v.AddConfigPath(profileDir)
-	cfg.v.SetConfigName("config")
-	cfg.v.SetConfigType("yaml")
-
-	// Re-read; profile config overrides base defaults.
-	_ = cfg.v.MergeInConfig() //nolint:errcheck // missing profile config is fine
-
-	cfg.profile = profile
-
-	return cfg
+	return LoadWithOverrides(Overrides{Profile: profile})
 }
 
 // ActiveProfileName returns the profile name this Config was loaded with.

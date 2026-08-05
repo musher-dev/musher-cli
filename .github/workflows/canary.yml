@@ -3,11 +3,18 @@ name: Golden Path Canary
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    # Hourly, not every 30 minutes: each run performs real API calls against the
+    # live platform, and a tighter cadence buys no signal for the quota.
+    - cron: "0 * * * *"
 
 permissions:
   contents: read
   issues: write
+
+# Overlapping runs would race on the same canary resources.
+concurrency:
+  group: canary
+  cancel-in-progress: false
 
 jobs:
   canary:
@@ -32,9 +39,16 @@ jobs:
           MUSHER_CANARY_PUSH_NAMESPACE: ${{ secrets.MUSHER_CANARY_PUSH_NAMESPACE }}
           MUSHER_CANARY_PUSH_SLUG: ${{ secrets.MUSHER_CANARY_PUSH_SLUG }}
           MUSHER_NETWORK_CA_CERT_FILE: ${{ secrets.MUSHER_CANARY_CA_CERT_FILE }}
+          # Makes the Go test t.Fatal instead of t.Skip when secrets are absent,
+          # so the shell guard below and the test's own guard cannot drift apart.
+          MUSHER_CANARY_REQUIRED: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: |
-          if [ -z "${MUSHER_CANARY_API_URL:-}" ] || [ -z "${MUSHER_CANARY_API_KEY:-}" ] || [ -z "${MUSHER_CANARY_PUBLIC_BUNDLE_REF:-}" ] || [ -z "${MUSHER_CANARY_EXPECTED_NAMESPACE:-}" ]; then
-            echo "Canary secrets not configured; skipping."
+          if [ -z "${MUSHER_CANARY_API_URL:-}" ] || [ -z "${MUSHER_CANARY_API_KEY:-}" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "::error::Canary secrets are not configured. A monitor that cannot run is an outage of the monitor."
+              exit 1
+            fi
+            echo "Canary secrets not configured; skipping (manual dispatch)."
             exit 0
           fi
           go test -v ./test/canary/...
@@ -43,8 +57,16 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue create \
-            --title "Canary failure: golden path tests failing ($(date -u +%Y-%m-%d))" \
-            --body "The scheduled canary workflow failed. [View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
-            --label "bug,canary"
+          # A sustained outage fires this job every hour. Comment on the open
+          # issue instead of opening a new one each time.
+          existing=$(gh issue list --label canary --state open --limit 1 --json number --jq '.[0].number')
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body "Still failing as of $(date -u +%Y-%m-%dT%H:%M:%SZ). [View run](${RUN_URL})."
+          else
+            gh issue create \
+              --title "Canary failure: golden path failing ($(date -u +%Y-%m-%d))" \
+              --body "The scheduled canary workflow failed. [View run](${RUN_URL})." \
+              --label "bug,canary"
+          fi

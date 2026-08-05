@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -831,11 +832,11 @@ func TestCheckAuthentication_InvalidCredentials(t *testing.T) {
 }
 
 func TestCheckAuthentication_ValidCredentials(t *testing.T) {
-	// Mock API returns a valid publisher identity.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Mock GET /v1/organizations returning the standard {data, meta} envelope.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"credentialType":"api_key","credentialId":"id1","credentialName":"my-key","user":null,"organization":null,"namespaces":[]}`)
+		fmt.Fprint(w, `{"data":[{"id":"org1","name":"Acme","handle":"acme"}],"meta":{"hasMore":false}}`)
 	}))
 	defer srv.Close()
 
@@ -854,6 +855,35 @@ func TestCheckAuthentication_ValidCredentials(t *testing.T) {
 
 	if result.Message == "" {
 		t.Error("expected non-empty message with credential name")
+	}
+}
+
+// A credential that authenticates but lacks organizations:read is valid. Grading
+// it as a failure would send the user off to rotate a perfectly good key, so it
+// must surface as a warning that names the missing permission instead.
+func TestCheckAuthentication_ForbiddenIsWarningNotFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"title":"Forbidden","detail":"missing organizations:read","status":403}`)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("MUSHER_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("MUSHER_DATA_HOME", filepath.Join(dir, "data"))
+	t.Setenv("MUSHER_API_URL", srv.URL)
+	t.Setenv("MUSHER_API_KEY", "scoped-key")
+
+	result := checkAuthentication(t.Context())
+
+	if result.Status != StatusWarn {
+		t.Errorf("status = %d, want Warn for a valid but under-scoped credential; message = %q",
+			result.Status, result.Message)
+	}
+
+	if !strings.Contains(result.Detail, "organizations:read") {
+		t.Errorf("detail = %q, want it to name the missing permission", result.Detail)
 	}
 }
 

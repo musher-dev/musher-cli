@@ -1,13 +1,9 @@
 package tui
 
-import (
-	"strings"
+import "strings"
 
-	"github.com/musher-dev/musher-cli/internal/bundledef"
-	"gopkg.in/yaml.v3"
-)
-
-// PreviewPane renders a read-only content panel, typically showing a live YAML preview.
+// PreviewPane renders a read-only content panel beside a form, typically
+// showing a live preview of whatever the form is building.
 type PreviewPane struct {
 	sty *styles
 }
@@ -17,20 +13,14 @@ func NewPreviewPane(sty *styles) *PreviewPane {
 	return &PreviewPane{sty: sty}
 }
 
-// RenderYAML renders a bundledef.Def as a YAML preview inside a panel.
-func (pp *PreviewPane) RenderYAML(def *bundledef.Def, width int) string {
-	data, err := yaml.Marshal(def)
-	if err != nil {
-		return pp.sty.errStyle.Render("error rendering preview")
-	}
-
-	yamlStr := strings.TrimSpace(string(data))
-
-	// Truncate long lines to fit panel width.
+// RenderText renders multi-line text in a muted panel, hard-truncating any
+// line that would overflow the panel's inner width so the preview never
+// wraps mid-record.
+func (pp *PreviewPane) RenderText(title, text string, width int) string {
 	innerWidth := max(width-panelContentOffset-2, 20)
-	lines := strings.Split(yamlStr, "\n")
+	lines := strings.Split(strings.TrimSpace(text), "\n")
 
-	var truncated []string
+	truncated := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		if len(line) > innerWidth {
@@ -42,10 +32,10 @@ func (pp *PreviewPane) RenderYAML(def *bundledef.Def, width int) string {
 
 	content := pp.sty.muted.Render(strings.Join(truncated, "\n"))
 
-	return renderPanel(pp.sty, "Preview", content, width, false)
+	return renderPanel(pp.sty, title, content, width, false)
 }
 
-// RenderContent renders arbitrary string content in a panel.
+// RenderContent renders pre-formatted content in a titled panel as-is.
 func (pp *PreviewPane) RenderContent(title, content string, width int) string {
 	return renderPanel(pp.sty, title, content, width, false)
 }

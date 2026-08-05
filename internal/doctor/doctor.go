@@ -339,7 +339,7 @@ func checkAPIConnectivity(ctx context.Context) Result {
 // checkAuthentication validates stored credentials.
 func checkAuthentication(ctx context.Context) Result {
 	cfg := config.Load()
-	source, apiKey := auth.GetCredentials(cfg.APIURL())
+	source, apiKey := auth.GetCredentials(cfg.APIURL(), cfg.ActiveProfileName())
 
 	if apiKey == "" {
 		return Result{
@@ -360,8 +360,18 @@ func checkAuthentication(ctx context.Context) Result {
 
 	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
 
-	identity, err := c.GetPublisherIdentity(ctx)
+	orgs, err := c.ListOrganizations(ctx)
 	if err != nil {
+		// A credential that authenticates but lacks organizations:read is valid;
+		// reporting it as invalid would send the user to rotate a working key.
+		if errors.Is(err, client.ErrForbidden) {
+			return Result{
+				Status:  StatusWarn,
+				Message: fmt.Sprintf("Authenticated (via %s), but cannot read organizations", source),
+				Detail:  "The credential lacks the 'organizations:read' permission",
+			}
+		}
+
 		return Result{
 			Status:  StatusFail,
 			Message: fmt.Sprintf("Invalid credentials (via %s)", source),
@@ -369,9 +379,16 @@ func checkAuthentication(ctx context.Context) Result {
 		}
 	}
 
+	if len(orgs) == 0 {
+		return Result{
+			Status:  StatusWarn,
+			Message: fmt.Sprintf("Authenticated (via %s), but no organizations are visible", source),
+		}
+	}
+
 	return Result{
 		Status:  StatusPass,
-		Message: fmt.Sprintf("%s (via %s)", identity.CredentialName, source),
+		Message: fmt.Sprintf("%s (via %s)", orgs[0].Name, source),
 	}
 }
 

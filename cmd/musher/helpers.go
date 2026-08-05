@@ -2,15 +2,11 @@ package main
 
 import (
 	"context"
-	"strings"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/harness"
-	"github.com/musher-dev/musher-cli/internal/output"
-	"github.com/musher-dev/musher-cli/internal/prompt"
 )
 
 // newAPIClientFromContext creates an authenticated API client using stored credentials.
@@ -19,7 +15,7 @@ func newAPIClientFromContext(ctx context.Context) (auth.CredentialSource, *clien
 	cfg := config.FromContext(ctx)
 	apiURL := cfg.APIURL()
 
-	source, apiKey := auth.GetCredentials(apiURL)
+	source, apiKey := resolveCredentials(cfg)
 	if apiKey == "" {
 		return "", nil, clierrors.NotAuthenticated()
 	}
@@ -33,9 +29,21 @@ func newAPIClientFromContext(ctx context.Context) (auth.CredentialSource, *clien
 	return source, client.NewWithHTTPClient(apiURL, apiKey, httpClient), nil
 }
 
+// resolveCredentials applies the --api-key flag ahead of the stored-credential
+// chain. The flag is held on Config rather than in the environment or viper, so
+// it can never leak into a persisted config file.
+func resolveCredentials(cfg *config.Config) (source auth.CredentialSource, apiKey string) {
+	if override := cfg.APIKeyOverride(); override != "" {
+		return auth.SourceFlag, override
+	}
+
+	return auth.GetCredentials(cfg.APIURL(), cfg.ActiveProfileName())
+}
+
 // requireAuthFromContext returns an authenticated API client or a CLIError.
 func requireAuthFromContext(ctx context.Context) (*client.Client, error) {
 	_, c, err := newAPIClientFromContext(ctx)
+
 	return c, err
 }
 
@@ -47,63 +55,4 @@ func configForPublicClient(ctx context.Context) string {
 // newPublicAPIClient creates an unauthenticated client for public endpoints.
 func newPublicAPIClient(apiURL string) *client.Client {
 	return client.New(apiURL, "")
-}
-
-// registryHealthChecker adapts the harness package functions to the
-// tui.HarnessHealthChecker interface.
-type registryHealthChecker struct {
-	reg *harness.Registry
-}
-
-func newRegistryHealthChecker(reg *harness.Registry) *registryHealthChecker {
-	return &registryHealthChecker{reg: reg}
-}
-
-func (r *registryHealthChecker) CheckAllHealth(ctx context.Context) []*harness.HealthReport {
-	return harness.CheckAllHealth(ctx, r.reg)
-}
-
-// inlineLogin performs an interactive login flow inline (without requiring the
-// login subcommand). Returns the validated PublisherIdentity on success so the
-// caller can use namespace data immediately without a second API call.
-func inlineLogin(out *output.Writer) (*client.PublisherIdentity, error) {
-	p := prompt.New(out)
-
-	apiKey, err := p.APIKey()
-	if err != nil {
-		return nil, clierrors.Errorf("read API key: %w", err)
-	}
-
-	apiKey = strings.TrimSpace(apiKey)
-	if apiKey == "" {
-		return nil, clierrors.Errorf("API key is empty")
-	}
-
-	spin := out.Spinner("Validating credentials")
-	spin.Start()
-
-	cfg := config.FromContext(context.Background())
-
-	httpClient, err := client.NewInstrumentedHTTPClient(cfg.CACertFile())
-	if err != nil {
-		spin.Stop()
-		return nil, clierrors.Errorf("initialize HTTP client: %w", err)
-	}
-
-	c := client.NewWithHTTPClient(cfg.APIURL(), apiKey, httpClient)
-
-	identity, err := c.GetPublisherIdentity(context.Background())
-	if err != nil {
-		spin.StopWithFailure("Authentication failed")
-		return nil, clierrors.Errorf("validate credentials: %w", err)
-	}
-
-	spin.StopWithSuccess("Authenticated as " + identity.CredentialName)
-
-	if storeErr := auth.StoreAPIKey(cfg.APIURL(), apiKey); storeErr != nil {
-		out.Warning("Could not store API key: %v", storeErr)
-		out.Info("Set MUSHER_API_KEY environment variable instead.")
-	}
-
-	return identity, nil
 }

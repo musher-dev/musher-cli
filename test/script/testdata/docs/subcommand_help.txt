@@ -6,29 +6,16 @@ stdout 'login'
 stdout 'logout'
 stdout 'status'
 
-# bundle subcommands
-exec $MUSHER_BIN --no-color --no-input bundle --help
-stdout 'init'
-stdout 'add'
-stdout 'remove'
-stdout 'validate'
-stdout 'push'
-stdout 'pull'
-stdout 'yank'
-stdout 'unyank'
-
-# hub subcommands
-exec $MUSHER_BIN --no-color --no-input hub --help
-stdout 'search'
-stdout 'info'
-stdout 'list'
-stdout 'categories'
-stdout 'publish'
-stdout 'deprecate'
-stdout 'undeprecate'
-
 # config subcommands
 exec $MUSHER_BIN --no-color --no-input config --help
 stdout 'list'
 stdout 'get'
 stdout 'set'
+stdout 'profile'
+
+# config profile subcommands
+exec $MUSHER_BIN --no-color --no-input config profile --help
+stdout 'list'
+stdout 'active'
+stdout 'create'
+stdout 'delete'

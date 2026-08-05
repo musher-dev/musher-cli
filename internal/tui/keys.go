@@ -2,18 +2,17 @@ package tui
 
 import "charm.land/bubbles/v2/key"
 
-// keyMap defines the key bindings for the TUI.
+// keyMap defines the screen-agnostic key bindings shared by every screen and
+// by the form widgets. Screen-specific bindings are declared by the screen
+// itself rather than being added here.
 type keyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Enter   key.Binding
-	Back    key.Binding
-	Quit    key.Binding
-	Tab     key.Binding
-	Load    key.Binding
-	Status  key.Binding
-	Submit  key.Binding
-	Preview key.Binding
+	Up     key.Binding
+	Down   key.Binding
+	Enter  key.Binding
+	Back   key.Binding
+	Quit   key.Binding
+	Tab    key.Binding
+	Submit key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -42,21 +41,9 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch"),
 		),
-		Load: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "load"),
-		),
-		Status: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "status"),
-		),
 		Submit: key.NewBinding(
 			key.WithKeys("ctrl+s"),
-			key.WithHelp("ctrl+s", "create"),
-		),
-		Preview: key.NewBinding(
-			key.WithKeys("p"),
-			key.WithHelp("p", "preview"),
+			key.WithHelp("ctrl+s", "submit"),
 		),
 	}
 }

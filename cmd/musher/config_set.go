@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -31,6 +32,16 @@ func newConfigSetCmd() *cobra.Command {
 
 			key := args[0]
 			value := args[1]
+
+			// A retired key is not a typo, and writing it would give the user a
+			// config entry this version silently ignores. Refuse it and say why.
+			if reason, retired := config.RetiredKeyReason(key); retired {
+				return &clierrors.CLIError{
+					Message: "Configuration key " + strconv.Quote(key) + " is no longer used",
+					Hint:    reason + ". Remove it from your config; setting it would have no effect.",
+					Code:    clierrors.ExitConfig,
+				}
+			}
 
 			if !config.IsKnownKey(key) {
 				out.Warning("Unknown configuration key %q — this may be a typo", key)

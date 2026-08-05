@@ -22,10 +22,32 @@ const (
 	UpdateDisabled = "MUSHER_UPDATE_DISABLED"
 	// Profile selects the active configuration profile.
 	Profile = "MUSHER_PROFILE"
+	// Org selects the organization to act in.
+	Org = "MUSHER_ORG"
+	// Environment selects the deployment environment to target.
+	Environment = "MUSHER_ENV"
+
+	// JSON forces machine-readable output.
+	JSON = "MUSHER_JSON"
+	// Quiet suppresses non-essential diagnostics.
+	Quiet = "MUSHER_QUIET"
+	// NoInput disables interactive prompts.
+	NoInput = "MUSHER_NO_INPUT"
+
+	// LogLevel sets the structured log level.
+	LogLevel = "MUSHER_LOG_LEVEL"
+	// LogFormat selects the structured log encoding.
+	LogFormat = "MUSHER_LOG_FORMAT"
+	// LogFile sets an optional structured log sink.
+	LogFile = "MUSHER_LOG_FILE"
+	// LogStderr controls whether structured logs also go to stderr.
+	LogStderr = "MUSHER_LOG_STDERR"
 
 	// XDGRuntimeDir is the standard XDG runtime directory.
 	XDGRuntimeDir = "XDG_RUNTIME_DIR"
 
+	// CI is set by virtually every continuous-integration runner.
+	CI = "CI"
 	// SudoUser is set by sudo and used to detect privilege escalation.
 	SudoUser = "SUDO_USER"
 	// NoColor disables colorized output when set (any value).

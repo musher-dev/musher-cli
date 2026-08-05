@@ -26,20 +26,14 @@ var (
 	platformCore = map[string]bool{
 		moduleRoot + "/internal/auth":          true,
 		moduleRoot + "/internal/buildinfo":     true,
-		moduleRoot + "/internal/bundle":        true,
-		moduleRoot + "/internal/bundledef":     true,
 		moduleRoot + "/internal/client":        true,
 		moduleRoot + "/internal/config":        true,
 		moduleRoot + "/internal/env":           true,
 		moduleRoot + "/internal/errors":        true,
-		moduleRoot + "/internal/harness":       true,
-		moduleRoot + "/internal/oci":           true,
 		moduleRoot + "/internal/observability": true,
 		moduleRoot + "/internal/paths":         true,
 		moduleRoot + "/internal/safeio":        true,
-		moduleRoot + "/internal/skills":        true,
 		moduleRoot + "/internal/terminal":      true,
-		moduleRoot + "/internal/transcript":    true,
 		moduleRoot + "/internal/update":        true,
 		moduleRoot + "/internal/validate":      true,
 		moduleRoot + "/internal/workflow":      true,
@@ -276,6 +270,38 @@ func TestAllInternalPackagesClassified(t *testing.T) {
 	}
 }
 
+// TestNoStaleClassifications is the inverse of TestAllInternalPackagesClassified.
+//
+// That test only fails on packages missing from the maps, so an entry naming a
+// package that has since been deleted lingers forever and nothing notices. After
+// a large refactor those stale entries are indistinguishable from live ones, and
+// a future package reusing the name silently inherits the wrong classification.
+func TestNoStaleClassifications(t *testing.T) {
+	root := repoRoot(t)
+
+	maps := map[string]map[string]bool{
+		"featureOrchestration": featureOrchestration,
+		"platformCore":         platformCore,
+		"testSupport":          testSupport,
+		"presentationPkgs":     presentationPkgs,
+	}
+
+	for mapName, classified := range maps {
+		for importPath := range classified {
+			rel := strings.TrimPrefix(importPath, moduleRoot+"/")
+			if rel == importPath {
+				t.Errorf("%s: entry %q is not in this module", mapName, importPath)
+
+				continue
+			}
+
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+				t.Errorf("%s: entry %q names a package that no longer exists; remove it", mapName, importPath)
+			}
+		}
+	}
+}
+
 func TestPlatformPackagesDoNotImportPresentation(t *testing.T) {
 	for _, pkg := range loadAllPackages(t) {
 		if !isInternal(pkg.ImportPath) || isTestPackage(pkg) {
@@ -346,9 +372,6 @@ func TestTestutilNotImportedByProductionCode(t *testing.T) {
 
 func TestNoCrossLayerFeatureImports(t *testing.T) {
 	allowed := map[string]map[string]bool{
-		moduleRoot + "/internal/doctor": {
-			moduleRoot + "/internal/harness": true,
-		},
 		moduleRoot + "/internal/prompt": {
 			moduleRoot + "/internal/output": true,
 		},

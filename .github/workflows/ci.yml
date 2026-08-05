@@ -10,7 +10,12 @@ permissions:
   contents: read
 
 env:
-  COVERAGE_THRESHOLD: "69.5"
+  # Raised from 69.5 alongside the deployment-CLI amputation. Removing the bundle
+  # stack and the bundle-specific TUI screens took the measured number from 67.2%
+  # to 78.8% as arithmetic rather than as progress. Holding the old floor would
+  # have silently permitted several hundred statements of untested transport code
+  # in the phases that follow.
+  COVERAGE_THRESHOLD: "78"
 
 jobs:
   # ---------------------------------------------------------------------------

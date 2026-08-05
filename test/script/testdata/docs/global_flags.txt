@@ -9,4 +9,17 @@ exec $MUSHER_BIN --no-color --no-input --quiet version
 
 # --no-color and --no-input flags (already used above, but validate explicitly)
 exec $MUSHER_BIN --no-color --no-input --help
-stdout 'Discover, load, publish, and manage agent bundles'
+stdout 'Deploy and manage containerized applications on the Musher platform'
+
+# the documented flag set, with --no-tui gone along with the TUI
+stdout '--api-key'
+stdout '--api-url'
+stdout '--json'
+stdout '--no-color'
+stdout '--no-input'
+stdout '--profile'
+stdout '--quiet'
+! stdout '--no-tui'
+
+# --no-tui is no longer accepted at all
+! exec $MUSHER_BIN --no-color --no-input --no-tui version

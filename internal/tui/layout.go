@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // renderScreen lays out a screen with the footer pinned to the bottom of
@@ -39,10 +38,6 @@ const (
 	bottomPadRows = 1
 	topPadRows    = 1
 )
-
-func renderScreen(width, height int, content, footer string) string {
-	return renderScreenWithHeader(width, height, "", content, footer)
-}
 
 // renderScreenWithHeader lays out a screen with the optional header pinned
 // to the top of the terminal (with topPadRows of breathing room above
@@ -120,5 +115,3 @@ func renderScreenWithHeader(width, height int, header, content, footer string) s
 
 	return out.String()
 }
-
-var _ = ansi.StringWidth // keep ansi import for downstream consumers

@@ -44,3 +44,60 @@ func TestComposeOverlayEmptyInputs(t *testing.T) {
 		t.Errorf("empty overlay should return base, got %q", got)
 	}
 }
+
+func TestWithDropShadowGrowsBox(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	box := strings.Join([]string{"┌────┐", "│ hi │", "└────┘"}, "\n")
+
+	out := ansi.Strip(withDropShadow(box, &sty))
+	lines := strings.Split(out, "\n")
+
+	if len(lines) != 4 {
+		t.Fatalf("expected one extra shadow row, got %d lines", len(lines))
+	}
+
+	if !strings.Contains(lines[len(lines)-1], shadowChar) {
+		t.Errorf("expected shadow glyphs on the bottom row, got %q", lines[len(lines)-1])
+	}
+
+	// The top row must stay clean so the box outline reads correctly.
+	if strings.Contains(lines[0], shadowChar) {
+		t.Errorf("top row should carry no shadow, got %q", lines[0])
+	}
+}
+
+func TestWithDropShadowEmptyInputs(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+
+	if got := withDropShadow("", &sty); got != "" {
+		t.Errorf("empty content should stay empty, got %q", got)
+	}
+
+	if got := withDropShadow("x", nil); got != "x" {
+		t.Errorf("nil styles should return content unchanged, got %q", got)
+	}
+}
+
+func TestDimBaseStripsExistingStyling(t *testing.T) {
+	t.Parallel()
+
+	sty := newStyles(true)
+	styled := sty.accent.Render("bright") + "\n" + sty.success.Render("green")
+
+	dimmed := dimBase(styled)
+	if dimmed == "" {
+		t.Fatal("expected non-empty dimmed output")
+	}
+
+	if plain := ansi.Strip(dimmed); plain != "bright\ngreen" {
+		t.Errorf("dimBase should preserve text content, got %q", plain)
+	}
+
+	if got := dimBase(""); got != "" {
+		t.Errorf("empty base should stay empty, got %q", got)
+	}
+}

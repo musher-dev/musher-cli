@@ -10,9 +10,9 @@ import (
 
 func testCommands() []Command {
 	return []Command{
-		{ID: "bundle.load", Title: "Load bundle", Group: CmdGroupBundles, Keywords: []string{"open"}},
-		{ID: "bundle.search", Title: "Search bundles", Group: CmdGroupBundles, Keywords: []string{"find"}},
-		{ID: "bundle.new", Title: "New bundle", Group: CmdGroupAuthoring},
+		{ID: "deployment.logs", Title: "Logs for deployment", Group: CmdGroupUse, Keywords: []string{"tail"}},
+		{ID: "deployment.list", Title: "Show deployments", Group: CmdGroupUse, Keywords: []string{"find"}},
+		{ID: "deployment.create", Title: "New deployment", Group: CmdGroupCreate},
 		{ID: "system.quit", Title: "Quit musher", Group: CmdGroupSystem},
 	}
 }
@@ -35,8 +35,8 @@ func TestPaletteEmptyQueryOrdersByGroupCanonicalOrder(t *testing.T) {
 	}
 
 	// Canonical group order is USE → CREATE → MANAGE → SYSTEM. Within USE,
-	// Load bundle and Search bundles sort alphabetically.
-	want := []string{"Load bundle", "Search bundles", "New bundle", "Quit musher"}
+	// the two entries sort alphabetically.
+	want := []string{"Logs for deployment", "Show deployments", "New deployment", "Quit musher"}
 	for i, w := range want {
 		if p.filtered[i].Title != w {
 			t.Errorf("position %d: want %q, got %q", i, w, p.filtered[i].Title)
@@ -48,7 +48,7 @@ func TestPaletteResumeAppearsFirst(t *testing.T) {
 	sty := newStyles(true)
 	deps := &PaletteDeps{
 		Global: testCommands(),
-		Resume: &ResumeTarget{Reference: "acme/widget@1.0", CommandID: "bundle.load"},
+		Resume: &ResumeTarget{Label: "acme/widget", CommandID: "deployment.load"},
 		Styles: &sty,
 	}
 	p, _ := NewPalette(deps).(*paletteScreen)
@@ -57,17 +57,17 @@ func TestPaletteResumeAppearsFirst(t *testing.T) {
 		t.Errorf("expected resume row first, got %q", p.filtered[0].ID)
 	}
 
-	if !strings.Contains(p.filtered[0].Title, "acme/widget@1.0") {
+	if !strings.Contains(p.filtered[0].Title, "acme/widget") {
 		t.Errorf("resume row should include reference, got %q", p.filtered[0].Title)
 	}
 }
 
 func TestPaletteFuzzyMatch(t *testing.T) {
 	p := newTestPalette()
-	p.filter("ld bn")
+	p.filter("lgs")
 
-	if len(p.filtered) == 0 || p.filtered[0].Title != "Load bundle" {
-		t.Errorf("expected 'Load bundle' first, got %+v", p.filtered)
+	if len(p.filtered) == 0 || p.filtered[0].Title != "Logs for deployment" {
+		t.Errorf("expected 'Logs for deployment' first, got %+v", p.filtered)
 	}
 }
 
@@ -75,9 +75,9 @@ func TestPaletteDisabledCommandIsRenderedButNotActivated(t *testing.T) {
 	enabled := false
 	cmds := testCommands()
 	cmds = append(cmds, Command{
-		ID:      "bundle.push",
-		Title:   "Push to registry",
-		Group:   CmdGroupAuthoring,
+		ID:      "deployment.delete",
+		Title:   "Delete deployment",
+		Group:   CmdGroupManage,
 		Enabled: func() bool { return enabled },
 		Run:     func() tea.Cmd { t.Fatal("should not run while disabled"); return nil },
 	})
@@ -89,7 +89,7 @@ func TestPaletteDisabledCommandIsRenderedButNotActivated(t *testing.T) {
 
 	// Find the push command and select it.
 	for i, c := range p.filtered {
-		if c.ID == "bundle.push" {
+		if c.ID == "deployment.delete" {
 			p.cursor = i
 			break
 		}
@@ -117,9 +117,9 @@ func TestPaletteMRUBumpsOnRun(t *testing.T) {
 	updated, _ := p.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	p = updated.(*paletteScreen)
 
-	// Select the first command (load bundle) and activate.
+	// Select the first command and activate it.
 	for i, c := range p.filtered {
-		if c.ID == "bundle.load" {
+		if c.ID == "deployment.logs" {
 			p.cursor = i
 			break
 		}
@@ -127,8 +127,8 @@ func TestPaletteMRUBumpsOnRun(t *testing.T) {
 
 	_ = p.activate()
 
-	if len(saved) == 0 || saved[0][0] != "bundle.load" {
-		t.Errorf("expected MRU to record bundle.load, got %+v", saved)
+	if len(saved) == 0 || saved[0][0] != "deployment.logs" {
+		t.Errorf("expected MRU to record deployment.logs, got %+v", saved)
 	}
 }
 
@@ -136,11 +136,11 @@ func TestPaletteRendersHeaderAndInput(t *testing.T) {
 	p := newTestPalette()
 	view := ansi.Strip(p.View())
 
-	if !strings.Contains(view, "musher") {
-		t.Errorf("expected brand in view, got:\n%s", view)
+	if !strings.Contains(view, "Command palette") {
+		t.Errorf("expected panel title in view, got:\n%s", view)
 	}
 
-	if !strings.Contains(view, "Load bundle") {
+	if !strings.Contains(view, "Logs for deployment") {
 		t.Errorf("expected commands in view, got:\n%s", view)
 	}
 }
