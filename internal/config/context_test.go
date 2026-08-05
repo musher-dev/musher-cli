@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -316,6 +317,14 @@ func TestCachedContextNeverWritesTheBearer(t *testing.T) {
 
 	if !strings.Contains(string(data), Fingerprint(testBearer)) {
 		t.Errorf("context cache is missing the credential fingerprint: %s", data)
+	}
+
+	// Windows has no Unix permission bits — os.Chmod only toggles the read-only
+	// attribute there, so a file written 0600 reports back as 0666. The bearer
+	// assertions above are the substance of this test and run everywhere; only
+	// the mode check is Unix-specific.
+	if runtime.GOOS == "windows" {
+		return
 	}
 
 	info, err := os.Stat(path)
