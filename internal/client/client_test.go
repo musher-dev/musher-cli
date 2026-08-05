@@ -14,6 +14,16 @@ import (
 // /v1/publisher/me and /v1/runner/me routes were removed from the platform.
 const orgsPath = "/v1/organizations"
 
+// mockClient wraps testutil.NewMockClient with retries disabled. Retry
+// behavior has its own suite in retry_test.go; these tests assert decoding and
+// header behavior and must not spend real time backing off.
+func mockClient(apiKey string, fn testutil.RoundTripFunc) *client.Client {
+	created := testutil.NewMockClient(apiKey, fn)
+	client.SetRetryHooks(created, client.BackoffPolicy{MaxAttempts: 1}, nil)
+
+	return created
+}
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +67,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("success parses data envelope", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("test-key", func(req *http.Request) (*http.Response, error) {
+		c := mockClient("test-key", func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != orgsPath {
 				t.Errorf("path = %q, want %q", req.URL.Path, orgsPath)
 			}
@@ -104,7 +114,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("empty data is not an error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {"hasMore": false}}`), nil
 		})
 
@@ -121,7 +131,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("unauthorized maps to ErrUnauthenticated", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad-key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("bad-key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusUnauthorized, `{}`), nil
 		})
 
@@ -134,7 +144,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("forbidden maps to ErrForbidden", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("scopeless-key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("scopeless-key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusForbidden, `{}`), nil
 		})
 
@@ -153,7 +163,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("server error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusInternalServerError, `{"detail":"db down"}`), nil
 		})
 
@@ -179,7 +189,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("malformed JSON", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return testutil.JSONResponse(http.StatusOK, `{"data": [`), nil
 		})
 
@@ -188,7 +198,7 @@ func TestListOrganizations(t *testing.T) {
 			t.Fatal("expected error for malformed JSON")
 		}
 
-		if !strings.Contains(err.Error(), "failed to parse organizations") {
+		if !strings.Contains(err.Error(), "failed to parse /v1/organizations response") {
 			t.Errorf("error = %q, want to mention parse failure", err.Error())
 		}
 	})
@@ -196,7 +206,7 @@ func TestListOrganizations(t *testing.T) {
 	t.Run("transport error", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			return nil, errors.New("connection refused")
 		})
 
@@ -212,13 +222,13 @@ func TestListOrganizations(t *testing.T) {
 	})
 }
 
-func TestListOrganizationsWithMeta(t *testing.T) {
+func TestListOrganizationsPage(t *testing.T) {
 	t.Parallel()
 
 	t.Run("captures response metadata", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			resp := testutil.JSONResponse(http.StatusOK, `{"data": [{"id":"org-1","name":"Acme"}], "meta": {}}`)
 			resp.Header.Set("X-Request-Id", "req-abc")
 			resp.Header.Set("X-Trace-Id", "trace-xyz")
@@ -226,13 +236,13 @@ func TestListOrganizationsWithMeta(t *testing.T) {
 			return resp, nil
 		})
 
-		orgs, meta, err := c.ListOrganizationsWithMeta(t.Context())
+		page, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if len(orgs) != 1 {
-			t.Fatalf("expected 1 organization, got %d", len(orgs))
+		if len(page.Data) != 1 {
+			t.Fatalf("expected 1 organization, got %d", len(page.Data))
 		}
 
 		if meta.RequestID != "req-abc" {
@@ -247,14 +257,14 @@ func TestListOrganizationsWithMeta(t *testing.T) {
 	t.Run("trace ID falls back to traceparent", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("key", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("key", func(_ *http.Request) (*http.Response, error) {
 			resp := testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`)
 			resp.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 
 			return resp, nil
 		})
 
-		_, meta, err := c.ListOrganizationsWithMeta(t.Context())
+		_, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -267,14 +277,14 @@ func TestListOrganizationsWithMeta(t *testing.T) {
 	t.Run("unauthorized includes meta", func(t *testing.T) {
 		t.Parallel()
 
-		c := testutil.NewMockClient("bad", func(_ *http.Request) (*http.Response, error) {
+		c := mockClient("bad", func(_ *http.Request) (*http.Response, error) {
 			resp := testutil.JSONResponse(http.StatusUnauthorized, `{}`)
 			resp.Header.Set("X-Request-Id", "req-fail")
 
 			return resp, nil
 		})
 
-		_, meta, err := c.ListOrganizationsWithMeta(t.Context())
+		_, meta, err := c.ListOrganizationsPage(t.Context(), 0, "")
 		if !errors.Is(err, client.ErrUnauthenticated) {
 			t.Fatalf("error = %v, want ErrUnauthenticated", err)
 		}
@@ -297,7 +307,7 @@ func TestRequestHeaders(t *testing.T) {
 
 		var got http.Header
 
-		c := testutil.NewMockClient("test-key", func(req *http.Request) (*http.Response, error) {
+		c := mockClient("test-key", func(req *http.Request) (*http.Response, error) {
 			got = req.Header.Clone()
 
 			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`), nil
@@ -311,8 +321,12 @@ func TestRequestHeaders(t *testing.T) {
 			t.Errorf("Authorization = %q, want %q", auth, "Bearer test-key")
 		}
 
-		if ct := got.Get("Content-Type"); ct != "application/json" {
-			t.Errorf("Content-Type = %q, want application/json", ct)
+		if ct := got.Get("Content-Type"); ct != "" {
+			t.Errorf("Content-Type = %q, want empty on a request with no body", ct)
+		}
+
+		if accept := got.Get("Accept"); accept != "application/json, application/problem+json" {
+			t.Errorf("Accept = %q, want both JSON media types", accept)
 		}
 
 		if ua := got.Get("User-Agent"); !strings.HasPrefix(ua, "musher/") {
@@ -329,7 +343,7 @@ func TestRequestHeaders(t *testing.T) {
 
 		var got http.Header
 
-		c := testutil.NewMockClient("", func(req *http.Request) (*http.Response, error) {
+		c := mockClient("", func(req *http.Request) (*http.Response, error) {
 			got = req.Header.Clone()
 
 			return testutil.JSONResponse(http.StatusOK, `{"data": [], "meta": {}}`), nil

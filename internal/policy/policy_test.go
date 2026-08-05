@@ -28,6 +28,7 @@ var (
 		moduleRoot + "/internal/buildinfo":     true,
 		moduleRoot + "/internal/client":        true,
 		moduleRoot + "/internal/config":        true,
+		moduleRoot + "/internal/deployspec":    true,
 		moduleRoot + "/internal/env":           true,
 		moduleRoot + "/internal/errors":        true,
 		moduleRoot + "/internal/observability": true,

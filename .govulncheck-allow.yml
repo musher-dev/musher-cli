@@ -1,0 +1,27 @@
+# Vulnerabilities that `task check:vuln` will not fail on.
+#
+# This file exists so an unfixable finding does not force the whole scan to be
+# switched off. Anything not listed here still fails the build, and every entry
+# has to say why it is accepted and what would let us remove it.
+#
+# Adding an entry is a deliberate risk acceptance. Review it when the referenced
+# condition changes.
+
+allow:
+  - id: GO-2026-5932
+    module: golang.org/x/crypto
+    package: golang.org/x/crypto/openpgp
+    reason: >-
+      Reached only through creativeprojects/go-selfupdate, which uses openpgp to
+      verify optional PGP signatures on GitHub release assets. Musher does not
+      publish PGP signatures — releases are verified by the SHA-256 checksums
+      file — so the vulnerable code path is compiled in but never exercised by
+      this CLI.
+    upstream_fix: >-
+      None. The advisory is "the openpgp package is unmaintained, unsafe by
+      design"; golang.org/x/crypto reports "Fixed in: N/A" and will not ship one.
+    removal_condition: >-
+      Drops out when the self-updater no longer depends on openpgp — either
+      go-selfupdate removes it, or we replace the self-updater. Tracked as
+      follow-up work; see the deployment-CLI PR description.
+    accepted_on: 2026-08-05

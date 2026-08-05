@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -32,19 +33,71 @@ organization the credential is bound to.`,
 }
 
 type authStatusResult struct {
-	Authenticated bool            `json:"authenticated"`
-	Source        string          `json:"source"`
-	APIURL        string          `json:"apiUrl"`
-	Profile       string          `json:"profile"`
-	Organizations []authStatusOrg `json:"organizations"`
-	Organization  *authStatusOrg  `json:"organization,omitempty"`
-	Warning       string          `json:"warning,omitempty"`
+	Authenticated bool               `json:"authenticated"`
+	Source        string             `json:"source"`
+	APIURL        string             `json:"apiUrl"`
+	Profile       string             `json:"profile"`
+	Organizations []authStatusOrg    `json:"organizations"`
+	Organization  *authStatusOrg     `json:"organization,omitempty"`
+	Session       *authStatusSession `json:"session,omitempty"`
+	Warning       string             `json:"warning,omitempty"`
+}
+
+// authStatusSession describes the stored session backing a "session" source.
+type authStatusSession struct {
+	ID        string `json:"id,omitempty"`
+	Expired   bool   `json:"expired"`
+	Renewable bool   `json:"renewable"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
 type authStatusOrg struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Handle string `json:"handle,omitempty"`
+}
+
+// storedSessionStatus describes the session behind a "session" credential, or
+// nil when the command is authenticating with an API key.
+func storedSessionStatus(cfg *config.Config, source auth.CredentialSource) *authStatusSession {
+	if source != auth.SourceSession {
+		return nil
+	}
+
+	stored, ok := auth.GetSession(cfg.APIURL(), cfg.ActiveProfileName())
+	if !ok {
+		return nil
+	}
+
+	status := &authStatusSession{
+		ID:        stored.SessionID,
+		Expired:   stored.Expired(time.Now()),
+		Renewable: stored.Renewable(),
+	}
+
+	if !stored.ExpiresAt.IsZero() {
+		status.ExpiresAt = stored.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+
+	return status
+}
+
+// describeSession renders the session line for human-readable output.
+func describeSession(status *authStatusSession) string {
+	state := "active"
+	if status.Expired {
+		state = "expired"
+
+		if status.Renewable {
+			state = "expired (renews automatically)"
+		}
+	}
+
+	if status.ExpiresAt != "" {
+		return state + ", expires " + status.ExpiresAt
+	}
+
+	return state
 }
 
 func runAuthStatus(cmd *cobra.Command, out *output.Writer) error {
@@ -92,6 +145,7 @@ func reportAuthStatus(
 		APIURL:        cfg.APIURL(),
 		Profile:       cfg.ActiveProfileName(),
 		Organizations: make([]authStatusOrg, 0, len(orgs)),
+		Session:       storedSessionStatus(cfg, source),
 		Warning:       warning,
 	}
 
@@ -114,6 +168,11 @@ func reportAuthStatus(
 
 	out.Muted("API:     %s", result.APIURL)
 	out.Muted("Profile: %s", result.Profile)
+	out.Muted("Source:  %s", result.Source)
+
+	if result.Session != nil {
+		out.Muted("Session: %s", describeSession(result.Session))
+	}
 
 	if warning != "" {
 		out.Warning("%s", warning)

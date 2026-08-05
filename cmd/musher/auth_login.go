@@ -25,27 +25,38 @@ func newAuthLoginCmd() *cobra.Command {
 	var (
 		apiKeyFlag string
 		noVerify   bool
+		webLogin   bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate with the Musher platform",
-		Long: `Authenticate with the Musher platform using an API key.
+		Long: `Authenticate with the Musher platform using an API key or an account sign-in.
 
 You can create or manage API keys at:
   https://console.musher.dev/settings/organization/api-keys
 
-The API key is stored securely in your OS keyring (macOS Keychain,
+With --web, musher signs in with your account email and password and
+stores the resulting session. A session reaches every API route; an API
+key today authenticates only the identity endpoint, so deployment
+commands need a session.
+
+Credentials are stored securely in your OS keyring (macOS Keychain,
 Windows Credential Manager, or Linux Secret Service). Falls back
 to a file-based store if the keyring is unavailable.
 
 You can also set MUSHER_API_KEY environment variable instead.`,
 		Example: `  musher auth login
+  musher auth login --web
   musher auth login --api-key KEY
   musher auth login --api-key KEY --no-verify`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := output.FromContext(cmd.Context())
+
+			if webLogin {
+				return runWebLogin(cmd, out)
+			}
 
 			return runLogin(cmd, out, apiKeyFlag, noVerify)
 		},
@@ -53,6 +64,10 @@ You can also set MUSHER_API_KEY environment variable instead.`,
 
 	cmd.Flags().StringVar(&apiKeyFlag, "api-key", "", "API key (non-interactive)")
 	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "Store the key without contacting the API")
+	cmd.Flags().BoolVar(&webLogin, "web", false, "Sign in with your account email and password")
+
+	cmd.MarkFlagsMutuallyExclusive("web", "api-key")
+	cmd.MarkFlagsMutuallyExclusive("web", "no-verify")
 
 	return cmd
 }
@@ -186,5 +201,12 @@ func storeLoginKey(out *output.Writer, cfg *config.Config, apiKey string, fromEn
 	if err := auth.StoreAPIKey(cfg.APIURL(), cfg.ActiveProfileName(), apiKey); err != nil {
 		out.Warning("Could not store API key: %v", err)
 		out.Info("Set MUSHER_API_KEY environment variable instead")
+
+		return
+	}
+
+	// A cached organization belongs to whoever was signed in before.
+	if err := config.ClearCachedContext(cfg.APIURL(), cfg.ActiveProfileName()); err != nil {
+		out.Debug("could not clear the cached deployment context: %v", err)
 	}
 }

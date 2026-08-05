@@ -10,6 +10,15 @@ import (
 )
 
 // Exit codes for CLI commands.
+//
+// These are part of the CLI's contract with scripts and CI: a value, once
+// shipped, never changes meaning. Codes 0-6 and 64 predate the deployment CLI
+// and are frozen.
+//
+// Exit code 7 is RETIRED. It meant ExitHarness in the bundle-and-harness era
+// of this CLI, which no longer exists. It must never be reassigned: a script
+// still branching on 7 would silently start treating an unrelated failure as a
+// harness problem.
 const (
 	ExitSuccess   = 0
 	ExitGeneral   = 1
@@ -18,9 +27,21 @@ const (
 	ExitConfig    = 4
 	ExitTimeout   = 5
 	ExitExecution = 6
-	ExitHarness   = 7
-	ExitUsage     = 64
+	// 7 is retired — see the note above.
+	ExitDeployFailed = 8  // deployment reached a FAILED terminal state
+	ExitPermission   = 9  // 403: the credential lacks the required permission
+	ExitConflict     = 10 // 409: resource-conflict or revision-conflict
+	ExitInvalidSpec  = 11 // 400/422: the request or spec failed validation
+	ExitEntitlement  = 12 // 403 + entitlement-required: the plan does not include this
+	ExitRateLimited  = 13 // 429 after retries were exhausted
+	ExitUsage        = 64
 )
+
+// Mapping an API problem document to one of these codes lives in
+// internal/client (Problem.ExitCode), not here: internal/client imports this
+// package, so a dependency in the other direction would be an import cycle.
+// cmd/ combines the two — it takes the code from the problem and builds the
+// CLIError with it.
 
 // CLIError represents a user-facing CLI error with actionable guidance.
 type CLIError struct {
@@ -177,171 +198,6 @@ func ConfigFailed(operation string, cause error) *CLIError {
 		Cause:   cause,
 		Code:    ExitConfig,
 	})
-}
-
-// PublishFailed returns an error for publishing failures.
-func PublishFailed(cause error) *CLIError {
-	hint := "Check your bundle definition file and credentials, then try again"
-
-	if containsAny(errorString(cause), "private", "visibility", "plan allows", "plan limit") {
-		hint = "Set 'visibility: public' in musher.yaml, or upgrade your plan for more private bundles"
-	}
-
-	return enrichFromCause(&CLIError{
-		Message: "Publish failed",
-		Hint:    hint,
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// VersionConflict returns an error when pushing a version that already exists.
-func VersionConflict(versionRef string, cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message:   fmt.Sprintf("Version %s already exists", versionRef),
-		Hint:      "Bump the version in musher.yaml and try again, or use 'musher bundle yank' to remove the existing version",
-		Cause:     cause,
-		Code:      ExitGeneral,
-		ErrorCode: "ERR-PUBLISH-CONFLICT",
-	})
-}
-
-// ValidateFailed returns an error for validation failures.
-func ValidateFailed(msg string) *CLIError {
-	return &CLIError{
-		Message: "Validation failed: " + msg,
-		Hint:    "Fix the issues above and run 'musher bundle validate' again",
-		Code:    ExitGeneral,
-	}
-}
-
-// InvalidBundleDef returns an error for invalid bundle definitions.
-func InvalidBundleDef(detail string) *CLIError {
-	return &CLIError{
-		Message: "Invalid bundle definition: " + detail,
-		Hint:    "Check musher.yaml for required fields",
-		Code:    ExitConfig,
-	}
-}
-
-// PullFailed returns an error for bundle pull failures.
-func PullFailed(cause error) *CLIError {
-	hint := "Check the bundle reference and your credentials, then try again"
-
-	if containsAny(errorString(cause), "not found") {
-		hint = "Verify the namespace, slug, and version are correct"
-	}
-
-	return enrichFromCause(&CLIError{
-		Message: "Pull failed",
-		Hint:    hint,
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// YankFailed returns an error for yank failures.
-func YankFailed(version string, cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message: "Failed to yank version " + version,
-		Hint:    "Check the version exists and you have namespace access. Yanked versions are hidden from search/install but remain fetchable by digest",
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// UnyankFailed returns an error for unyank failures.
-func UnyankFailed(version string, cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message: "Failed to unyank version " + version,
-		Hint:    "Check the version exists, is currently yanked, and you have namespace access",
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// --- Consumer error constructors ---
-
-// BundleNotFound returns an error when a bundle does not exist in the registry.
-func BundleNotFound(ref string) *CLIError {
-	return &CLIError{
-		Message:   "Bundle not found: " + ref,
-		Hint:      "Check the namespace and slug, then try 'musher hub search'",
-		Code:      ExitGeneral,
-		ErrorCode: "ERR-BUNDLE-001",
-	}
-}
-
-// BundleResolveFailed returns an error when bundle resolution fails.
-func BundleResolveFailed(cause error) *CLIError {
-	hint := "Check the bundle reference and version, then try again"
-
-	if containsAny(errorString(cause), "not found") {
-		hint = "Verify the namespace, slug, and version are correct"
-	}
-
-	return enrichFromCause(&CLIError{
-		Message:   "Failed to resolve bundle",
-		Hint:      hint,
-		Cause:     cause,
-		Code:      ExitGeneral,
-		ErrorCode: "ERR-BUNDLE-002",
-	})
-}
-
-// CacheCorrupt returns an error when the bundle cache is in an inconsistent state.
-func CacheCorrupt(path string, cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message: "Cache integrity error: " + path,
-		Hint:    "Try clearing the cache directory and re-downloading the bundle",
-		Cause:   cause,
-		Code:    ExitGeneral,
-	})
-}
-
-// HarnessNotFound returns an error when the requested harness is not recognized.
-func HarnessNotFound(name string) *CLIError {
-	return &CLIError{
-		Message:   "Unknown harness: " + name,
-		Hint:      "Run 'musher doctor' to see available harnesses",
-		Code:      ExitHarness,
-		ErrorCode: "ERR-HARNESS-001",
-	}
-}
-
-// HarnessNotInstalled returns an error when a harness binary is not on PATH.
-func HarnessNotInstalled(name, installHint string) *CLIError {
-	hint := "Install the harness and ensure it is on your PATH"
-	if installHint != "" {
-		hint = installHint
-	}
-
-	return &CLIError{
-		Message:   "Harness not installed: " + name,
-		Hint:      hint,
-		Code:      ExitHarness,
-		ErrorCode: "ERR-HARNESS-002",
-	}
-}
-
-// HarnessExecFailed returns an error when a harness executor fails.
-func HarnessExecFailed(harness string, cause error) *CLIError {
-	return enrichFromCause(&CLIError{
-		Message:   "Harness execution failed: " + harness,
-		Hint:      "Check the harness logs and try again, or run 'musher doctor'",
-		Cause:     cause,
-		Code:      ExitHarness,
-		ErrorCode: "ERR-HARNESS-003",
-	})
-}
-
-// InstallConflict returns an error when a bundle asset conflicts with an existing file.
-func InstallConflict(path string) *CLIError {
-	return &CLIError{
-		Message: "Install conflict: file already exists: " + path,
-		Hint:    "Use --force to overwrite existing files, or remove the conflicting file first",
-		Code:    ExitGeneral,
-	}
 }
 
 func containsAny(s string, substrings ...string) bool {

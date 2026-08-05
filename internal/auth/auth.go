@@ -32,6 +32,7 @@ const (
 	SourceEnv     CredentialSource = "environment variable"
 	SourceKeyring CredentialSource = "keyring"
 	SourceFile    CredentialSource = "credentials file"
+	SourceSession CredentialSource = "session"
 	SourceNone    CredentialSource = ""
 )
 
@@ -45,6 +46,13 @@ func GetCredentials(apiURL, profile string) (source CredentialSource, apiKey str
 		return SourceEnv, key
 	}
 
+	return storedAPIKey(apiURL, profile)
+}
+
+// storedAPIKey returns the API key held on this machine, ignoring the
+// environment. Resolve needs the stored key separately because a session
+// outranks it while the environment outranks both.
+func storedAPIKey(apiURL, profile string) (source CredentialSource, apiKey string) {
 	service, err := paths.KeyringServiceFromURL(apiURL)
 	if err == nil {
 		if key, keyErr := keyring.Get(service, keyringUserFor(profile)); keyErr == nil && key != "" {

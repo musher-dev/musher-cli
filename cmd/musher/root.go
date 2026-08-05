@@ -25,6 +25,7 @@ func defaultOutput() *output.Writer {
 
 // Command group IDs.
 const (
+	groupDeploy      = "deploy"
 	groupAuth        = "auth"
 	groupMaintenance = "maintenance"
 )
@@ -169,9 +170,18 @@ func buildConfigOverrides(cmd *cobra.Command, apiURL, apiKey string) (config.Ove
 
 func registerRootCommands(rootCmd *cobra.Command) {
 	rootCmd.AddGroup(
+		&cobra.Group{ID: groupDeploy, Title: "Deploy:"},
 		&cobra.Group{ID: groupAuth, Title: "Authentication:"},
 		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},
 	)
+
+	// Deploy group
+	for _, deployCmd := range []*cobra.Command{
+		newDeployCmd(), newListCmd(), newStatusCmd(), newLogsCmd(),
+	} {
+		deployCmd.GroupID = groupDeploy
+		rootCmd.AddCommand(deployCmd)
+	}
 
 	// Auth group
 	authCmd := newAuthCmd()

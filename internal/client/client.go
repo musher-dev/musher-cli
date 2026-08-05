@@ -1,27 +1,22 @@
-// Package client provides the API client for communicating with the Musher platform.
+// Package client provides the API client for communicating with the Musher
+// platform.
 //
-// The client handles authentication and provides methods for:
-//   - Validating runner API keys
-//   - Publishing bundles
-//   - Searching the hub
+// It is a transport layer only: it builds requests, retries what is safe to
+// retry, decodes RFC 9457 problem documents, and hands typed results back.
+// Use-case logic belongs in the packages above it.
 package client
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	repoerrors "github.com/musher-dev/musher-cli/internal/errors"
-	"github.com/musher-dev/musher-cli/internal/observability"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -32,8 +27,14 @@ const (
 // Client is the Musher API client.
 type Client struct {
 	baseURL    string
+	base       *url.URL
+	baseErr    error
 	apiKey     string
 	httpClient *http.Client
+	backoff    BackoffPolicy
+
+	// sleep is the backoff wait, overridable so tests need not spend real time.
+	sleep func(context.Context, time.Duration) error
 }
 
 // HTTPStatusError is returned when an API call receives a non-success HTTP status.
@@ -43,8 +44,16 @@ type HTTPStatusError struct {
 	RequestID string
 	TraceID   string
 	Detail    string
+
+	// Problem is the decoded RFC 9457 document when the server sent one. It
+	// carries the machine-readable slug and any subclass extension members.
+	Problem *Problem
 }
 
+// Error renders the server's own explanation first. The status line is
+// context, not the message: burying "deployment region is not enabled for your
+// plan" behind "create deployment failed with status 403" hides the only part
+// a user can act on.
 func (e *HTTPStatusError) Error() string {
 	var extras []string
 	if e.RequestID != "" {
@@ -55,16 +64,34 @@ func (e *HTTPStatusError) Error() string {
 		extras = append(extras, "trace_id="+e.TraceID)
 	}
 
-	base := fmt.Sprintf("%s failed with status %d", e.Operation, e.Status)
-	if len(extras) > 0 {
-		base = fmt.Sprintf("%s (%s)", base, strings.Join(extras, ", "))
+	if e.Detail != "" {
+		suffix := ""
+		if len(extras) > 0 {
+			suffix = ", " + strings.Join(extras, ", ")
+		}
+
+		return fmt.Sprintf("%s (%s: status %d%s)", e.Detail, e.Operation, e.Status, suffix)
 	}
 
-	if e.Detail != "" {
-		base = fmt.Sprintf("%s: %s", base, e.Detail)
+	base := fmt.Sprintf("%s failed with status %d", e.Operation, e.Status)
+	if len(extras) > 0 {
+		base += " (" + strings.Join(extras, ", ") + ")"
 	}
 
 	return base
+}
+
+// Is lets callers match the credential sentinels without unwrapping, so a
+// status-carrying error still satisfies errors.Is(err, ErrUnauthenticated).
+func (e *HTTPStatusError) Is(target error) bool {
+	switch {
+	case errors.Is(target, ErrUnauthenticated):
+		return e.Status == http.StatusUnauthorized
+	case errors.Is(target, ErrForbidden):
+		return e.Status == http.StatusForbidden
+	default:
+		return false
+	}
 }
 
 // RequestIDValue returns the request correlation ID when available.
@@ -72,6 +99,15 @@ func (e *HTTPStatusError) RequestIDValue() string { return e.RequestID }
 
 // TraceIDValue returns the distributed trace ID when available.
 func (e *HTTPStatusError) TraceIDValue() string { return e.TraceID }
+
+// ExitCode returns the CLI exit code implied by the failure.
+func (e *HTTPStatusError) ExitCode() int {
+	if e.Problem != nil {
+		return e.Problem.ExitCode()
+	}
+
+	return exitCodeForStatus(e.Status)
+}
 
 // RequestError represents a transport-level request failure.
 type RequestError struct {
@@ -134,11 +170,32 @@ func NewWithHTTPClient(baseURL, apiKey string, httpClient *http.Client) *Client 
 		httpClient.Timeout = DefaultTimeout
 	}
 
-	return &Client{
+	client := &Client{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		httpClient: httpClient,
+		backoff:    DefaultBackoff(),
+		sleep:      sleepContext,
 	}
+
+	// Parse once. Every request then composes segments onto the parsed URL,
+	// which keeps a base with both a path prefix and a trailing slash intact.
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		client.baseErr = repoerrors.Errorf("invalid API base URL %q: %w", baseURL, err)
+
+		return client
+	}
+
+	if parsed.Scheme == "" || parsed.Host == "" {
+		client.baseErr = repoerrors.Newf("invalid API base URL %q: missing scheme or host", baseURL)
+
+		return client
+	}
+
+	client.base = parsed
+
+	return client
 }
 
 // BaseURL returns the configured base URL.
@@ -159,6 +216,9 @@ var ErrForbidden = errors.New("credential lacks the required permission")
 // ErrUnauthenticated signals a missing, invalid, or expired credential.
 var ErrUnauthenticated = errors.New("invalid or expired credential")
 
+// orgsRoute is the stable route template for the identity endpoint.
+const orgsRoute = "/v1/organizations"
+
 // ListOrganizations returns the organizations the credential can act in.
 //
 // This is the CLI's identity endpoint. It is one of the few public routes that
@@ -166,170 +226,60 @@ var ErrUnauthenticated = errors.New("invalid or expired credential")
 // the single bound organization. The former /v1/publisher/me and /v1/runner/me
 // endpoints were removed from the platform and now 404.
 func (c *Client) ListOrganizations(ctx context.Context) ([]Organization, error) {
-	page, _, err := c.ListOrganizationsWithMeta(ctx)
-
-	return page, err
-}
-
-// ListOrganizationsWithMeta returns the organizations plus response correlation
-// metadata from the response headers.
-func (c *Client) ListOrganizationsWithMeta(ctx context.Context) ([]Organization, *ResponseMeta, error) {
-	req, err := c.newRequest(ctx, "GET", c.baseURL+"/v1/organizations", http.NoBody)
+	page, _, err := c.ListOrganizationsPage(ctx, 0, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	resp, err := c.do(req, "/v1/organizations")
-	if err != nil {
-		return nil, nil, repoerrors.Errorf("failed to connect to API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	meta := &ResponseMeta{
-		RequestID: strings.TrimSpace(resp.Header.Get("X-Request-Id")),
-		TraceID:   responseTraceID(resp),
-	}
-
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusUnauthorized:
-		return nil, meta, ErrUnauthenticated
-	case http.StatusForbidden:
-		return nil, meta, ErrForbidden
-	default:
-		return nil, meta, unexpectedStatus("list organizations", resp)
-	}
-
-	var page Page[Organization]
-	if err := decodeJSON(resp.Body, &page, "failed to parse organizations"); err != nil {
-		return nil, meta, err
-	}
-
-	return page.Data, meta, nil
+	return page.Data, nil
 }
 
-func (c *Client) setRequestHeaders(req *http.Request) {
-	requestID := req.Header.Get("X-Request-Id")
-	if requestID == "" {
-		requestID = uuid.NewString()
-		req.Header.Set("X-Request-Id", requestID)
+// ListOrganizationsPage returns one page of organizations plus response
+// correlation metadata. A limit of zero and an empty cursor request the
+// server's default first page.
+func (c *Client) ListOrganizationsPage(
+	ctx context.Context,
+	limit int,
+	cursor string,
+) (*Page[Organization], *ResponseMeta, error) {
+	query := url.Values{}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
 	}
 
-	spanCtx := trace.SpanContextFromContext(req.Context())
-	if spanCtx.IsValid() {
-		req.Header.Set("X-Trace-Id", spanCtx.TraceID().String())
+	if cursor != "" {
+		query.Set("cursor", cursor)
 	}
 
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "musher/"+buildinfo.Version)
+	return do[Page[Organization]](ctx, c, request{
+		method: http.MethodGet,
+		path:   []string{"v1", "organizations"},
+		query:  query,
+		op:     orgsRoute,
+	})
 }
 
-func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, repoerrors.Errorf("failed to create request: %w", err)
-	}
-
-	c.setRequestHeaders(req)
-
-	return req, nil
-}
-
-func (c *Client) do(req *http.Request, route string) (*http.Response, error) {
-	requestID := strings.TrimSpace(req.Header.Get("X-Request-Id"))
-	logger := observability.FromContext(req.Context()).With(
-		slog.String("component", "client"),
-		slog.String("http.request.method", req.Method),
-		slog.String("http.route", route),
-		slog.String("request.id", requestID),
-	)
-
-	start := time.Now()
-
-	logger.Debug("request started", slog.String("event.type", "http.request.start"))
-
-	resp, err := c.httpClient.Do(req)
-	durationMS := time.Since(start).Milliseconds()
-
-	if err != nil || resp == nil {
-		errVal := err
-		if errVal == nil {
-			errVal = errors.New("server returned nil response")
-		}
-
-		logger.Error(
-			"request failed",
-			slog.String("event.type", "http.request.error"),
-			slog.Int64("duration_ms", durationMS),
-			slog.String("error", errVal.Error()),
-		)
-
-		return nil, &RequestError{
-			Operation: "http request",
-			RequestID: requestID,
-			Cause:     errVal,
-		}
-	}
-
-	traceID := responseTraceID(resp)
-	if traceID != "" {
-		logger = logger.With(slog.String("trace.id", traceID))
-	}
-
-	logger.Debug(
-		"request completed",
-		slog.String("event.type", "http.request.finish"),
-		slog.Int("http.response.status_code", resp.StatusCode),
-		slog.Int64("duration_ms", durationMS),
-		slog.String("trace.id", traceID),
-	)
-
-	return resp, nil
-}
-
-func decodeJSON(body io.Reader, dst any, msg string) error {
-	if err := json.NewDecoder(body).Decode(dst); err != nil {
-		return repoerrors.Errorf("%s: %w", msg, err)
-	}
-
-	return nil
-}
-
-// unexpectedStatus creates a formatted error from an unexpected HTTP status code.
+// unexpectedStatus builds an error from a non-success response, decoding the
+// RFC 9457 problem document when the server sent one.
 func unexpectedStatus(operation string, resp *http.Response) error {
-	statusCode := 0
-	requestID := ""
-	traceID := ""
-	detail := ""
+	if resp == nil {
+		return &HTTPStatusError{Operation: operation}
+	}
 
-	if resp != nil {
-		statusCode = resp.StatusCode
-		requestID = strings.TrimSpace(resp.Header.Get("X-Request-Id"))
-		traceID = responseTraceID(resp)
+	problem := decodeProblem(resp)
 
-		// Try to extract detail from RFC 9457 Problem Details response.
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		if err == nil && len(body) > 0 {
-			var problem struct {
-				Detail string `json:"detail"`
-				Title  string `json:"title"`
-			}
-			if json.Unmarshal(body, &problem) == nil && problem.Detail != "" {
-				detail = problem.Detail
-			}
-		}
+	detail := problem.Detail
+	if detail == "" {
+		detail = problem.Title
 	}
 
 	return &HTTPStatusError{
 		Operation: operation,
-		Status:    statusCode,
-		RequestID: requestID,
-		TraceID:   traceID,
+		Status:    resp.StatusCode,
+		RequestID: strings.TrimSpace(resp.Header.Get("X-Request-Id")),
+		TraceID:   problem.TraceID,
 		Detail:    detail,
+		Problem:   problem,
 	}
 }
 
