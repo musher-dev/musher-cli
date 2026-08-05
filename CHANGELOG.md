@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/musher-dev/musher-cli/compare/v0.3.14...v0.4.0) (2026-08-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* all bundle and hub commands are removed, along with the cache, search, load, run, and history commands. `musher auth status` no longer reports publisher namespaces; it reports the credential's organization. The oci.registry_url and harness.scrollback_lines config keys are retired. Exit code 7 (ExitHarness) is retired and will not be reassigned.
+
+### Features
+
+* **deploy:** add the deployment golden path, transport core, and SSE client ([328d9bd](https://github.com/musher-dev/musher-cli/commit/328d9bd4ca871bdb5b82d5b701190929c449bbb6))
+* rebuild as a deployment CLI, remove the bundle/hub surface ([94ae1cf](https://github.com/musher-dev/musher-cli/commit/94ae1cffab4c0468eaa9f9c493e447b48c4fc5de))
+
+
+### Bug Fixes
+
+* **test:** skip the Unix-only permission assertion on Windows ([3d6d29c](https://github.com/musher-dev/musher-cli/commit/3d6d29c1f1df0b4aeaa5d6eba1426b793a5e2a8e))
+
 ## [0.3.14](https://github.com/musher-dev/musher-cli/compare/v0.3.13...v0.3.14) (2026-04-09)
 
 
