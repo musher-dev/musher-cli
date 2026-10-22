@@ -52,10 +52,7 @@
     "ghcr.io/devcontainers-extra/features/go-task:1": {},
 
     // --- Linting ---
-    "ghcr.io/lukewiwa/features/shellcheck:0": { "version": "stable" },
-
-    // --- AI tooling ---
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+    "ghcr.io/lukewiwa/features/shellcheck:0": { "version": "stable" }
 
     // --- Optional: Infrastructure tooling (uncomment as needed) ---
     // "ghcr.io/devcontainers-extra/features/opentofu:1": {},
@@ -73,15 +70,36 @@
   // Allow debuggers (gdb, strace, delve) to attach to processes.
   "capAdd": ["SYS_PTRACE"],
 
+  // One volume per purpose per container: logins, agent sessions, shell
+  // history and download caches survive a rebuild. Each target's parent
+  // already exists in the image, so Docker creates no root-owned directory on
+  // the way; post-create takes ownership of the volumes themselves.
   "mounts": [
     "source=musher-${devcontainerId}-gh-config,target=/home/vscode/.config/gh,type=volume",
     "source=musher-${devcontainerId}-claude-config,target=/home/vscode/.claude,type=volume",
-    "source=musher-${devcontainerId}-codex-config,target=/home/vscode/.codex,type=volume"
-    // Uncomment to persist Docker-in-Docker data across rebuilds:
-    // "source=musher-${devcontainerId}-dind-data,target=/var/lib/docker/volumes,type=volume"
+    "source=musher-${devcontainerId}-codex-config,target=/home/vscode/.codex,type=volume",
+    "source=musher-${devcontainerId}-shell-history,target=/home/vscode/.shell-history,type=volume",
+    "source=musher-${devcontainerId}-cache,target=/home/vscode/.cache,type=volume"
+    // Docker-in-Docker needs no line here: its Feature keeps /var/lib/docker,
+    // the compose services' data included, on a volume that outlives a rebuild.
   ],
 
   "containerEnv": {
+    // Claude keeps .claude.json beside its config dir, so without this it
+    // lands in ~/ -- outside the claude volume -- and is lost on every rebuild.
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+
+    // Every Claude Code session starts at max effort. An env var because the
+    // settings file's effortLevel has no "max"; it also outranks /effort, so
+    // start a lighter session as `CLAUDE_CODE_EFFORT_LEVEL=auto claude`.
+    "CLAUDE_CODE_EFFORT_LEVEL": "max",
+
+    // REPL histories join the shell's on its volume; post-create points zsh
+    // and bash there.
+    "NODE_REPL_HISTORY": "/home/vscode/.shell-history/node_repl_history",
+    "PYTHON_HISTORY": "/home/vscode/.shell-history/python_history",
+    "PSQL_HISTORY": "/home/vscode/.shell-history/psql_history",
+
     "PYTHONUNBUFFERED": "1",
     "PYTHONDONTWRITEBYTECODE": "1",
     "UV_LINK_MODE": "copy",
@@ -99,7 +117,12 @@
   },
 
   "remoteEnv": {
-    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
+
+    // The host's GH_TOKEN, when it exports one: the first credential
+    // lib/github-auth.sh offers gh. Not GH_TOKEN itself, which would override
+    // gh's stored login on every call.
+    "MUSHER_HOST_GH_TOKEN": "${localEnv:GH_TOKEN}"
     // Uncomment if Go feature auto-sets GOROOT incorrectly:
     // "GOROOT": ""
   },
@@ -110,6 +133,9 @@
     "setup": ["bash", ".devcontainer/scripts/post-create.sh"]
   },
   "postStartCommand": ["bash", ".devcontainer/scripts/startup.sh"],
+  // post-attach finishes the GitHub credential once VS Code has copied the
+  // host's ~/.gitconfig, which happens only after post-create.
+  "postAttachCommand": ["bash", ".devcontainer/scripts/post-attach.sh"],
 
   "forwardPorts": [15432, 15433, 15434, 15435, 15436, 15440, 15441, 15442, 15443, 15444, 15445, 15446, 15447, 15448, 15460],
   "portsAttributes": {
@@ -133,6 +159,10 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        // --- AI ---
+        // Claude Code's editor integration; the CLI comes from post-create.
+        "anthropic.claude-code",
+
         // --- Core tooling ---
         "redhat.vscode-yaml",
         "tamasfe.even-better-toml",

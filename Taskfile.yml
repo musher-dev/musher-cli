@@ -206,7 +206,8 @@ tasks:
       - sh: command -v shellcheck >/dev/null 2>&1
         msg: "shellcheck is required and must be installed on PATH."
     cmds:
-      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -d -i 2 -ci -sr"
+      # --apply-ignore: .editorconfig exempts the canonical github-auth.sh.
+      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -d -i 2 -ci -sr --apply-ignore"
       - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shellcheck -x"
 
   check:shell:files:
@@ -219,7 +220,7 @@ tasks:
       - sh: test -n "{{.CLI_ARGS}}"
         msg: "Pass one or more shell files after '--'."
     cmds:
-      - shfmt -d -i 2 -ci -sr {{.CLI_ARGS}}
+      - shfmt -d -i 2 -ci -sr --apply-ignore {{.CLI_ARGS}}
       - shellcheck -x {{.CLI_ARGS}}
 
   check:workflow:
@@ -442,7 +443,7 @@ tasks:
         msg: "shfmt is required. Run 'task setup:tools' first."
     cmds:
       - golangci-lint fmt ./...
-      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -w -i 2 -ci -sr"
+      - sh -c "find . -type f -name '*.sh' -print0 | xargs -0 shfmt -w -i 2 -ci -sr --apply-ignore"
       - go mod tidy
 
   # ===========================================================================
