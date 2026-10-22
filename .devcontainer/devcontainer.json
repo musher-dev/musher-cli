@@ -2,7 +2,10 @@
 // Uncomment optional blocks as needed. Comment out what you don't use.
 {
   "name": "Musher Dev",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  // Ubuntu 24.04, not the floating `ubuntu` tag: that now resolves to 26.04
+  // (resolute), where docker-in-docker refuses its default moby option, so the
+  // build fails. Move it by hand once the Features build on a newer release.
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
 
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
