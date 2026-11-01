@@ -105,10 +105,9 @@
   },
 
   "waitFor": "postCreateCommand",
-  "postCreateCommand": {
-    "fix-crlf": "find .devcontainer/scripts -type f -name '*.sh' -exec sed -i 's/\\r$//' {} +",
-    "setup": ["bash", ".devcontainer/scripts/post-create.sh"]
-  },
+  // A single string runs sequentially; the object form runs entries in
+  // parallel, which let setup start before the CRLF strip finished.
+  "postCreateCommand": "find .devcontainer/scripts -type f -name '*.sh' -exec sed -i 's/\\r$//' {} + && bash .devcontainer/scripts/post-create.sh",
   "postStartCommand": ["bash", ".devcontainer/scripts/startup.sh"],
 
   "forwardPorts": [15432, 15433, 15434, 15435, 15436, 15440, 15441, 15442, 15443, 15444, 15445, 15446, 15447, 15448, 15460],
