@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,8 +18,15 @@ import (
 // Step identifiers reported through [Reporter.Step]. They are stable tokens, so
 // a front end can key a checklist off them without parsing prose.
 const (
-	StepValidate  = "validate"
+	StepValidate = "validate"
+	// StepBuild builds the image from a local recipe. Reserved for the build
+	// engine; this package does not emit it yet.
+	StepBuild = "build"
+	// StepPush pushes the built image to its repository. Reserved for the
+	// build engine; this package does not emit it yet.
+	StepPush      = "push"
 	StepResolve   = "resolve"
+	StepVerify    = "verify"
 	StepComponent = "component"
 	StepBlueprint = "blueprint"
 	StepDeploy    = "deploy"
@@ -78,15 +85,30 @@ var (
 
 // DeployInput is the resolved intent of one deploy.
 type DeployInput struct {
-	Name         string
+	// Name is the natural key: the deployment name, and the slug of the
+	// component and blueprint compiled for it.
+	Name string
+	// Image is the container image to run. Required unless Build is set, and
+	// even then until the build engine lands.
 	Image        string
 	Environment  string
 	Organization string
-	Size         string
-	Kind         string
-	Port         int
-	Replicas     int
-	Env          map[string]string
+	// Size is the compute profile slug. Empty selects the server's
+	// recommended profile.
+	Size string
+	// Kind is SERVICE, WORKER or JOB. Empty means SERVICE.
+	Kind     string
+	Replicas int
+	Env      map[string]string
+	// Command overrides the image's arguments.
+	Command []string
+	// Endpoints are the ports the workload serves, by endpoint name.
+	Endpoints map[string]DeployEndpoint
+	// Schedule is a JOB's cron expression.
+	Schedule string
+	// Build is the local build recipe from musher.yaml. It is never sent to
+	// the platform.
+	Build *deployspec.AppBuild
 }
 
 // DeployOptions tunes how the deploy is driven.
@@ -108,6 +130,10 @@ type DeployOptions struct {
 	// DisableStream forces the polling watcher. The SSE path is preferred in
 	// production; this exists for environments that block event streams.
 	DisableStream bool
+	// Force rolls the deployment even when it already runs the compiled
+	// revision: a digest-pinned image is redeployed, a tagged one has its
+	// image re-resolved.
+	Force bool
 }
 
 // DeployError is the platform's own account of why a deployment failed.
@@ -156,10 +182,15 @@ type DeployResult struct {
 	Environment  string
 	Image        string
 	Replicas     int
-	Duration     time.Duration
-	Detached     bool
-	Outcome      Outcome
-	Err          *DeployError
+	// Revision is the blueprint revision the deployment was moved to.
+	Revision int
+	// Unchanged is true when the deployment already ran Revision and nothing
+	// was submitted.
+	Unchanged bool
+	Duration  time.Duration
+	Detached  bool
+	Outcome   Outcome
+	Err       *DeployError
 }
 
 // Reporter receives the narrative of a deploy.
@@ -197,15 +228,44 @@ func (NopReporter) Note(_, _ string, _ ...any) {}
 type DeployAPI interface {
 	ListOrganizations(ctx context.Context) ([]client.Organization, error)
 	ListEnvironments(ctx context.Context, orgID, status string) ([]client.Environment, error)
+	ListComputeProfiles(ctx context.Context) ([]client.ComputeProfile, error)
 	GetDeploymentByName(ctx context.Context, orgID, name string) (*client.Deployment, error)
-	CreateComponent(ctx context.Context, orgID string, input *client.ComponentInput) (*client.Component, error)
-	PublishComponent(ctx context.Context, componentID string) (*client.Component, error)
-	CreateBlueprint(ctx context.Context, orgID string, input *client.BlueprintInput) (*client.Blueprint, error)
-	PublishBlueprint(ctx context.Context, blueprintID string) (*client.Blueprint, error)
-	DeployBlueprint(
-		ctx context.Context, orgID string, input client.DeploymentDeployBlueprintInput,
+
+	ValidateComponent(ctx context.Context, orgID string, doc any, scope string) (*client.SpecValidationResult, error)
+	ListComponentsBySlug(ctx context.Context, orgID, slug string) ([]client.Component, error)
+	CreateComponent(
+		ctx context.Context, orgID, slug string, doc *client.ComponentDocument,
+	) (*client.ComponentVersion, error)
+	LatestComponentRevision(ctx context.Context, componentID string) (*client.VersionSummary, error)
+	GetComponentVersion(ctx context.Context, componentID string, revision int) (*client.ComponentVersion, error)
+	CreateComponentVersion(
+		ctx context.Context, componentID string, doc *client.ComponentDocument,
+	) (*client.ComponentVersion, error)
+	ReplaceComponentVersion(
+		ctx context.Context, componentID string, revision int, doc *client.ComponentDocument, expected *int,
+	) (*client.ComponentVersion, error)
+	PublishComponentVersion(ctx context.Context, componentID string, revision int) (*client.ComponentVersion, error)
+
+	ListBlueprintsBySlug(ctx context.Context, orgID, slug string) ([]client.Blueprint, error)
+	CreateBlueprint(
+		ctx context.Context, orgID, slug string, doc *client.BlueprintDocument,
+	) (*client.BlueprintVersion, error)
+	LatestBlueprintRevision(ctx context.Context, blueprintID string) (*client.VersionSummary, error)
+	GetBlueprintVersion(ctx context.Context, blueprintID string, revision int) (*client.BlueprintVersion, error)
+	CreateBlueprintVersion(
+		ctx context.Context, blueprintID string, doc *client.BlueprintDocument,
+	) (*client.BlueprintVersion, error)
+	ReplaceBlueprintVersion(
+		ctx context.Context, blueprintID string, revision int, doc *client.BlueprintDocument, expected *int,
+	) (*client.BlueprintVersion, error)
+	PublishBlueprintVersion(ctx context.Context, blueprintID string, revision int) (*client.BlueprintVersion, error)
+
+	DeployBlueprint(ctx context.Context, orgID string, input client.DeployBlueprintInput) (*client.Deployment, error)
+	UpdateDeployment(
+		ctx context.Context, deploymentID string, input client.DeploymentUpdateInput,
 	) (*client.Deployment, error)
 	DeploymentAction(ctx context.Context, deploymentID, action, reason string) (*client.Deployment, error)
+	ListReplicas(ctx context.Context, deploymentID string) ([]client.ReplicaGroup, error)
 	GetDeployment(ctx context.Context, deploymentID string) (*client.Deployment, error)
 	ListEndpoints(ctx context.Context, orgID, deploymentID string) ([]client.Endpoint, error)
 	ListActivity(ctx context.Context, deploymentID string, limit int, cursor string) (*client.Page[client.Activity], error)
@@ -258,6 +318,10 @@ type deployRun struct {
 
 	started       time.Time
 	orgID         string
+	plan          *compiled
+	profile       string
+	revision      int
+	unchanged     bool
 	watchedID     string
 	degradedSince time.Time
 	snapshot      DeploymentSnapshot
@@ -290,6 +354,8 @@ func (r *deployRun) execute(ctx context.Context, input *DeployInput) (*DeployRes
 		Environment:  environment.Label(),
 		Image:        input.Image,
 		Replicas:     input.Replicas,
+		Revision:     r.revision,
+		Unchanged:    r.unchanged,
 		Outcome:      OutcomePending,
 	}
 
@@ -371,13 +437,36 @@ func (r *deployRun) validate(input *DeployInput) error {
 		return &UsageError{Err: repoerrors.Errorf("deployment name is required")}
 	}
 
+	if input.Build != nil && strings.TrimSpace(input.Image) == "" {
+		r.rep.Step(StepValidate, StateFailed, "no image to deploy")
+
+		return &UsageError{Err: repoerrors.Errorf(
+			"musher.yaml has a build recipe, but building is not supported yet " +
+				"(build support arrives in the next commit); build and push the image yourself and pass --image")}
+	}
+
 	if err := deployspec.ValidateImageRef(input.Image); err != nil {
 		// The step note stays terse: the returned error carries the full
 		// explanation, and the caller renders that. Putting the whole message in
 		// both places prints it twice in the same terminal.
-		r.rep.Step(StepValidate, StateFailed, "image is not pinned")
+		r.rep.Step(StepValidate, StateFailed, "image reference is not valid")
 
 		return &UsageError{Err: err}
+	}
+
+	plan, err := compile(input)
+	if err != nil {
+		r.rep.Step(StepValidate, StateFailed, "musher.yaml cannot be expressed as platform documents")
+
+		return &UsageError{Err: err}
+	}
+
+	r.plan = plan
+
+	// The platform accepts every tag, so a floating one is advice, not a
+	// refusal. Digests remain the recommended way to deploy.
+	if warning := deployspec.FloatingTagWarning(input.Image); warning != "" {
+		r.rep.Note(NoteWarn, "%s", warning)
 	}
 
 	r.rep.Step(StepValidate, StateDone, input.Image)
@@ -385,7 +474,8 @@ func (r *deployRun) validate(input *DeployInput) error {
 	return nil
 }
 
-// resolve picks the organization and environment this deploy targets.
+// resolve picks the organization, environment and compute profile this
+// deploy targets.
 func (r *deployRun) resolve(ctx context.Context, input *DeployInput) (*client.Environment, error) {
 	r.rep.Step(StepResolve, StateRunning, "resolving organization and environment")
 
@@ -405,9 +495,39 @@ func (r *deployRun) resolve(ctx context.Context, input *DeployInput) (*client.En
 		return nil, err
 	}
 
-	r.rep.Step(StepResolve, StateDone, environment.Label())
+	profile, err := r.resolveProfile(ctx, input.Size)
+	if err != nil {
+		r.rep.Step(StepResolve, StateFailed, err.Error())
+
+		return nil, err
+	}
+
+	r.profile = profile
+
+	r.rep.Step(StepResolve, StateDone, environment.Label()+", "+profile)
 
 	return environment, nil
+}
+
+// resolveProfile returns the compute profile to run on. An explicit size wins;
+// otherwise the server's recommended profile is the default, so the CLI never
+// hard-codes a catalog entry that may be retired.
+func (r *deployRun) resolveProfile(ctx context.Context, size string) (string, error) {
+	if trimmed := strings.TrimSpace(size); trimmed != "" {
+		return trimmed, nil
+	}
+
+	profiles, err := r.api.ListComputeProfiles(ctx)
+	if err != nil {
+		return "", repoerrors.Errorf("list compute profiles: %w", err)
+	}
+
+	profile, err := client.RecommendedComputeProfile(profiles)
+	if err != nil {
+		return "", repoerrors.Errorf("%w; set spec.size in musher.yaml or pass --size", err)
+	}
+
+	return profile, nil
 }
 
 // resolveOrg selects the organization to act in.
@@ -473,40 +593,99 @@ func (r *deployRun) resolveEnvironment(ctx context.Context, wanted string) (*cli
 		"no default STANDARD environment is available; pass --environment to choose one")
 }
 
-// submit compiles the component and blueprint and creates or updates the
-// deployment.
+// submit converges the platform onto the compiled intent:
+// validateRemote → lookup → ensureComponent → ensureBlueprint → deployment.
+//
+// Every step reads before it writes, keyed on the deployment name, so running
+// the same command twice converges instead of duplicating, and an unchanged
+// file writes nothing at all.
 func (r *deployRun) submit(
 	ctx context.Context,
 	input *DeployInput,
 	environment *client.Environment,
 ) (*client.Deployment, error) {
+	if err := r.validateRemote(ctx); err != nil {
+		return nil, err
+	}
+
 	existing, err := r.lookup(ctx, input.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	component, err := r.publishComponent(ctx, input)
+	if existing != nil {
+		// Refuse before writing anything: publishing revisions for a
+		// deployment this command will then decline to touch leaves debris.
+		if ownErr := r.checkOwnership(ctx, existing); ownErr != nil {
+			return nil, ownErr
+		}
+	}
+
+	r.rep.Step(StepComponent, StateRunning, "publishing the workload definition")
+
+	component, err := r.ensure(ctx, r.componentStore(r.plan))
 	if err != nil {
+		r.rep.Step(StepComponent, StateFailed, "could not publish the component")
+
 		return nil, err
 	}
 
-	blueprint, err := r.publishBlueprint(ctx, input, component)
+	r.rep.Step(StepComponent, StateDone, revisionNote(r.plan.slug, component))
+	r.rep.Step(StepBlueprint, StateRunning, "publishing the blueprint")
+
+	blueprint, err := r.ensure(ctx, r.blueprintStore(r.plan, component, r.profile))
 	if err != nil {
+		r.rep.Step(StepBlueprint, StateFailed, "could not publish the blueprint")
+
 		return nil, err
 	}
+
+	r.rep.Step(StepBlueprint, StateDone, revisionNote(r.plan.slug, blueprint))
+	r.revision = blueprint.revision
 
 	if existing != nil {
-		return r.redeploy(ctx, existing)
+		return r.update(ctx, input, existing, blueprint)
 	}
 
 	return r.create(ctx, input, environment, blueprint)
 }
 
+// validateRemote asks the platform to judge the compiled component before any
+// write, so a bad file never leaves an orphaned draft behind. Only ERROR
+// diagnostics block; warnings are passed on.
+func (r *deployRun) validateRemote(ctx context.Context) error {
+	r.rep.Step(StepVerify, StateRunning, "")
+
+	result, err := r.api.ValidateComponent(ctx, r.orgID, r.plan.component(1), client.ScopePublication)
+	if err != nil {
+		r.rep.Step(StepVerify, StateFailed, "the platform could not validate musher.yaml")
+
+		return repoerrors.Errorf("validate component: %w", err)
+	}
+
+	for _, warning := range mapDiagnostics(r.plan.componentSource, result.Warnings()) {
+		r.rep.Note(NoteWarn, "%s", warning.String())
+	}
+
+	if failures := result.Errors(); len(failures) > 0 {
+		r.rep.Step(StepVerify, StateFailed, "musher.yaml is not valid for the platform")
+
+		return &SpecError{
+			Document:    DocumentComponent,
+			Diagnostics: mapDiagnostics(r.plan.componentSource, failures),
+			Deferred:    mapDeferred(r.plan.componentSource, result.Deferred),
+		}
+	}
+
+	r.rep.Step(StepVerify, StateDone, "")
+
+	return nil
+}
+
 // lookup reads the deployment by its natural key.
 //
-// This read is what makes `musher deploy` idempotent: the write routes accept
-// no Idempotency-Key, so create-versus-update is decided by whether the name
-// already exists.
+// This read is what makes `musher deploy` idempotent: create-versus-update is
+// decided by whether the name already exists.
 func (r *deployRun) lookup(ctx context.Context, name string) (*client.Deployment, error) {
 	existing, err := r.api.GetDeploymentByName(ctx, r.orgID, name)
 	if err == nil {
@@ -520,54 +699,21 @@ func (r *deployRun) lookup(ctx context.Context, name string) (*client.Deployment
 	return nil, repoerrors.Errorf("look up deployment %q: %w", name, err)
 }
 
-// publishComponent creates and publishes the component version for this deploy.
-func (r *deployRun) publishComponent(ctx context.Context, input *DeployInput) (*client.Component, error) {
-	r.rep.Step(StepComponent, StateRunning, "publishing the workload definition")
-
-	created, err := r.api.CreateComponent(ctx, r.orgID, componentInput(input))
+// checkOwnership refuses to touch a deployment that runs a blueprint other
+// than the one this deploy manages under the same slug.
+func (r *deployRun) checkOwnership(ctx context.Context, existing *client.Deployment) error {
+	owned, err := r.findBlueprint(ctx, r.plan.slug)
 	if err != nil {
-		r.rep.Step(StepComponent, StateFailed, "could not create the component")
-
-		return nil, repoerrors.Errorf("create component: %w", err)
+		return err
 	}
 
-	published, err := r.api.PublishComponent(ctx, created.Metadata.ID)
-	if err != nil {
-		r.rep.Step(StepComponent, StateFailed, "could not publish the component")
+	if owned == "" || existing.Spec.BlueprintID != owned {
+		r.rep.Step(StepDeploy, StateFailed, "the deployment belongs to another blueprint")
 
-		return nil, repoerrors.Errorf("publish component: %w", err)
+		return &ForeignDeploymentError{Name: existing.Metadata.Name, BlueprintID: existing.Spec.BlueprintID}
 	}
 
-	r.rep.Step(StepComponent, StateDone, published.Metadata.Slug)
-
-	return published, nil
-}
-
-// publishBlueprint creates and publishes the blueprint version for this deploy.
-func (r *deployRun) publishBlueprint(
-	ctx context.Context,
-	input *DeployInput,
-	component *client.Component,
-) (*client.Blueprint, error) {
-	r.rep.Step(StepBlueprint, StateRunning, "publishing the blueprint")
-
-	created, err := r.api.CreateBlueprint(ctx, r.orgID, blueprintInput(input, component))
-	if err != nil {
-		r.rep.Step(StepBlueprint, StateFailed, "could not create the blueprint")
-
-		return nil, repoerrors.Errorf("create blueprint: %w", err)
-	}
-
-	published, err := r.api.PublishBlueprint(ctx, created.Metadata.ID)
-	if err != nil {
-		r.rep.Step(StepBlueprint, StateFailed, "could not publish the blueprint")
-
-		return nil, repoerrors.Errorf("publish blueprint: %w", err)
-	}
-
-	r.rep.Step(StepBlueprint, StateDone, published.Metadata.Slug)
-
-	return published, nil
+	return nil
 }
 
 // create submits a brand-new deployment.
@@ -579,18 +725,19 @@ func (r *deployRun) create(
 	ctx context.Context,
 	input *DeployInput,
 	environment *client.Environment,
-	blueprint *client.Blueprint,
+	blueprint *ensured,
 ) (*client.Deployment, error) {
 	r.rep.Step(StepDeploy, StateRunning, "creating the deployment")
 
-	deployment, err := r.api.DeployBlueprint(ctx, r.orgID, client.DeploymentDeployBlueprintInput{
-		BlueprintID:      blueprint.Metadata.ID,
-		EnvironmentID:    environment.ID,
-		Replicas:         input.Replicas,
-		UserAssignedName: input.Name,
+	deployment, err := r.api.DeployBlueprint(ctx, r.orgID, client.DeployBlueprintInput{
+		BlueprintID:   blueprint.id,
+		Revision:      blueprint.revision,
+		Name:          input.Name,
+		EnvironmentID: environment.ID,
+		Replicas:      input.Replicas,
 	})
 	if err == nil {
-		r.rep.Step(StepDeploy, StateDone, "accepted")
+		r.rep.Step(StepDeploy, StateDone, "accepted at revision "+strconv.Itoa(blueprint.revision))
 
 		return deployment, nil
 	}
@@ -598,7 +745,7 @@ func (r *deployRun) create(
 	if !isStatus(err, http.StatusConflict) {
 		r.rep.Step(StepDeploy, StateFailed, "could not create the deployment")
 
-		return nil, repoerrors.Errorf("create deployment: %w", err)
+		return nil, r.deployFailure("create deployment", err)
 	}
 
 	r.rep.Note(NoteInfo, "a deployment named %q already exists; continuing with it", input.Name)
@@ -607,30 +754,69 @@ func (r *deployRun) create(
 	if lookupErr != nil || existing == nil {
 		r.rep.Step(StepDeploy, StateFailed, "could not create the deployment")
 
-		return nil, repoerrors.Errorf("create deployment: %w", err)
+		return nil, &ConflictError{Resource: DocumentDeployment, Slug: input.Name, Err: err}
 	}
 
-	return r.redeploy(ctx, existing)
+	if existing.Spec.BlueprintID != blueprint.id {
+		r.rep.Step(StepDeploy, StateFailed, "the deployment belongs to another blueprint")
+
+		return nil, &ForeignDeploymentError{Name: input.Name, BlueprintID: existing.Spec.BlueprintID}
+	}
+
+	return r.update(ctx, input, existing, blueprint)
 }
 
-// redeploy rolls an existing deployment onto the newly published blueprint
-// version.
+// update rolls an existing deployment onto the converged blueprint revision.
 //
-// Deleting and recreating would be simpler and is exactly what must not happen:
-// it discards the deployment id, its timeline, and its URL, which is the one
-// thing everything downstream of a deploy depends on staying put.
-func (r *deployRun) redeploy(ctx context.Context, existing *client.Deployment) (*client.Deployment, error) {
+// A new image reaches a running deployment through :update with the new
+// revision, never through :redeploy, which replays the recorded resolution and
+// cannot change what runs. Deleting and recreating would discard the
+// deployment id, its timeline, and its URL.
+func (r *deployRun) update(
+	ctx context.Context,
+	input *DeployInput,
+	existing *client.Deployment,
+	blueprint *ensured,
+) (*client.Deployment, error) {
+	r.warnReplicas(ctx, existing, input.Replicas)
+
+	revision := strconv.Itoa(blueprint.revision)
+
+	if existing.Spec.BlueprintVersion == blueprint.revision && !r.opts.Force {
+		r.unchanged = true
+		r.rep.Step(StepDeploy, StateDone, "already at revision "+revision)
+
+		return existing, nil
+	}
+
 	r.rep.Step(StepDeploy, StateRunning, "updating the deployment")
 
-	updated, err := r.api.DeploymentAction(
-		ctx, existing.Metadata.ID, client.ActionRedeploy, "musher deploy")
+	var (
+		updated *client.Deployment
+		err     error
+	)
+
+	switch {
+	case existing.Spec.BlueprintVersion != blueprint.revision:
+		updated, err = r.api.UpdateDeployment(ctx, existing.Metadata.ID,
+			client.DeploymentUpdateInput{Revision: blueprint.revision})
+	case deployspec.IsDigestPinned(input.Image):
+		// A digest cannot move, so there is nothing to re-resolve: restart
+		// what the deployment already records.
+		updated, err = r.api.DeploymentAction(ctx, existing.Metadata.ID, client.ActionRedeploy, "musher deploy --force")
+	default:
+		// A tag can move. Re-resolve it in place without a new revision.
+		updated, err = r.api.UpdateDeployment(ctx, existing.Metadata.ID,
+			client.DeploymentUpdateInput{Refresh: []string{client.RefreshImages}})
+	}
+
 	if err != nil {
 		r.rep.Step(StepDeploy, StateFailed, "could not update the deployment")
 
-		return nil, repoerrors.Errorf("redeploy deployment: %w", err)
+		return nil, r.deployFailure("update deployment", err)
 	}
 
-	r.rep.Step(StepDeploy, StateDone, "accepted")
+	r.rep.Step(StepDeploy, StateDone, "accepted at revision "+revision)
 
 	if updated == nil || updated.Metadata.ID == "" {
 		return existing, nil
@@ -639,71 +825,39 @@ func (r *deployRun) redeploy(ctx context.Context, existing *client.Deployment) (
 	return updated, nil
 }
 
-// componentInput compiles the local intent into a component create body.
-func componentInput(input *DeployInput) *client.ComponentInput {
-	workload := client.ComponentWorkload{
-		Kind: input.Kind,
-		Source: client.ComponentSource{
-			Type: client.SourceTypeImage,
-			Ref:  input.Image,
-		},
-		EnvVars: envVars(input.Env),
+// warnReplicas says so when musher.yaml asks for a replica count the existing
+// deployment does not run. The platform has no route that changes it yet, so
+// silently ignoring the field would be a lie.
+func (r *deployRun) warnReplicas(ctx context.Context, existing *client.Deployment, wanted int) {
+	if wanted <= 0 {
+		return
 	}
 
-	if input.Port > 0 {
-		workload.Endpoints = map[string]client.ComponentEndpoint{
-			"http": {
-				ContainerPort: input.Port,
-				Protocol:      "HTTP",
-				Visibility:    client.VisibilityPublic,
-			},
-		}
+	groups, err := r.api.ListReplicas(ctx, existing.Metadata.ID)
+	if err != nil || len(groups) == 0 {
+		return
 	}
 
-	return &client.ComponentInput{
-		Metadata: client.ComponentMetadata{Slug: input.Name},
-		Spec:     client.ComponentSpec{Workload: workload},
+	desired := 0
+	for _, group := range groups {
+		desired += group.Desired
 	}
-}
 
-// blueprintInput compiles the local intent into a blueprint create body.
-func blueprintInput(input *DeployInput, component *client.Component) *client.BlueprintInput {
-	return &client.BlueprintInput{
-		Metadata: client.BlueprintMetadata{Slug: input.Name},
-		Spec: client.BlueprintSpec{
-			Components: map[string]client.BlueprintComponent{
-				input.Name: {
-					ComponentID: component.Metadata.ID,
-					Size:        input.Size,
-				},
-			},
-		},
+	if desired > 0 && desired != wanted {
+		r.rep.Note(NoteWarn,
+			"deployment %q runs %d replicas, not %d; the platform cannot change the replica count of an "+
+				"existing deployment yet, so the new value applies only to a new deployment",
+			existing.Metadata.Name, desired, wanted)
 	}
 }
 
-// envVars renders the env map in a stable order, so two identical deploys
-// produce byte-identical requests.
-func envVars(env map[string]string) []client.ComponentEnvVar {
-	if len(env) == 0 {
-		return nil
+// deployFailure classifies a failed deployment write.
+func (r *deployRun) deployFailure(verb string, err error) error {
+	if specErr := specErrorFrom(err, DocumentDeployment, r.plan.blueprintSource); specErr != nil {
+		return specErr
 	}
 
-	keys := make([]string, 0, len(env))
-	for key := range env {
-		keys = append(keys, key)
-	}
-
-	sort.Strings(keys)
-
-	vars := make([]client.ComponentEnvVar, 0, len(keys))
-	for _, key := range keys {
-		vars = append(vars, client.ComponentEnvVar{
-			Key:   key,
-			Value: client.EnvVarValue{Type: client.EnvValueLiteral, Value: env[key]},
-		})
-	}
-
-	return vars
+	return repoerrors.Errorf("%s: %w", verb, err)
 }
 
 // isStatus reports whether err is an HTTP status error with the given code.
@@ -1096,7 +1250,7 @@ type activityFrame struct {
 }
 
 // UsageError marks a failure the user can fix in the command they just typed —
-// an unpinned image, a missing name — as opposed to a rejection from the
+// a malformed image reference, a missing name — as opposed to a rejection from the
 // platform. The CLI layer maps it to the usage exit code so scripts can tell
 // "you typed it wrong" apart from "the deployment failed".
 type UsageError struct{ Err error }

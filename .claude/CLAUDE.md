@@ -26,22 +26,29 @@ Key API facts that constrain the design:
 - **Auth**: `Authorization: Bearer mush_{8}.{43}`. The identity endpoint is
   `GET /v1/organizations` — `/v1/publisher/me` and `/v1/runner/me` are removed.
   `/agent/v1/*` requires the AGENT audience and belongs to the host-agent, not us.
-- **Most public routes are still JWT-only.** Only the organization router accepts
-  API keys today; deployment/component/blueprint writes need `current_user.id` as
-  actor. Tracked in platform issues #1778 (widened from #1521) and #1780.
+- **API keys are accepted on write routes.** Deployment, component and
+  blueprint writes take `Authorization: Bearer mush_…` as well as a session.
 - **Errors are RFC 9457** `application/problem+json`. The stable machine token is
   the trailing slug of `type`.
-- **Images must be pinned.** The server enforces a *floating-tag denylist*
-  (`latest, main, main-stable, master, stable, edge, nightly, dev, rolling`) plus
-  bare refs — not a semver allowlist. Mirror the denylist exactly; a client
-  stricter than the server rejects refs the platform accepts.
+- **Every image tag is accepted.** Component v2 COMP-SRC-002 removed the
+  server's floating-tag denylist. The CLI checks reference *grammar* only and
+  merely **warns** about floating tags (`latest, main, …`) and bare refs; never
+  refuse a ref the platform accepts. Deploying a digest is still recommended.
+- **Deploy speaks the v2 documents.** `musher deploy` compiles musher.yaml
+  into a component v2 and a blueprint v2 document (`internal/workflow/compile.go`),
+  validates the component remotely (`components:validate`, scope PUBLICATION)
+  before any write, then converges by natural key: slug for the component and
+  blueprint (`/versions/{rev}:publish`), deployment name for
+  `:deployBlueprint` / `:update`. An unchanged file writes nothing.
 - **SSE is a two-step ticket flow**: mint (authenticated), then stream with
   `?ticket=` and **no** Authorization header. Tickets are single-use with a
   10-second TTL, so every reconnect must re-mint. Heartbeats are bare `: ping`
   *comment* frames every 15s. These routes are `include_in_schema=False`, so they
   cannot be code-generated.
-- **`Idempotency-Key` is not accepted** on any deployment/component/blueprint
-  write. Idempotency comes from natural keys (read-before-write, 409-tolerance).
+- **`Idempotency-Key` is accepted** on writes, but deploy does not rely on it:
+  a key minted per invocation cannot make a re-run idempotent. Idempotency
+  comes from natural keys (read-before-write, 409-tolerance, adopting the
+  `componentId`/`blueprintId` a `resource-conflict` names).
 
 ## Directory Overview
 

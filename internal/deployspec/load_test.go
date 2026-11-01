@@ -134,16 +134,16 @@ spec:
 			wantText: "metadata.name",
 		},
 		{
-			name: "floating image tag",
+			name: "malformed image reference",
 			src: `apiVersion: musher.dev/v1
 kind: App
 metadata:
   name: api
 spec:
   workload:
-    image: ghcr.io/acme/api:latest
+    image: ghcr.io/Acme/API:v1
 `,
-			wantText: "floating tag",
+			wantText: "spec.workload.image",
 		},
 		{
 			name: "bad env key",
@@ -172,7 +172,7 @@ spec:
       http:
         containerPort: 99999
 `,
-			wantText: "containerPort",
+			wantText: "targetPort must be between",
 		},
 		{
 			name: "bad protocol",
@@ -232,7 +232,7 @@ metadata:
   name: BAD_NAME
 spec:
   workload:
-    image: ghcr.io/acme/api:latest
+    image: ghcr.io/ACME/api
 `
 
 	_, err := Parse([]byte(src))

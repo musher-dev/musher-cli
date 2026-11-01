@@ -312,7 +312,7 @@ tasks:
       - |
         for flag in --image --port --name --env --env-file --replicas --size \
                     --environment --kind --file --detach --watch --timeout \
-                    --degraded-grace --wait-for --yes; do
+                    --degraded-grace --wait-for --yes --force; do
           if ! ./{{.CONTRACTS_BIN}} deploy --help | grep -q -- "$flag"; then
             echo "FAIL: musher deploy is missing $flag"
             exit 1

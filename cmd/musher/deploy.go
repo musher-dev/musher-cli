@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -52,6 +53,7 @@ type deployFlags struct {
 	detach        bool
 	watch         bool
 	yes           bool
+	force         bool
 	timeout       time.Duration
 	degradedGrace time.Duration
 }
@@ -69,7 +71,12 @@ over the file, so a pinned image can be overridden for one run without editing
 anything.
 
 The deployment name is the natural key: deploying the same name again updates
-the existing deployment in place, keeping its id, its timeline, and its URL.`,
+the existing deployment in place, keeping its id, its timeline, and its URL.
+An unchanged file is a no-op; --force rolls the deployment anyway.
+
+The file is compiled into a v2 component and blueprint, validated by the
+platform before anything is written, and published as new revisions only when
+something changed.`,
 		Example: `  # Deploy an image directly
   musher deploy api --image ghcr.io/acme/api:v1.4.2 --port 8080
 
@@ -95,13 +102,13 @@ the existing deployment in place, keeping its id, its timeline, and its URL.`,
 func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 	set := cmd.Flags()
 
-	set.StringVar(&flags.image, "image", "", "Container image to run (must be a pinned tag or digest)")
+	set.StringVar(&flags.image, "image", "", "Container image to run (a digest or version tag is recommended)")
 	set.StringVar(&flags.name, "name", "", "Deployment name (defaults to the positional argument or the file)")
 	set.StringVarP(&flags.file, "file", "f", "", "Deployment file to read (default: ./musher.yaml)")
 	set.StringVar(&flags.environment, "environment", "", "Environment to deploy into (default: the default STANDARD one)")
-	set.StringVar(&flags.kind, "kind", "", "Workload kind: SERVICE, WORKER, JOB, CRON")
+	set.StringVar(&flags.kind, "kind", "", "Workload kind: SERVICE, WORKER, JOB")
 	set.StringVar(&flags.size, "size", "", "Compute profile for the workload")
-	set.IntVar(&flags.port, "port", 0, "Container port to expose publicly")
+	set.IntVar(&flags.port, "port", 0, "Container port to serve (sets the endpoint's targetPort)")
 	set.IntVar(&flags.replicas, "replicas", 0, "Number of replicas to run")
 	set.StringArrayVarP(&flags.envPairs, "env", "e", nil, "Environment variable as KEY=VALUE (repeatable)")
 	set.StringVar(&flags.envFile, "env-file", "", "File of KEY=VALUE environment variables")
@@ -112,6 +119,7 @@ func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 		"How long DEGRADED is tolerated before it is a failure (default: 1m)")
 	set.StringVar(&flags.waitFor, "wait-for", "ready", "Success condition: ready or url")
 	set.BoolVarP(&flags.yes, "yes", "y", false, "Do not ask for confirmation")
+	set.BoolVar(&flags.force, "force", false, "Roll the deployment even when nothing changed")
 }
 
 // runDeploy is the whole command: resolve intent, confirm, run, report.
@@ -119,7 +127,7 @@ func runDeploy(cmd *cobra.Command, args []string, flags *deployFlags) error {
 	out := output.FromContext(cmd.Context())
 	cfg := config.FromContext(cmd.Context())
 
-	input, err := resolveDeployInput(args, flags, cfg)
+	input, err := resolveDeployInput(out, args, flags, cfg)
 	if err != nil {
 		return err
 	}
@@ -178,6 +186,8 @@ func executeDeploy(
 	}
 
 	if err != nil {
+		renderSpecDiagnostics(out, err)
+
 		return deployFailure(err, input.Name)
 	}
 
@@ -187,7 +197,12 @@ func executeDeploy(
 // resolveDeployInput merges the deployment file, the flags, and configuration
 // into one request. Flags always win: overriding a pinned image for a single
 // run must not require editing a file that is under review.
-func resolveDeployInput(args []string, flags *deployFlags, cfg *config.Config) (*workflow.DeployInput, error) {
+func resolveDeployInput(
+	out *output.Writer,
+	args []string,
+	flags *deployFlags,
+	cfg *config.Config,
+) (*workflow.DeployInput, error) {
 	input := &workflow.DeployInput{
 		Kind:         deployspec.KindService,
 		Replicas:     1,
@@ -203,9 +218,15 @@ func resolveDeployInput(args []string, flags *deployFlags, cfg *config.Config) (
 
 	if app != nil {
 		applyAppSpec(input, app)
+
+		for _, warning := range app.Warnings() {
+			out.Warning("%s", warning)
+		}
 	}
 
-	applyDeployFlags(input, flags)
+	if flagErr := applyDeployFlags(input, flags); flagErr != nil {
+		return nil, flagErr
+	}
 
 	if len(args) == 1 {
 		input.Name = args[0]
@@ -270,11 +291,32 @@ func loadDeploySpec(flags *deployFlags) (*deployspec.App, error) {
 	return app, nil
 }
 
-// applyAppSpec copies the file's intent onto the request.
+// applyAppSpec copies the file's intent onto the request: every endpoint, the
+// command, the schedule and the build recipe, not just the first port.
 func applyAppSpec(input *workflow.DeployInput, app *deployspec.App) {
+	workload := &app.Spec.Workload
+
 	input.Name = app.Metadata.Name
-	input.Image = app.Spec.Workload.Image
-	input.Kind = app.Spec.Workload.Kind
+	input.Image = workload.Image
+	input.Kind = workload.Kind
+	input.Command = slices.Clone(workload.Command)
+	input.Build = workload.Build
+
+	if workload.Schedule != nil {
+		input.Schedule = workload.Schedule.Cron
+	}
+
+	if len(workload.Endpoints) > 0 {
+		input.Endpoints = make(map[string]workflow.DeployEndpoint, len(workload.Endpoints))
+
+		for name, endpoint := range workload.Endpoints {
+			input.Endpoints[name] = workflow.DeployEndpoint{
+				TargetPort: endpoint.Port(),
+				Protocol:   endpoint.Protocol,
+				Visibility: endpoint.Visibility,
+			}
+		}
+	}
 
 	if app.Spec.Environment != "" {
 		input.Environment = app.Spec.Environment
@@ -288,21 +330,13 @@ func applyAppSpec(input *workflow.DeployInput, app *deployspec.App) {
 		input.Replicas = app.Spec.Replicas
 	}
 
-	for _, endpoint := range app.Spec.Workload.Endpoints {
-		if endpoint.ContainerPort > 0 {
-			input.Port = endpoint.ContainerPort
-
-			break
-		}
-	}
-
-	if len(app.Spec.Workload.Env) > 0 {
-		input.Env = maps.Clone(app.Spec.Workload.Env)
+	if len(workload.Env) > 0 {
+		input.Env = maps.Clone(workload.Env)
 	}
 }
 
 // applyDeployFlags overlays the command line onto the request.
-func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) {
+func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) error {
 	overlay := []struct {
 		value  string
 		target *string
@@ -320,13 +354,44 @@ func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) {
 		}
 	}
 
-	if flags.port > 0 {
-		input.Port = flags.port
-	}
-
 	if flags.replicas > 0 {
 		input.Replicas = flags.replicas
 	}
+
+	return applyPortFlag(input, flags.port)
+}
+
+// defaultEndpointName names the endpoint --port creates when there is none.
+const defaultEndpointName = "http"
+
+// applyPortFlag points the workload's endpoint at --port. With no endpoint it
+// creates one; with exactly one it overrides that endpoint's port; with
+// several it refuses, because guessing which one was meant is how a deploy
+// silently breaks a second listener.
+func applyPortFlag(input *workflow.DeployInput, port int) error {
+	if port <= 0 {
+		return nil
+	}
+
+	switch len(input.Endpoints) {
+	case 0:
+		input.Endpoints = map[string]workflow.DeployEndpoint{
+			defaultEndpointName: {TargetPort: port},
+		}
+	case 1:
+		for name, endpoint := range input.Endpoints {
+			endpoint.TargetPort = port
+			input.Endpoints[name] = endpoint
+		}
+	default:
+		return &clierrors.CLIError{
+			Message: "--port is ambiguous: the workload serves " + strconv.Itoa(len(input.Endpoints)) + " endpoints",
+			Hint:    "Set each endpoint's targetPort in musher.yaml instead",
+			Code:    clierrors.ExitUsage,
+		}
+	}
+
+	return nil
 }
 
 // deployOptions turns the watch flags and config into workflow options.
@@ -351,6 +416,7 @@ func deployOptions(cmd *cobra.Command, flags *deployFlags, cfg *config.Config) (
 	}
 
 	return workflow.DeployOptions{
+		Force:         flags.force,
 		Detach:        flags.detach,
 		Watch:         watch && !flags.detach,
 		Timeout:       timeout,
@@ -421,7 +487,7 @@ func confirmDeploy(out *output.Writer, input *workflow.DeployInput, yes bool) er
 	}
 
 	out.Muted("Deploy %s", input.Name)
-	out.Muted("  image:       %s", input.Image)
+	out.Muted("  image:       %s", imageLabel(input))
 	out.Muted("  environment: %s", environmentLabel(input.Environment))
 	out.Muted("  replicas:    %d", input.Replicas)
 
@@ -438,6 +504,15 @@ func confirmDeploy(out *output.Writer, input *workflow.DeployInput, yes bool) er
 	}
 
 	return nil
+}
+
+// imageLabel renders the image, or says it will come from the build recipe.
+func imageLabel(input *workflow.DeployInput) string {
+	if strings.TrimSpace(input.Image) == "" && input.Build != nil {
+		return "(built from " + input.Build.Repository + ")"
+	}
+
+	return input.Image
 }
 
 // environmentLabel renders an unset environment as the implied default.

@@ -25,7 +25,10 @@ const stampLayout = "15:04:05"
 // the contract; the words are not.
 var stepLabels = map[string]string{
 	workflow.StepValidate:  "Checking the request",
+	workflow.StepBuild:     "Building the image",
+	workflow.StepPush:      "Pushing the image",
 	workflow.StepResolve:   "Resolving the target",
+	workflow.StepVerify:    "Validating with the platform",
 	workflow.StepComponent: "Publishing the workload",
 	workflow.StepBlueprint: "Publishing the blueprint",
 	workflow.StepDeploy:    "Submitting the deployment",
@@ -157,6 +160,8 @@ type deployPayload struct {
 	Environment string              `json:"environment"`
 	Image       string              `json:"image"`
 	Replicas    int                 `json:"replicas"`
+	Revision    int                 `json:"revision"`
+	Unchanged   bool                `json:"unchanged"`
 	DurationMS  int64               `json:"durationMs"`
 	Error       *deployErrorPayload `json:"error"`
 }
@@ -174,6 +179,8 @@ func newDeployPayload(result *workflow.DeployResult) deployPayload {
 		Environment: result.Environment,
 		Image:       result.Image,
 		Replicas:    result.Replicas,
+		Revision:    result.Revision,
+		Unchanged:   result.Unchanged,
 		DurationMS:  result.Duration.Milliseconds(),
 	}
 
@@ -234,6 +241,10 @@ func deployFailure(err error, name string) error {
 		return deploymentFailedError(deployErr, name)
 	}
 
+	if cliErr := convergeFailure(err, name); cliErr != nil {
+		return cliErr
+	}
+
 	// A malformed invocation is the user's typo, not the platform's verdict, so
 	// it exits like any other usage error rather than like a failed deployment.
 	var usageErr *workflow.UsageError
@@ -262,6 +273,74 @@ func deployFailure(err error, name string) error {
 		}
 	default:
 		return apiFailure("Deploy failed", err)
+	}
+}
+
+// convergeFailure maps the errors the converge loop raises — an invalid
+// document, a natural key held by something else — onto CLI errors with a
+// hint that names the offending slug. It returns nil for anything else.
+func convergeFailure(err error, name string) error {
+	var specErr *workflow.SpecError
+	if errors.As(err, &specErr) {
+		return &clierrors.CLIError{
+			Message:   "musher.yaml is not valid for the platform: " + specErr.Error(),
+			Hint:      "Fix the fields listed above in musher.yaml and run the command again",
+			Code:      clierrors.ExitInvalidSpec,
+			ErrorCode: "ERR-DEPLOY-SPEC-INVALID",
+		}
+	}
+
+	var foreignErr *workflow.ForeignDeploymentError
+	if errors.As(err, &foreignErr) {
+		return &clierrors.CLIError{
+			Message: "Refusing to update " + strconv.Quote(foreignErr.Name) + ": " + foreignErr.Error(),
+			Hint: "Deploy under another name (--name or metadata.name), or delete the existing " +
+				"deployment with the Console first",
+			Code:      clierrors.ExitConflict,
+			ErrorCode: "ERR-DEPLOY-FOREIGN-BLUEPRINT",
+		}
+	}
+
+	var conflictErr *workflow.ConflictError
+	if errors.As(err, &conflictErr) {
+		return &clierrors.CLIError{
+			Message:   "The " + conflictErr.Resource + " " + strconv.Quote(conflictErr.Slug) + " could not be updated",
+			Hint:      conflictHint(conflictErr, name),
+			Cause:     conflictErr.Err,
+			Code:      clierrors.ExitConflict,
+			ErrorCode: "ERR-DEPLOY-CONFLICT",
+		}
+	}
+
+	return nil
+}
+
+// conflictHint explains a natural-key conflict in terms of the slug.
+func conflictHint(conflictErr *workflow.ConflictError, name string) string {
+	switch {
+	case conflictErr.Resource == workflow.DocumentDeployment:
+		return "Another deploy of " + strconv.Quote(conflictErr.Slug) +
+			" is in progress; wait for it, then run 'musher status " + name + "'"
+	case client.ProblemOf(conflictErr.Err).Slug() == client.SlugRevisionConflict:
+		return "Someone else edited the " + conflictErr.Resource + " draft " + strconv.Quote(conflictErr.Slug) +
+			" at the same time; run the command again"
+	default:
+		return "The " + conflictErr.Resource + " slug " + strconv.Quote(conflictErr.Slug) +
+			" is held by something this deploy cannot adopt (managed elsewhere, or in a state that " +
+			"refuses changes). Deploy under another name, or resolve it in the Console"
+	}
+}
+
+// renderSpecDiagnostics prints every located platform finding on stderr, one
+// "musher.yaml path: message [CODE]" line each, before the error summary.
+func renderSpecDiagnostics(out *output.Writer, err error) {
+	var specErr *workflow.SpecError
+	if !errors.As(err, &specErr) {
+		return
+	}
+
+	for _, line := range specErr.Lines() {
+		out.Failure("  %s", line)
 	}
 }
 
