@@ -110,18 +110,14 @@ func (a *App) handleAppMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		a.width = msg.Width
 		a.height = msg.Height
 
-		var cmds []tea.Cmd
+		cmd := a.updateAll(msg)
 
-		for i, s := range a.screens {
-			updated, cmd := s.Update(msg)
-			a.screens[i] = updated
+		return a, cmd, true
 
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		}
+	case broadcastMsg:
+		cmd := a.updateAll(msg)
 
-		return a, tea.Batch(cmds...), true
+		return a, cmd, true
 
 	case tea.BackgroundColorMsg:
 		a.isDark = msg.IsDark()
@@ -163,6 +159,23 @@ func (a *App) handleAppMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	}
 
 	return a, nil, false
+}
+
+// updateAll delivers msg to every screen on the stack, not just the active
+// one, and batches the resulting commands.
+func (a *App) updateAll(msg tea.Msg) tea.Cmd {
+	var cmds []tea.Cmd
+
+	for i, s := range a.screens {
+		updated, cmd := s.Update(msg)
+		a.screens[i] = updated
+
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // handlePop handles popScreenMsg, including the pendingCmd flush. It is

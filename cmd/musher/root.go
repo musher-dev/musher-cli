@@ -39,16 +39,10 @@ func newRootCmd() *cobra.Command {
 
 func newRootCmdWithOutput(out *output.Writer) *cobra.Command {
 	var (
-		jsonOutput bool
-		quiet      bool
-		noColor    bool
-		noInput    bool
-		logLevel   string
-		logFormat  string
-		logFile    string
-		logStderr  string
-		apiURL     string
-		apiKey     string
+		flags     rootFlags
+		apiURL    string
+		apiKey    string
+		launchTUI bool
 	)
 
 	rootCmd := &cobra.Command{
@@ -56,12 +50,17 @@ func newRootCmdWithOutput(out *output.Writer) *cobra.Command {
 		Short: "Deploy containers to the Musher platform",
 		Long: `Deploy and manage containerized applications on the Musher platform.
 
-Run 'musher auth login' to get started.`,
+Run 'musher auth login' to get started. Run 'musher' on its own in a
+terminal to open the interactive UI.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
+			if !launchTUI {
+				return cmd.Help()
+			}
+
+			return runRootTUI(cmd, out)
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			warnIfRoot(cmd, out)
@@ -71,11 +70,12 @@ Run 'musher auth login' to get started.`,
 				return err
 			}
 
-			if _, err := configureRootRuntime(
-				cmd, out, jsonOutput, quiet, noInput, noColor, logLevel, logFormat, logFile, logStderr,
-			); err != nil {
+			state, err := configureRootRuntime(cmd, out, &flags)
+			if err != nil {
 				return err
 			}
+
+			launchTUI = state.launchTUI
 
 			// Load config once and store in context for all subcommands.
 			cfg := config.LoadWithOverrides(overrides)
@@ -96,14 +96,15 @@ Run 'musher auth login' to get started.`,
 
 	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\nDocs: https://docs.musher.dev/\n")
 
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Minimal output (for CI)")
-	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
-	rootCmd.PersistentFlags().BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "Log level: error, warn, info, debug")
-	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "", "Log format: json, text")
-	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "Optional structured log file path")
-	rootCmd.PersistentFlags().StringVar(&logStderr, "log-stderr", "", "Structured logging to stderr: auto, on, off")
+	rootCmd.PersistentFlags().BoolVar(&flags.jsonOutput, "json", false, "Output in JSON format")
+	rootCmd.PersistentFlags().BoolVar(&flags.quiet, "quiet", false, "Minimal output (for CI)")
+	rootCmd.PersistentFlags().BoolVar(&flags.noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolVar(&flags.noInput, "no-input", false, "Disable interactive prompts")
+	rootCmd.PersistentFlags().BoolVar(&flags.noTUI, "no-tui", false, "Print help instead of opening the interactive UI (or set MUSHER_NO_TUI)")
+	rootCmd.PersistentFlags().StringVar(&flags.logLevel, "log-level", "", "Log level: error, warn, info, debug")
+	rootCmd.PersistentFlags().StringVar(&flags.logFormat, "log-format", "", "Log format: json, text")
+	rootCmd.PersistentFlags().StringVar(&flags.logFile, "log-file", "", "Optional structured log file path")
+	rootCmd.PersistentFlags().StringVar(&flags.logStderr, "log-stderr", "", "Structured logging to stderr: auto, on, off")
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "", "Override Musher API URL for this command")
 	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "", "API key override (prefer MUSHER_API_KEY env var)")
 	rootCmd.PersistentFlags().String("profile", "", "Configuration profile (or set MUSHER_PROFILE)")

@@ -133,6 +133,7 @@ All paths follow XDG conventions. Override with `MUSHER_CONFIG_HOME`, `MUSHER_DA
 | `--quiet` | Minimal output (for CI) |
 | `--no-color` | Disable colored output |
 | `--no-input` | Disable interactive prompts |
+| `--no-tui` | Print help instead of opening the interactive UI on a bare `musher` (or set `MUSHER_NO_TUI`) |
 
 ## Contributing
 

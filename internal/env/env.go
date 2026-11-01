@@ -33,6 +33,8 @@ const (
 	Quiet = "MUSHER_QUIET"
 	// NoInput disables interactive prompts.
 	NoInput = "MUSHER_NO_INPUT"
+	// NoTUI keeps a bare `musher` from opening the interactive terminal UI.
+	NoTUI = "MUSHER_NO_TUI"
 
 	// LogLevel sets the structured log level.
 	LogLevel = "MUSHER_LOG_LEVEL"

@@ -216,13 +216,9 @@ func TestRootCmdPersistentFlags(t *testing.T) {
 	root := newRootCmd()
 
 	flags := []string{
-		"json", "quiet", "no-color", "no-input",
+		"json", "quiet", "no-color", "no-input", "no-tui",
 		"log-level", "log-format", "log-file", "log-stderr",
 		"api-url", "api-key", "profile",
-	}
-
-	if root.PersistentFlags().Lookup("no-tui") != nil {
-		t.Error("--no-tui should have been removed along with the TUI")
 	}
 
 	for _, name := range flags {

@@ -80,6 +80,23 @@ type Result struct {
 	Action string
 }
 
+// Result actions the command layer acts on after the program exits and the
+// terminal has left the alternate screen.
+const (
+	// ActionLogin asks the caller to run the interactive sign-in and then
+	// reopen the home screen. Sign-in prompts on the plain terminal, which a
+	// screen inside the alternate screen cannot do.
+	ActionLogin = "login"
+)
+
+// broadcastMsg marks a message the App delivers to every screen on the stack
+// rather than only the active one. Use it for results of background work that
+// a covered screen still needs — e.g. the home screen's identity lookup
+// finishing while the user is already on another screen.
+type broadcastMsg interface {
+	broadcast()
+}
+
 // quitWithResultMsg instructs the App to exit with a result.
 type quitWithResultMsg struct {
 	result *Result
