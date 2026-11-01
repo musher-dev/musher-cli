@@ -82,6 +82,10 @@
   ],
 
   "containerEnv": {
+    // Claude keeps .claude.json beside its config dir, so without this it
+    // lands in ~/ -- outside the claude volume -- and is lost on every rebuild.
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+
     "PYTHONUNBUFFERED": "1",
     "PYTHONDONTWRITEBYTECODE": "1",
     "UV_LINK_MODE": "copy",
