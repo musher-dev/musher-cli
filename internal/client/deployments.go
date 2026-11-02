@@ -40,8 +40,37 @@ const (
 	ActionRollback = "rollback"
 )
 
-// LogStreamRuntime selects the runtime log stream on the log-entries routes.
-const LogStreamRuntime = "RUNTIME"
+// Log streams accepted by the log-entries and log-tail routes.
+const (
+	// LogStreamRuntime is the workload's own output.
+	LogStreamRuntime = "RUNTIME"
+	// LogStreamSystem is the platform's account of the workload.
+	LogStreamSystem = "SYSTEM"
+	// LogStreamBuild is image build output.
+	LogStreamBuild = "BUILD"
+)
+
+// logSeverityRanks orders the platform's severity vocabulary.
+var logSeverityRanks = map[string]int{
+	"TRACE": 0,
+	"DEBUG": 1,
+	"INFO":  2,
+	"WARN":  3,
+	"ERROR": 4,
+	"FATAL": 5,
+}
+
+// LogSeverityRank orders a log severity for minimum-severity filters. Unknown
+// values rank above everything, so a new severity is never silently filtered
+// away.
+func LogSeverityRank(value string) int {
+	rank, ok := logSeverityRanks[strings.ToUpper(strings.TrimSpace(value))]
+	if !ok {
+		return len(logSeverityRanks)
+	}
+
+	return rank
+}
 
 // APITime is a timestamp that decodes leniently.
 //

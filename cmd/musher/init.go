@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,11 +27,9 @@ import (
 const (
 	// defaultServicePort is the port a SERVICE is assumed to listen on when
 	// nobody says otherwise.
-	defaultServicePort = 8080
+	defaultServicePort = workflow.DefaultServicePort
 	// pinTimeout bounds resolving the buildpacks builder to a digest.
 	pinTimeout = 20 * time.Second
-	// maxNameLength is a DNS label's limit.
-	maxNameLength = 63
 	// specFileMode is the permission of a written musher.yaml.
 	specFileMode = 0o644
 )
@@ -280,14 +279,13 @@ func buildpacksRecipe(ctx context.Context, out *output.Writer, builder string, n
 	return build.Recipe{Context: build.DefaultContext, Buildpacks: &build.Buildpacks{BuilderImage: builder}}
 }
 
-// initApp assembles the document around the recipe.
+// initApp resolves the answers init asks for and assembles the document
+// around the recipe with the shared scaffold.
 func initApp(dir string, recipe build.Recipe, flags *initFlags, deps *initDeps) (*deployspec.App, error) {
 	repository, err := initRepository(flags.repository, deps)
 	if err != nil {
 		return nil, err
 	}
-
-	recipe.Repository = repository
 
 	name := strings.TrimSpace(flags.name)
 	if name == "" {
@@ -304,23 +302,20 @@ func initApp(dir string, recipe build.Recipe, flags *initFlags, deps *initDeps) 
 		kind = deployspec.KindService
 	}
 
-	app := &deployspec.App{
-		APIVersion: deployspec.APIVersion,
-		Kind:       deployspec.KindApp,
-		Metadata:   deployspec.AppMetadata{Name: name},
-		Spec: deployspec.AppSpec{Workload: deployspec.AppWorkload{
-			Kind:  kind,
-			Build: workflow.AppBuildFromRecipe(recipe),
-		}},
-	}
-
 	port, err := initPort(kind, flags.port, deps.prompter)
 	if err != nil {
 		return nil, err
 	}
 
-	if port > 0 {
-		app.Spec.Workload.Endpoints = map[string]deployspec.AppEndpoint{defaultEndpointName: {TargetPort: port}}
+	app, err := workflow.ScaffoldApp(workflow.ScaffoldInput{
+		Name:       name,
+		Repository: repository,
+		Kind:       kind,
+		Port:       port,
+		Recipe:     recipe,
+	})
+	if err != nil {
+		return nil, clierrors.Wrap(clierrors.ExitUsage, "Cannot assemble musher.yaml", err)
 	}
 
 	return app, nil
@@ -384,60 +379,22 @@ func initPort(kind string, flag int, prompter initPrompter) (int, error) {
 // encodeInitApp renders the document and proves it parses back: a file init
 // writes must be one deploy accepts.
 func encodeInitApp(app *deployspec.App) ([]byte, error) {
-	data, err := deployspec.Encode(app)
-	if err != nil {
-		return nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot render musher.yaml", err)
+	data, err := workflow.EncodeScaffold(app)
+	if err == nil {
+		return data, nil
 	}
 
-	if _, err := deployspec.Parse(data); err != nil {
-		return nil, clierrors.Wrap(clierrors.ExitUsage, "The values given do not make a valid musher.yaml", err).
+	var usageErr *workflow.UsageError
+	if errors.As(err, &usageErr) {
+		return nil, clierrors.Wrap(clierrors.ExitUsage, "The values given do not make a valid musher.yaml", usageErr.Err).
 			WithHint("Fix the flags named above and run 'musher init' again")
 	}
 
-	header := "# Written by 'musher init'. The build block is used locally and never sent.\n"
-
-	return append([]byte(header), data...), nil
+	return nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot render musher.yaml", err)
 }
 
 // sanitizeName turns a directory name into a DNS-label deployment name.
-func sanitizeName(raw string) string {
-	var builder strings.Builder
-
-	dash := false
-
-	for _, ch := range strings.ToLower(raw) {
-		switch {
-		case ch >= 'a' && ch <= 'z', ch >= '0' && ch <= '9':
-			builder.WriteRune(ch)
-
-			dash = false
-		case !dash && builder.Len() > 0:
-			builder.WriteByte('-')
-
-			dash = true
-		}
-	}
-
-	name := strings.Trim(builder.String(), "-")
-	if name == "" {
-		return "app"
-	}
-
-	if name[0] < 'a' || name[0] > 'z' {
-		name = "app-" + name
-	}
-
-	if len(name) > maxNameLength {
-		name = name[:maxNameLength]
-	}
-
-	name = strings.TrimRight(name, "-")
-	if len(name) < 2 {
-		name += "-app"
-	}
-
-	return name
-}
+func sanitizeName(raw string) string { return workflow.SanitizeName(raw) }
 
 // renderInitSummary tells the story on stderr.
 func renderInitSummary(out *output.Writer, det *detect.Detection, app *deployspec.App) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -112,9 +113,19 @@ func buildHomeDeps(ctx context.Context) *tui.HomeDeps {
 		},
 	}
 
-	if source, api, err := newAPIClientFromContext(ctx); err == nil {
-		deps.Identity = identityLoader{api: api, source: source}
+	var api *client.Client
+
+	if source, apiClient, err := newAPIClientFromContext(ctx); err == nil {
+		deps.Identity = identityLoader{api: apiClient, source: source}
+		api = apiClient
 	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = "."
+	}
+
+	newTUIServices(deps, cfg, dir, api)
 
 	return deps
 }

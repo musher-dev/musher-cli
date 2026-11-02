@@ -124,11 +124,11 @@ func TestHomeScreenEnterOpensScreens(t *testing.T) {
 		id    string
 		check func(Screen) bool
 	}{
-		{MenuDeployments, isPlaceholder},
-		{MenuBuild, isPlaceholder},
-		{MenuDeploy, isPlaceholder},
-		{MenuLogs, isPlaceholder},
-		{MenuInit, isPlaceholder},
+		{MenuDeployments, func(s Screen) bool { _, ok := s.(*deploymentsScreen); return ok }},
+		{MenuBuild, func(s Screen) bool { _, ok := s.(*buildScreen); return ok }},
+		{MenuDeploy, func(s Screen) bool { _, ok := s.(*deployScreen); return ok }},
+		{MenuLogs, func(s Screen) bool { _, ok := s.(*logsScreen); return ok }},
+		{MenuInit, func(s Screen) bool { _, ok := s.(*initScreen); return ok }},
 		{MenuAccount, func(s Screen) bool { _, ok := s.(*accountScreen); return ok }},
 		{MenuConfig, func(s Screen) bool { _, ok := s.(*configScreen); return ok }},
 	}
@@ -151,12 +151,6 @@ func TestHomeScreenEnterOpensScreens(t *testing.T) {
 			}
 		})
 	}
-}
-
-func isPlaceholder(s Screen) bool {
-	_, ok := s.(*placeholderScreen)
-
-	return ok
 }
 
 func TestHomeScreenHotkeys(t *testing.T) {
@@ -407,9 +401,11 @@ func TestPlaceholderScreen(t *testing.T) {
 	t.Parallel()
 
 	home := sizedHome(t, nil, 80)
+	item := homeMenuItem{label: "Deployments", description: "Browse deployments"}
+	logsItem := homeMenuItem{label: "Logs", description: "Stream logs"}
 
 	for _, tc := range snapshotWidths {
-		screen := pushedScreen(t, home.open(MenuDeployments))
+		screen := placeholderFactory(&item)(t.Context(), home.env())
 		screen.Update(tea.WindowSizeMsg{Width: tc.width, Height: 30})
 
 		view := ansi.Strip(screen.View())
@@ -420,7 +416,7 @@ func TestPlaceholderScreen(t *testing.T) {
 		assertFitsWidth(t, view, tc.width)
 	}
 
-	screen := pushedScreen(t, home.open(MenuLogs))
+	screen := placeholderFactory(&logsItem)(t.Context(), home.env())
 
 	if titler, ok := screen.(Titler); !ok || titler.Title() != "Logs" {
 		t.Error("placeholder should be titled after its menu item")

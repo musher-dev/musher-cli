@@ -222,13 +222,7 @@ func resolveDeployInput(
 	flags *deployFlags,
 	cfg *config.Config,
 ) (*workflow.DeployInput, error) {
-	input := &workflow.DeployInput{
-		Kind:         deployspec.KindService,
-		Replicas:     1,
-		Environment:  cfg.Environment(),
-		Organization: cfg.Organization(),
-		Size:         cfg.DeploySize(),
-	}
+	input := newDeployInput(cfg)
 
 	path, app, err := loadDeploySpec(flags)
 	if err != nil {
@@ -282,6 +276,18 @@ func resolveDeployInput(
 	}
 
 	return input, nil
+}
+
+// newDeployInput is the request before musher.yaml and flags apply: the
+// configured context and the defaults every deploy starts from.
+func newDeployInput(cfg *config.Config) *workflow.DeployInput {
+	return &workflow.DeployInput{
+		Kind:         deployspec.KindService,
+		Replicas:     1,
+		Environment:  cfg.Environment(),
+		Organization: cfg.Organization(),
+		Size:         cfg.DeploySize(),
+	}
 }
 
 // loadDeploySpec reads the deployment file, if there is one to read, and
@@ -391,7 +397,7 @@ func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) error {
 }
 
 // defaultEndpointName names the endpoint --port creates when there is none.
-const defaultEndpointName = "http"
+const defaultEndpointName = workflow.DefaultEndpointName
 
 // applyPortFlag points the workload's endpoint at --port. With no endpoint it
 // creates one; with exactly one it overrides that endpoint's port; with

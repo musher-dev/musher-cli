@@ -85,6 +85,22 @@ type HomeDeps struct {
 
 	// Environment is the locally resolved API/profile/context.
 	Environment EnvironmentInfo
+
+	// Deployments backs the deployments list and detail screens. Nil when
+	// there is no credential: those screens then offer sign-in.
+	Deployments DeploymentsService
+
+	// Logs backs the live log tail. Nil when there is no credential.
+	Logs LogsService
+
+	// Deploy backs the deploy screen. Nil when there is no credential.
+	Deploy DeployService
+
+	// Build backs the build screen. It needs no credential.
+	Build BuildService
+
+	// Init backs the init screen. It needs no credential.
+	Init InitService
 }
 
 // identityStatus is the lifecycle of the home screen's identity lookup.
@@ -208,11 +224,16 @@ type screenEnv struct {
 type screenFactory func(ctx context.Context, env *screenEnv) Screen
 
 // menuScreens maps a home menu item to the screen it opens. A menu item with
-// no entry opens a "coming soon" placeholder, so wiring a real screen in a
-// later phase is one line here — the palette picks it up automatically.
+// no entry opens a "coming soon" placeholder, so wiring a real screen is one
+// line here — the palette picks it up automatically.
 func menuScreens() map[string]screenFactory {
 	return map[string]screenFactory{
-		MenuAccount: func(_ context.Context, env *screenEnv) Screen { return newAccountScreen(env) },
+		MenuDeployments: func(ctx context.Context, env *screenEnv) Screen { return newDeploymentsScreen(ctx, env) },
+		MenuBuild:       func(ctx context.Context, env *screenEnv) Screen { return newBuildScreen(ctx, env) },
+		MenuDeploy:      func(ctx context.Context, env *screenEnv) Screen { return newDeployScreen(ctx, env) },
+		MenuLogs:        func(ctx context.Context, env *screenEnv) Screen { return newLogsScreen(ctx, env) },
+		MenuInit:        func(ctx context.Context, env *screenEnv) Screen { return newInitScreen(ctx, env) },
+		MenuAccount:     func(_ context.Context, env *screenEnv) Screen { return newAccountScreen(env) },
 		MenuConfig: func(_ context.Context, env *screenEnv) Screen {
 			return newConfigScreen(env.deps.Config, env.styles, env.keys)
 		},
