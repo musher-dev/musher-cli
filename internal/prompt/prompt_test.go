@@ -288,3 +288,34 @@ func TestCanPromptNoInput(t *testing.T) {
 		t.Error("CanPrompt() = true with NoInput, want false")
 	}
 }
+
+func TestInput(t *testing.T) {
+	tests := []struct {
+		name, input, def, want, prompt string
+		wantErr                        bool
+	}{
+		{name: "answer wins", input: "ghcr.io/acme/web\n", def: "x", want: "ghcr.io/acme/web", prompt: "Repo [x]: "},
+		{name: "empty takes default", input: "\n", def: "8080", want: "8080", prompt: "Repo [8080]: "},
+		{name: "no default", input: "  value \n", want: "value", prompt: "Repo: "},
+		{name: "eof returns default", input: "", def: "d", want: "d", prompt: "Repo [d]: ", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, out, _ := newTestPrompter(t, tt.input)
+
+			got, err := p.Input("Repo", tt.def)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Input() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if got != tt.want {
+				t.Errorf("Input() = %q, want %q", got, tt.want)
+			}
+
+			if out.String() != tt.prompt {
+				t.Errorf("prompt = %q, want %q", out.String(), tt.prompt)
+			}
+		})
+	}
+}

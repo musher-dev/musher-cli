@@ -20,6 +20,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
@@ -57,6 +58,36 @@ func RunApp(app *App) (*Result, error) {
 	}
 
 	return finalApp.Result(), nil
+}
+
+// RunHome opens the home screen — the TUI a bare `musher` launches — with
+// the command palette installed over it, and returns what the user chose.
+// deps may be nil. A nil Result (or an empty Action) means the user simply
+// quit; ActionLogin asks the caller to sign in and call RunHome again.
+func RunHome(ctx context.Context, deps *HomeDeps) (*Result, error) {
+	return RunApp(newHomeApp(ctx, deps, LoadPaletteMRU, SavePaletteMRU))
+}
+
+// newHomeApp wires the home screen and its palette. The MRU store is a
+// parameter so tests never touch the real state directory.
+func newHomeApp(ctx context.Context, deps *HomeDeps, loadMRU func() []string, saveMRU func([]string) error) *App {
+	sty := newStyles(true)
+	keys := defaultKeyMap()
+
+	home := newHomeScreen(ctx, deps, &sty, &keys)
+	global := home.Commands()
+
+	app := NewApp(home)
+	app.SetPaletteFactory(func() Screen {
+		return NewPalette(&PaletteDeps{
+			Global:  global,
+			LoadMRU: loadMRU,
+			SaveMRU: saveMRU,
+			Styles:  &sty,
+		})
+	})
+
+	return app
 }
 
 // Mode describes the TUI operating mode.

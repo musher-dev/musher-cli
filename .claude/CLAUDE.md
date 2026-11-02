@@ -3,7 +3,9 @@
 ## What This Is
 
 Musher is the **deployment CLI** for the Musher platform — it authenticates,
-deploys container images, and observes running deployments.
+builds images from a repository (BuildKit or Cloud Native Buildpacks), deploys
+container images, and observes running deployments. Bare `musher` in a terminal
+opens an interactive TUI over the same use cases.
 
 **IS**: Intent delivery and observability. It resolves local context, submits
 deployment intent, and streams progress back.
@@ -26,22 +28,55 @@ Key API facts that constrain the design:
 - **Auth**: `Authorization: Bearer mush_{8}.{43}`. The identity endpoint is
   `GET /v1/organizations` — `/v1/publisher/me` and `/v1/runner/me` are removed.
   `/agent/v1/*` requires the AGENT audience and belongs to the host-agent, not us.
-- **Most public routes are still JWT-only.** Only the organization router accepts
-  API keys today; deployment/component/blueprint writes need `current_user.id` as
-  actor. Tracked in platform issues #1778 (widened from #1521) and #1780.
+- **API keys are accepted on write routes.** Deployment, component and
+  blueprint writes take `Authorization: Bearer mush_…` as well as a session.
 - **Errors are RFC 9457** `application/problem+json`. The stable machine token is
   the trailing slug of `type`.
-- **Images must be pinned.** The server enforces a *floating-tag denylist*
-  (`latest, main, main-stable, master, stable, edge, nightly, dev, rolling`) plus
-  bare refs — not a semver allowlist. Mirror the denylist exactly; a client
-  stricter than the server rejects refs the platform accepts.
+- **Every image tag is accepted.** Component v2 COMP-SRC-002 removed the
+  server's floating-tag denylist. The CLI checks reference *grammar* only and
+  merely **warns** about floating tags (`latest, main, …`) and bare refs; never
+  refuse a ref the platform accepts. Deploying a digest is still recommended.
+- **Deploy speaks the v2 documents.** `musher deploy` compiles musher.yaml
+  into a component v2 and a blueprint v2 document (`internal/workflow/compile.go`),
+  validates the component remotely (`components:validate`, scope PUBLICATION)
+  before any write, then converges by natural key: slug for the component and
+  blueprint (`/versions/{rev}:publish`), deployment name for
+  `:deployBlueprint` / `:update`. An unchanged file writes nothing.
 - **SSE is a two-step ticket flow**: mint (authenticated), then stream with
   `?ticket=` and **no** Authorization header. Tickets are single-use with a
   10-second TTL, so every reconnect must re-mint. Heartbeats are bare `: ping`
   *comment* frames every 15s. These routes are `include_in_schema=False`, so they
   cannot be code-generated.
-- **`Idempotency-Key` is not accepted** on any deployment/component/blueprint
-  write. Idempotency comes from natural keys (read-before-write, 409-tolerance).
+- **`Idempotency-Key` is accepted** on writes, but deploy does not rely on it:
+  a key minted per invocation cannot make a re-run idempotent. Idempotency
+  comes from natural keys (read-before-write, 409-tolerance, adopting the
+  `componentId`/`blueprintId` a `resource-conflict` names).
+
+## Builds (read this before changing `internal/build`)
+
+The platform cannot build from source yet. Component v2 specifies
+`workload.source.{git,upload}` + `workload.build`, but platform-api refuses both
+at admission (`GIT_SOURCE_UNSUPPORTED` / `UPLOAD_SOURCE_UNSUPPORTED`), and there
+is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
+`ImageBuild` / `ImageRegistry` are `TO_BE`). So the CLI builds **locally**:
+
+- The recipe lives in `musher.yaml` `spec.workload.build` and mirrors the
+  component v2 `build` grammar plus the CLI-only `repository`. It is consumed
+  locally and **never sent**: the server gets `source.image: repo:tag@sha256:…`
+  with no `build` (v2 forbids `build` beside `image`).
+- A recipe is **never inferred at build time** (COMP-BUILD-007). `musher init`
+  detects and *writes* one (allowed by specifications ADR 0040 §7).
+- `internal/build` is the only package allowed to import moby/buildkit,
+  buildpacks/pack, docker, and go-containerregistry (depguard
+  `build_engine_isolation`). Drivers sit behind `core.Builder`, so a future
+  server-side driver (upload → ImageBuild) can replace them without UX changes.
+- Default platform `linux/amd64`: compute hosts are x86_64.
+- The digest deployed is the pushed **manifest** digest, never an image ID.
+- Pelorus exclusion **X-19** (no deploy client for a team's own code until the
+  CLI's deploy/build-runner/preview roles are designed together) and bet B-08
+  (Musher-side builds in Firecracker guests) are in tension with local builds.
+  This path is the interim image-source route; keep recipes spec-conformant so
+  the remote path stays open.
 
 ## Directory Overview
 
@@ -55,6 +90,9 @@ Key API facts that constrain the design:
 - `auth.go`, `auth_login.go`, `auth_logout.go`, `auth_status.go`
 - `config.go`, `config_get.go`, `config_list.go`, `config_set.go`, `config_profile.go`
 - `doctor.go`, `update.go`, `version.go`, `completion.go`
+- `init.go`, `build.go` — recipe detection/writing and local builds
+- `deploy.go`, `deploy_report.go`, `list.go`, `status.go`, `logs.go` — deploy and observe
+- `root_tui.go`, `tui_adapters.go` — TUI launch decision and service adapters
 
 ### Internal Packages — `internal/`
 
@@ -62,7 +100,10 @@ Key API facts that constrain the design:
 
 - `auth/` — Credential storage (keyring + file fallback), profile-scoped
 - `buildinfo/` — Build metadata
+- `build/` — Local image builds: `core` (types, `Builder`), `buildkit`,
+  `buildpacks`, `daemon`, `detect`, `registry`; doctor checks
 - `client/` — HTTP client for the Musher API
+- `deployspec/` — `musher.yaml` schema, parsing, validation, encoding
 - `config/` — Viper-based configuration, profiles, overrides
 - `env/` — Centralized environment-variable access (single source of truth)
 - `errors/` — CLIError with exit codes and hints
@@ -72,13 +113,18 @@ Key API facts that constrain the design:
 - `terminal/` — TTY detection and capabilities
 - `update/` — Self-update from GitHub Releases
 - `validate/` — Input validation utilities
-- `workflow/` — Transport-agnostic use-case layer (`Progress`, `Confirmer`)
+- `workflow/` — Transport-agnostic use cases: `Deploy` (compile → validate →
+  converge → watch), `Build`, scaffolding for `init`
 
 #### Presentation
 
 - `output/` — CLI output (colors, spinners, TTY detection)
 - `prompt/` — Interactive prompts
 - `doctor/` — Diagnostic framework (output-agnostic)
+- `tui/` — Bubbletea UI: home, deployments, logs, init, build, deploy screens.
+  Screens declare narrow service interfaces (adapted in `cmd/musher`); never
+  store a `context.Context` in a struct (containedctx). Does not import
+  `workflow`, so the build engine stays out of TUI tests.
 
 ## Stable Code Patterns
 
@@ -119,6 +165,10 @@ task check:test     # Run tests only
 task check:contracts # Assert the command tree (incl. that bundle/hub stay gone)
 task fmt            # Format code
 ```
+
+golangci-lint must run with the pinned go1.26.10 toolchain (a newer local Go
+breaks its typecheck). Docker-backed build tests are behind
+`-tags integration` (`go test -tags integration ./internal/build/...`).
 
 ## Quick Reference
 

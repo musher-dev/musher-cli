@@ -85,6 +85,9 @@ func configItemDefs() []configItem {
 		{key: "deploy.wait", displayName: "Wait for Deploy", description: "Watch a deployment until it settles.", section: "DEPLOY", defaultValue: configBoolTrue, inputType: configInputBool},
 		{key: "deploy.timeout", displayName: "Deploy Timeout", description: "How long to watch a deployment before giving up.", section: "DEPLOY", defaultValue: "15m", inputType: configInputDuration},
 		{key: "deploy.size", displayName: "Deploy Size", description: "Default instance size for new deployments.", section: "DEPLOY", defaultValue: "", inputType: configInputText},
+		{key: "build.repository", displayName: "Build Repository", description: "Image repository builds push to.", section: "BUILD", defaultValue: "", inputType: configInputText},
+		{key: "build.platform", displayName: "Build Platform", description: "Platform images are built for.", section: "BUILD", defaultValue: "linux/amd64", inputType: configInputText},
+		{key: "build.buildkit_host", displayName: "BuildKit Host", description: "Standalone buildkitd address; empty uses Docker.", section: "BUILD", defaultValue: "", inputType: configInputText},
 		{key: "update.auto_apply", displayName: "Auto-apply Updates", description: "Automatically apply CLI updates.", section: "UPDATES", defaultValue: configBoolTrue, inputType: configInputBool},
 		{key: "update.check_interval", displayName: "Update Interval", description: "How often to check for updates.", section: "UPDATES", defaultValue: "24h", inputType: configInputDuration},
 	}

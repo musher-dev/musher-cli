@@ -5,6 +5,8 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/build"
+	"github.com/musher-dev/musher-cli/internal/build/registry"
 	"github.com/musher-dev/musher-cli/internal/config"
 	"github.com/musher-dev/musher-cli/internal/deployspec"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -52,6 +56,10 @@ type deployFlags struct {
 	detach        bool
 	watch         bool
 	yes           bool
+	force         bool
+	noBuild       bool
+	platform      string
+	tag           string
 	timeout       time.Duration
 	degradedGrace time.Duration
 }
@@ -69,11 +77,20 @@ over the file, so a pinned image can be overridden for one run without editing
 anything.
 
 The deployment name is the natural key: deploying the same name again updates
-the existing deployment in place, keeping its id, its timeline, and its URL.`,
+the existing deployment in place, keeping its id, its timeline, and its URL.
+An unchanged file is a no-op; --force rolls the deployment anyway.
+
+When musher.yaml has a build recipe (spec.workload.build) and no --image is
+given, the image is built and pushed first, and the deployment runs that exact
+digest. --no-build skips the build; it needs --image.
+
+The file is compiled into a v2 component and blueprint, validated by the
+platform before anything is written, and published as new revisions only when
+something changed.`,
 		Example: `  # Deploy an image directly
   musher deploy api --image ghcr.io/acme/api:v1.4.2 --port 8080
 
-  # Deploy from ./musher.yaml
+  # Deploy from ./musher.yaml (building first when it has a recipe)
   musher deploy
 
   # Submit and return immediately
@@ -95,13 +112,13 @@ the existing deployment in place, keeping its id, its timeline, and its URL.`,
 func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 	set := cmd.Flags()
 
-	set.StringVar(&flags.image, "image", "", "Container image to run (must be a pinned tag or digest)")
+	set.StringVar(&flags.image, "image", "", "Container image to run (a digest or version tag is recommended)")
 	set.StringVar(&flags.name, "name", "", "Deployment name (defaults to the positional argument or the file)")
 	set.StringVarP(&flags.file, "file", "f", "", "Deployment file to read (default: ./musher.yaml)")
 	set.StringVar(&flags.environment, "environment", "", "Environment to deploy into (default: the default STANDARD one)")
-	set.StringVar(&flags.kind, "kind", "", "Workload kind: SERVICE, WORKER, JOB, CRON")
+	set.StringVar(&flags.kind, "kind", "", "Workload kind: SERVICE, WORKER, JOB")
 	set.StringVar(&flags.size, "size", "", "Compute profile for the workload")
-	set.IntVar(&flags.port, "port", 0, "Container port to expose publicly")
+	set.IntVar(&flags.port, "port", 0, "Container port to serve (sets the endpoint's targetPort)")
 	set.IntVar(&flags.replicas, "replicas", 0, "Number of replicas to run")
 	set.StringArrayVarP(&flags.envPairs, "env", "e", nil, "Environment variable as KEY=VALUE (repeatable)")
 	set.StringVar(&flags.envFile, "env-file", "", "File of KEY=VALUE environment variables")
@@ -112,6 +129,10 @@ func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 		"How long DEGRADED is tolerated before it is a failure (default: 1m)")
 	set.StringVar(&flags.waitFor, "wait-for", "ready", "Success condition: ready or url")
 	set.BoolVarP(&flags.yes, "yes", "y", false, "Do not ask for confirmation")
+	set.BoolVar(&flags.force, "force", false, "Roll the deployment even when nothing changed")
+	set.BoolVar(&flags.noBuild, "no-build", false, "Do not build from the recipe; deploy --image instead")
+	set.StringVar(&flags.platform, "platform", "", "Platform to build for as os/arch (default: build.platform, linux/amd64)")
+	set.StringVar(&flags.tag, "tag", "", "Tag for the built image (default: the git commit, or a timestamp)")
 }
 
 // runDeploy is the whole command: resolve intent, confirm, run, report.
@@ -119,7 +140,7 @@ func runDeploy(cmd *cobra.Command, args []string, flags *deployFlags) error {
 	out := output.FromContext(cmd.Context())
 	cfg := config.FromContext(cmd.Context())
 
-	input, err := resolveDeployInput(args, flags, cfg)
+	input, err := resolveDeployInput(out, args, flags, cfg)
 	if err != nil {
 		return err
 	}
@@ -128,6 +149,12 @@ func runDeploy(cmd *cobra.Command, args []string, flags *deployFlags) error {
 	if err != nil {
 		return err
 	}
+
+	if input.Build != nil && strings.TrimSpace(input.Image) == "" {
+		opts.Build = deployBuildOptions(flags, cfg)
+	}
+
+	opts.ImageIsPublic = registry.IsPublic
 
 	if confirmErr := confirmDeploy(out, input, flags.yes); confirmErr != nil {
 		return confirmErr
@@ -149,10 +176,10 @@ func executeDeploy(
 	input *workflow.DeployInput,
 	opts workflow.DeployOptions,
 ) error {
-	reporter := newDeployReporter(out)
-
 	watchCtx, guard, stop := watchWithInterrupt(ctx, out, input.Name)
 	defer stop()
+
+	reporter := &buildAwareReporter{Reporter: newDeployReporter(out), guard: guard}
 
 	result, err := workflow.Deploy(watchCtx, api, reporter, *input, opts)
 
@@ -178,6 +205,8 @@ func executeDeploy(
 	}
 
 	if err != nil {
+		renderSpecDiagnostics(out, err)
+
 		return deployFailure(err, input.Name)
 	}
 
@@ -187,28 +216,42 @@ func executeDeploy(
 // resolveDeployInput merges the deployment file, the flags, and configuration
 // into one request. Flags always win: overriding a pinned image for a single
 // run must not require editing a file that is under review.
-func resolveDeployInput(args []string, flags *deployFlags, cfg *config.Config) (*workflow.DeployInput, error) {
-	input := &workflow.DeployInput{
-		Kind:         deployspec.KindService,
-		Replicas:     1,
-		Environment:  cfg.Environment(),
-		Organization: cfg.Organization(),
-		Size:         cfg.DeploySize(),
-	}
+func resolveDeployInput(
+	out *output.Writer,
+	args []string,
+	flags *deployFlags,
+	cfg *config.Config,
+) (*workflow.DeployInput, error) {
+	input := newDeployInput(cfg)
 
-	app, err := loadDeploySpec(flags)
+	path, app, err := loadDeploySpec(flags)
 	if err != nil {
 		return nil, err
 	}
 
 	if app != nil {
 		applyAppSpec(input, app)
+		input.BuildRoot = filepath.Dir(path)
+
+		for _, warning := range app.Warnings() {
+			out.Warning("%s", warning)
+		}
 	}
 
-	applyDeployFlags(input, flags)
+	if flagErr := applyDeployFlags(input, flags); flagErr != nil {
+		return nil, flagErr
+	}
 
 	if len(args) == 1 {
 		input.Name = args[0]
+	}
+
+	if flags.noBuild && strings.TrimSpace(input.Image) == "" {
+		return nil, &clierrors.CLIError{
+			Message: "--no-build needs --image",
+			Hint:    "Pass the image to deploy, e.g. --image \"$(musher build -q)\"",
+			Code:    clierrors.ExitUsage,
+		}
 	}
 
 	if input.Name == "" {
@@ -235,26 +278,39 @@ func resolveDeployInput(args []string, flags *deployFlags, cfg *config.Config) (
 	return input, nil
 }
 
-// loadDeploySpec reads the deployment file, if there is one to read.
-func loadDeploySpec(flags *deployFlags) (*deployspec.App, error) {
+// newDeployInput is the request before musher.yaml and flags apply: the
+// configured context and the defaults every deploy starts from.
+func newDeployInput(cfg *config.Config) *workflow.DeployInput {
+	return &workflow.DeployInput{
+		Kind:         deployspec.KindService,
+		Replicas:     1,
+		Environment:  cfg.Environment(),
+		Organization: cfg.Organization(),
+		Size:         cfg.DeploySize(),
+	}
+}
+
+// loadDeploySpec reads the deployment file, if there is one to read, and
+// returns its path with it.
+func loadDeploySpec(flags *deployFlags) (string, *deployspec.App, error) {
 	path := strings.TrimSpace(flags.file)
 	if path == "" {
 		if strings.TrimSpace(flags.image) != "" {
 			// An explicit image is a complete request; do not surprise the
 			// caller by silently merging a file they did not mention.
-			return nil, nil //nolint:nilnil // "no file involved" is a valid answer
+			return "", nil, nil
 		}
 
 		workdir, err := os.Getwd()
 		if err != nil {
-			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot determine the working directory", err)
+			return "", nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot determine the working directory", err)
 		}
 
 		path = deployspec.Discover(workdir)
 	}
 
 	if path == "" {
-		return nil, &clierrors.CLIError{
+		return "", nil, &clierrors.CLIError{
 			Message: "Nothing to deploy",
 			Hint:    "Pass --image, or run this from a directory containing musher.yaml",
 			Code:    clierrors.ExitUsage,
@@ -263,18 +319,39 @@ func loadDeploySpec(flags *deployFlags) (*deployspec.App, error) {
 
 	app, err := deployspec.Load(path)
 	if err != nil {
-		return nil, clierrors.Wrap(clierrors.ExitInvalidSpec, "Invalid deployment file", err).
+		return "", nil, clierrors.Wrap(clierrors.ExitInvalidSpec, "Invalid deployment file", err).
 			WithHint("Fix " + path + " and run the command again")
 	}
 
-	return app, nil
+	return path, app, nil
 }
 
-// applyAppSpec copies the file's intent onto the request.
+// applyAppSpec copies the file's intent onto the request: every endpoint, the
+// command, the schedule and the build recipe, not just the first port.
 func applyAppSpec(input *workflow.DeployInput, app *deployspec.App) {
+	workload := &app.Spec.Workload
+
 	input.Name = app.Metadata.Name
-	input.Image = app.Spec.Workload.Image
-	input.Kind = app.Spec.Workload.Kind
+	input.Image = workload.Image
+	input.Kind = workload.Kind
+	input.Command = slices.Clone(workload.Command)
+	input.Build = workload.Build
+
+	if workload.Schedule != nil {
+		input.Schedule = workload.Schedule.Cron
+	}
+
+	if len(workload.Endpoints) > 0 {
+		input.Endpoints = make(map[string]workflow.DeployEndpoint, len(workload.Endpoints))
+
+		for name, endpoint := range workload.Endpoints {
+			input.Endpoints[name] = workflow.DeployEndpoint{
+				TargetPort: endpoint.Port(),
+				Protocol:   endpoint.Protocol,
+				Visibility: endpoint.Visibility,
+			}
+		}
+	}
 
 	if app.Spec.Environment != "" {
 		input.Environment = app.Spec.Environment
@@ -288,21 +365,13 @@ func applyAppSpec(input *workflow.DeployInput, app *deployspec.App) {
 		input.Replicas = app.Spec.Replicas
 	}
 
-	for _, endpoint := range app.Spec.Workload.Endpoints {
-		if endpoint.ContainerPort > 0 {
-			input.Port = endpoint.ContainerPort
-
-			break
-		}
-	}
-
-	if len(app.Spec.Workload.Env) > 0 {
-		input.Env = maps.Clone(app.Spec.Workload.Env)
+	if len(workload.Env) > 0 {
+		input.Env = maps.Clone(workload.Env)
 	}
 }
 
 // applyDeployFlags overlays the command line onto the request.
-func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) {
+func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) error {
 	overlay := []struct {
 		value  string
 		target *string
@@ -320,13 +389,44 @@ func applyDeployFlags(input *workflow.DeployInput, flags *deployFlags) {
 		}
 	}
 
-	if flags.port > 0 {
-		input.Port = flags.port
-	}
-
 	if flags.replicas > 0 {
 		input.Replicas = flags.replicas
 	}
+
+	return applyPortFlag(input, flags.port)
+}
+
+// defaultEndpointName names the endpoint --port creates when there is none.
+const defaultEndpointName = workflow.DefaultEndpointName
+
+// applyPortFlag points the workload's endpoint at --port. With no endpoint it
+// creates one; with exactly one it overrides that endpoint's port; with
+// several it refuses, because guessing which one was meant is how a deploy
+// silently breaks a second listener.
+func applyPortFlag(input *workflow.DeployInput, port int) error {
+	if port <= 0 {
+		return nil
+	}
+
+	switch len(input.Endpoints) {
+	case 0:
+		input.Endpoints = map[string]workflow.DeployEndpoint{
+			defaultEndpointName: {TargetPort: port},
+		}
+	case 1:
+		for name, endpoint := range input.Endpoints {
+			endpoint.TargetPort = port
+			input.Endpoints[name] = endpoint
+		}
+	default:
+		return &clierrors.CLIError{
+			Message: "--port is ambiguous: the workload serves " + strconv.Itoa(len(input.Endpoints)) + " endpoints",
+			Hint:    "Set each endpoint's targetPort in musher.yaml instead",
+			Code:    clierrors.ExitUsage,
+		}
+	}
+
+	return nil
 }
 
 // deployOptions turns the watch flags and config into workflow options.
@@ -351,6 +451,7 @@ func deployOptions(cmd *cobra.Command, flags *deployFlags, cfg *config.Config) (
 	}
 
 	return workflow.DeployOptions{
+		Force:         flags.force,
 		Detach:        flags.detach,
 		Watch:         watch && !flags.detach,
 		Timeout:       timeout,
@@ -421,7 +522,7 @@ func confirmDeploy(out *output.Writer, input *workflow.DeployInput, yes bool) er
 	}
 
 	out.Muted("Deploy %s", input.Name)
-	out.Muted("  image:       %s", input.Image)
+	out.Muted("  image:       %s", imageLabel(input))
 	out.Muted("  environment: %s", environmentLabel(input.Environment))
 	out.Muted("  replicas:    %d", input.Replicas)
 
@@ -438,6 +539,15 @@ func confirmDeploy(out *output.Writer, input *workflow.DeployInput, yes bool) er
 	}
 
 	return nil
+}
+
+// imageLabel renders the image, or says it will come from the build recipe.
+func imageLabel(input *workflow.DeployInput) string {
+	if strings.TrimSpace(input.Image) == "" && input.Build != nil {
+		return "(built from " + input.Build.Repository + ")"
+	}
+
+	return input.Image
 }
 
 // environmentLabel renders an unset environment as the implied default.
@@ -459,6 +569,30 @@ type deployInterrupt struct {
 	mu    sync.Mutex
 	first time.Time
 	hard  bool
+	// building is set while the deploy builds its image. A build is local
+	// work, so an interrupt then cancels it instead of detaching.
+	building bool
+}
+
+// setBuilding records whether a local build is running.
+func (d *deployInterrupt) setBuilding(building bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.building = building
+}
+
+// cancelBuild reports whether a build was running, and if so turns the
+// interrupt into an abort.
+func (d *deployInterrupt) cancelBuild() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.building {
+		d.hard = true
+	}
+
+	return d.building
 }
 
 // record notes an interrupt and reports whether it was the deliberate second.
@@ -513,6 +647,15 @@ func watchWithInterrupt(
 			case <-done:
 				return
 			case <-signals:
+				if guard.cancelBuild() {
+					out.Errorln()
+					out.Warning("Build canceled. Nothing was deployed.")
+					signal.Stop(signals)
+					cancel()
+
+					return
+				}
+
 				if guard.record(time.Now()) {
 					// Hand SIGINT back to the runtime so a third one always
 					// terminates, even if the watch is wedged.
@@ -545,4 +688,38 @@ func renderDetachNotice(out *output.Writer, name string) {
 	out.Warning("Stopped watching. The deployment is still running.")
 	out.Muted("  Follow it:  musher status %s --watch", name)
 	out.Muted("  Read logs:  musher logs %s --follow", name)
+}
+
+// buildAwareReporter tells the interrupt guard when the deploy is building,
+// so Ctrl-C during a build cancels it rather than claiming a detach.
+type buildAwareReporter struct {
+	workflow.Reporter
+
+	guard *deployInterrupt
+}
+
+// Step forwards the transition and tracks the build/push window.
+func (b *buildAwareReporter) Step(id, state, note string) {
+	if id == workflow.StepBuild || id == workflow.StepPush {
+		finished := state == workflow.StateFailed || (id == workflow.StepPush && state != workflow.StateRunning)
+		b.guard.setBuilding(!finished)
+	}
+
+	b.Reporter.Step(id, state, note)
+}
+
+// deployBuildOptions configures the deploy's build step. Engine progress is
+// not drawn: the reporter summarizes the build under its checklist instead of
+// interleaving a BuildKit display with it.
+func deployBuildOptions(flags *deployFlags, cfg *config.Config) *workflow.DeployBuild {
+	platform := strings.TrimSpace(flags.platform)
+	if platform == "" {
+		platform = cfg.BuildPlatform()
+	}
+
+	return &workflow.DeployBuild{
+		Engine:   engineFor(build.Options{BuildKitAddress: cfg.BuildKitHost()}),
+		Tag:      strings.TrimSpace(flags.tag),
+		Platform: platform,
+	}
 }

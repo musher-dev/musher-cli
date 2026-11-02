@@ -124,7 +124,7 @@ func (p *paletteScreen) KeyMap() KeyMap {
 				Title: GroupActions,
 				Bindings: []key.Binding{
 					key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "run")),
-					key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "quit")),
+					key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
 				},
 			},
 		},
@@ -192,8 +192,9 @@ func (p *paletteScreen) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		return p, cmd
 
 	case "esc":
-		// Root palette: esc quits.
-		return p, tea.Quit
+		// Close the overlay and return to the screen below. When the palette
+		// is the only screen the App treats the pop as a quit.
+		return p, func() tea.Msg { return popScreenMsg{} }
 	}
 
 	prev := p.input.Value()

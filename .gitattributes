@@ -1,0 +1,15 @@
+# Normalize all text to LF in the repo and in every working tree, regardless
+# of the client's core.autocrlf. CRLF shell scripts break the devcontainer
+# (`set: pipefail: invalid option name`).
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.ps1 text eol=crlf
+
+# Binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.gz  binary

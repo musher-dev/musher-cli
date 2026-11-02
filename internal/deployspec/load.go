@@ -62,3 +62,23 @@ func Parse(data []byte) (*App, error) {
 
 	return &app, nil
 }
+
+// Encode renders an App document as YAML, the inverse of Parse for the
+// fields it sets. Writers such as `musher init` use it so the file they
+// produce is exactly what Parse reads back.
+func Encode(app *App) ([]byte, error) {
+	var buf bytes.Buffer
+
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+
+	if err := encoder.Encode(app); err != nil {
+		return nil, repoerrors.Errorf("encode deployment file: %w", err)
+	}
+
+	if err := encoder.Close(); err != nil {
+		return nil, repoerrors.Errorf("encode deployment file: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}

@@ -54,6 +54,26 @@ func (p *Prompter) Confirm(message string, defaultValue bool) (bool, error) {
 	return input == "y" || input == "yes", nil
 }
 
+// Input prompts for one line of text. An empty answer returns defaultValue.
+func (p *Prompter) Input(message, defaultValue string) (string, error) {
+	if defaultValue != "" {
+		p.out.Print("%s [%s]: ", message, defaultValue)
+	} else {
+		p.out.Print("%s: ", message)
+	}
+
+	input, err := p.reader.ReadString('\n')
+	if err != nil {
+		return defaultValue, repoerrors.Errorf("failed to read input: %w", err)
+	}
+
+	if input = strings.TrimSpace(input); input == "" {
+		return defaultValue, nil
+	}
+
+	return input, nil
+}
+
 // Password prompts for a password, showing * for each character typed.
 func (p *Prompter) Password(prompt string) (string, error) {
 	p.out.Print("%s: ", prompt)

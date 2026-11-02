@@ -119,11 +119,12 @@ func TestDeployBlueprintWithMeta(t *testing.T) {
 	api, seen := recordingMock(t, http.StatusCreated, deploymentJSON)
 
 	deployment, meta, err := api.DeployBlueprintWithMeta(t.Context(), "org-1",
-		client.DeploymentDeployBlueprintInput{
-			BlueprintID:      "bp-1",
-			EnvironmentID:    "env-1",
-			Replicas:         2,
-			UserAssignedName: "api",
+		client.DeployBlueprintInput{
+			BlueprintID:   "bp-1",
+			Revision:      3,
+			Name:          "api",
+			EnvironmentID: "env-1",
+			Replicas:      2,
 		})
 	if err != nil {
 		t.Fatalf("DeployBlueprintWithMeta() error = %v", err)
@@ -139,7 +140,7 @@ func TestDeployBlueprintWithMeta(t *testing.T) {
 
 	for _, want := range []string{
 		`"blueprintId":"bp-1"`, `"environmentId":"env-1"`,
-		`"replicas":2`, `"userAssignedName":"api"`,
+		`"replicas":2`, `"name":"api"`, `"revision":3`,
 	} {
 		if !strings.Contains(seen.body, want) {
 			t.Errorf("body %s missing %s", seen.body, want)
@@ -392,7 +393,7 @@ func TestDeployBlueprintConvenienceWrapper(t *testing.T) {
 	api, seen := recordingMock(t, http.StatusCreated, deploymentJSON)
 
 	deployment, err := api.DeployBlueprint(t.Context(), "org-1",
-		client.DeploymentDeployBlueprintInput{BlueprintID: "bp-1", EnvironmentID: "env-1"})
+		client.DeployBlueprintInput{BlueprintID: "bp-1", Revision: 1, Name: "api"})
 	if err != nil {
 		t.Fatalf("DeployBlueprint() error = %v", err)
 	}

@@ -25,3 +25,42 @@ allow:
       go-selfupdate removes it, or we replace the self-updater. Tracked as
       follow-up work; see the deployment-CLI PR description.
     accepted_on: 2026-08-05
+
+  - id: GO-2026-4887
+    module: github.com/docker/docker
+    package: github.com/docker/docker (daemon AuthZ plugin middleware)
+    reason: >-
+      Daemon-side flaw (an AuthZ plugin can be bypassed by an oversized request
+      body sent to dockerd). The module is linked only because the buildpacks
+      driver embeds pack, whose lifecycle dependency imports client-side helper
+      packages of github.com/docker/docker (registry config, api/types/filters,
+      pkg/homedir, pkg/idtools, volume/mounts parsers). govulncheck reports it as
+      "called" solely through those packages' init functions; Musher never runs
+      the Docker daemon or its AuthZ middleware, so the vulnerable path cannot
+      execute in this CLI.
+    upstream_fix: >-
+      None in this module: github.com/docker/docker is frozen at v28.5.2 and
+      reports "Fixed in: N/A". The fix ships only in the daemon under the new
+      github.com/moby/moby module path.
+    removal_condition: >-
+      Drops out when buildpacks/pack and buildpacks/lifecycle stop importing
+      github.com/docker/docker (migrating to github.com/moby/moby/{api,client}),
+      or if the buildpacks driver is removed.
+    accepted_on: 2026-11-02
+
+  - id: GO-2026-4883
+    module: github.com/docker/docker
+    package: github.com/docker/docker (daemon plugin privilege validation)
+    reason: >-
+      Daemon-side flaw (off-by-one when dockerd validates a plugin's requested
+      privileges). Same reachability as GO-2026-4887: linked only through pack's
+      lifecycle dependency, reported as "called" solely via init functions of
+      client-side helper packages. Musher never installs plugins or runs the
+      daemon's plugin manager.
+    upstream_fix: >-
+      None in this module (frozen at v28.5.2, "Fixed in: N/A"); fixed only in
+      the daemon under github.com/moby/moby.
+    removal_condition: >-
+      Same as GO-2026-4887: when pack/lifecycle drop github.com/docker/docker,
+      or the buildpacks driver is removed.
+    accepted_on: 2026-11-02

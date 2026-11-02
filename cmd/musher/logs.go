@@ -216,22 +216,4 @@ func matchesFilters(entry *client.LogEntry, flags *logsFlags) bool {
 	return severityRank(entry.Severity) >= severityRank(wanted)
 }
 
-// severityRanks orders the platform's severity vocabulary. Unknown values rank
-// above everything so a new severity is never silently filtered away.
-var severityRanks = map[string]int{
-	"TRACE": 0,
-	"DEBUG": 1,
-	"INFO":  2,
-	"WARN":  3,
-	"ERROR": 4,
-	"FATAL": 5,
-}
-
-func severityRank(value string) int {
-	rank, ok := severityRanks[strings.ToUpper(strings.TrimSpace(value))]
-	if !ok {
-		return len(severityRanks)
-	}
-
-	return rank
-}
+func severityRank(value string) int { return client.LogSeverityRank(value) }

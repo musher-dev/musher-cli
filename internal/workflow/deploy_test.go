@@ -2,11 +2,13 @@ package workflow_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -69,14 +71,269 @@ func (c *fakeClock) sleeps() []time.Duration {
 	return append([]time.Duration(nil), c.slept...)
 }
 
-// fakeAPI is a scripted DeployAPI.
+// fakeVersion is one stored revision in a fakeLibrary.
+type fakeVersion struct {
+	revision   int
+	status     string
+	document   json.RawMessage
+	rowVersion int
+}
+
+// fakeLineage is one component or blueprint in a fakeLibrary.
+type fakeLineage struct {
+	id       string
+	versions []*fakeVersion
+}
+
+// fakeLibrary is an in-memory component or blueprint library that enforces
+// the platform rules the converge loop relies on: one open draft at a time,
+// a slug held by one lineage, publish only from DRAFT.
+type fakeLibrary struct {
+	prefix   string
+	idExt    string
+	lineages map[string]*fakeLineage
+
+	// hideFromList makes the slug lookup miss although the lineage exists,
+	// modeling a race with another deploy.
+	hideFromList bool
+	// publishErr fails the next publish, modeling a crash between writes.
+	publishErr error
+	// publishConflict makes the next publish answer 409 after publishing,
+	// modeling a concurrent deploy that published first.
+	publishConflict bool
+	// createErr fails every create.
+	createErr error
+	// staleLatest makes the versions page omit an open draft, modeling a
+	// draft opened concurrently after the read.
+	staleLatest bool
+}
+
+func newFakeLibrary(prefix, idExt string) *fakeLibrary {
+	return &fakeLibrary{prefix: prefix, idExt: idExt, lineages: map[string]*fakeLineage{}}
+}
+
+func problemError(status int, slug string, extensions map[string]any) error {
+	ext := make(map[string]json.RawMessage, len(extensions))
+	for key, value := range extensions {
+		raw, _ := json.Marshal(value) //nolint:errchkjson // extension values in these tests are strings and ints
+		ext[key] = raw
+	}
+
+	return &client.HTTPStatusError{
+		Operation: "test",
+		Status:    status,
+		Problem:   &client.Problem{Type: "/errors/" + slug, Status: status, Extensions: ext},
+	}
+}
+
+func (l *fakeLibrary) byID(id string) *fakeLineage {
+	for _, lineage := range l.lineages {
+		if lineage.id == id {
+			return lineage
+		}
+	}
+
+	return nil
+}
+
+func (l *fakeLibrary) find(slug string) string {
+	if l.hideFromList {
+		return ""
+	}
+
+	if lineage, ok := l.lineages[slug]; ok {
+		return lineage.id
+	}
+
+	return ""
+}
+
+func encode(doc any) (raw json.RawMessage, revision int) {
+	raw, _ = json.Marshal(doc) //nolint:errchkjson // the fake stores what the workflow sent; documents always encode
+
+	var probe struct {
+		Metadata struct {
+			Revision int `json:"revision"`
+		} `json:"metadata"`
+	}
+
+	_ = json.Unmarshal(raw, &probe)
+
+	revision = probe.Metadata.Revision
+
+	return raw, revision
+}
+
+func (l *fakeLibrary) create(slug string, doc any) (string, *fakeVersion, error) {
+	if l.createErr != nil {
+		return "", nil, l.createErr
+	}
+
+	if existing, ok := l.lineages[slug]; ok {
+		return "", nil, problemError(http.StatusConflict, client.SlugResourceConflict, map[string]any{l.idExt: existing.id})
+	}
+
+	raw, revision := encode(doc)
+	lineage := &fakeLineage{id: l.prefix + "-" + strconv.Itoa(len(l.lineages)+1)}
+	version := &fakeVersion{revision: revision, status: client.VersionStatusDraft, document: raw, rowVersion: 1}
+	lineage.versions = append(lineage.versions, version)
+	l.lineages[slug] = lineage
+
+	return lineage.id, version, nil
+}
+
+func (l *fakeLibrary) latest(id string) *client.VersionSummary {
+	lineage := l.byID(id)
+	if lineage == nil || len(lineage.versions) == 0 {
+		return nil
+	}
+
+	newest := lineage.versions[len(lineage.versions)-1]
+	if l.staleLatest && newest.status == client.VersionStatusDraft && len(lineage.versions) > 1 {
+		newest = lineage.versions[len(lineage.versions)-2]
+	}
+
+	return &client.VersionSummary{Revision: newest.revision, Status: newest.status}
+}
+
+func (l *fakeLibrary) get(id string, revision int) (*fakeVersion, error) {
+	lineage := l.byID(id)
+	if lineage == nil {
+		return nil, statusError(http.StatusNotFound)
+	}
+
+	for _, version := range lineage.versions {
+		if version.revision == revision {
+			return version, nil
+		}
+	}
+
+	return nil, statusError(http.StatusNotFound)
+}
+
+func (l *fakeLibrary) createVersion(id string, doc any) (*fakeVersion, error) {
+	lineage := l.byID(id)
+	if lineage == nil {
+		return nil, statusError(http.StatusNotFound)
+	}
+
+	if newest := lineage.versions[len(lineage.versions)-1]; newest.status == client.VersionStatusDraft {
+		return nil, problemError(http.StatusConflict, client.SlugDraftAlreadyOpen,
+			map[string]any{client.ExtOpenDraftVersion: newest.revision})
+	}
+
+	raw, revision := encode(doc)
+	version := &fakeVersion{revision: revision, status: client.VersionStatusDraft, document: raw, rowVersion: 1}
+	lineage.versions = append(lineage.versions, version)
+
+	return version, nil
+}
+
+func (l *fakeLibrary) replace(id string, revision int, doc any, expected *int) (*fakeVersion, error) {
+	version, err := l.get(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	if version.status != client.VersionStatusDraft {
+		return nil, problemError(http.StatusConflict, client.SlugImmutableState, nil)
+	}
+
+	if expected != nil && *expected != version.rowVersion {
+		return nil, problemError(http.StatusConflict, client.SlugRevisionConflict, nil)
+	}
+
+	version.document, _ = encode(doc)
+	version.rowVersion++
+
+	return version, nil
+}
+
+func (l *fakeLibrary) publish(id string, revision int) (*fakeVersion, error) {
+	if l.publishErr != nil {
+		err := l.publishErr
+		l.publishErr = nil
+
+		return nil, err
+	}
+
+	version, err := l.get(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	if version.status != client.VersionStatusDraft {
+		return nil, problemError(http.StatusConflict, client.SlugImmutableState, nil)
+	}
+
+	version.status = client.VersionStatusPublished
+
+	if l.publishConflict {
+		l.publishConflict = false
+
+		return nil, problemError(http.StatusConflict, client.SlugImmutableState, nil)
+	}
+
+	return version, nil
+}
+
+// document decodes the stored document at revision of the lineage holding slug.
+func (l *fakeLibrary) document(t *testing.T, slug string, revision int) map[string]any {
+	t.Helper()
+
+	lineage, ok := l.lineages[slug]
+	if !ok {
+		t.Fatalf("no lineage holds %q", slug)
+	}
+
+	for _, version := range lineage.versions {
+		if version.revision == revision {
+			var doc map[string]any
+			if err := json.Unmarshal(version.document, &doc); err != nil {
+				t.Fatalf("stored document: %v", err)
+			}
+
+			return doc
+		}
+	}
+
+	t.Fatalf("%q has no revision %d", slug, revision)
+
+	return nil
+}
+
+// statuses lists the stored revisions as "rev:STATUS".
+func (l *fakeLibrary) statuses(slug string) []string {
+	lineage, ok := l.lineages[slug]
+	if !ok {
+		return nil
+	}
+
+	out := make([]string, 0, len(lineage.versions))
+	for _, version := range lineage.versions {
+		out = append(out, strconv.Itoa(version.revision)+":"+version.status)
+	}
+
+	return out
+}
+
+// fakeAPI is a scripted DeployAPI over an in-memory platform.
 type fakeAPI struct {
 	mu sync.Mutex
 
 	orgs         []client.Organization
 	environments []client.Environment
+	profiles     []client.ComputeProfile
+	profilesErr  error
 	existing     *client.Deployment
 	existingErr  error
+
+	components *fakeLibrary
+	blueprints *fakeLibrary
+
+	validation  *client.SpecValidationResult
+	validateErr error
+	validated   []any
 
 	// states is consumed one entry per GetDeployment call; the last entry
 	// repeats forever.
@@ -85,15 +342,19 @@ type fakeAPI struct {
 	// repeats forever.
 	endpoints [][]client.Endpoint
 	activity  []client.Activity
+	replicas  []client.ReplicaGroup
 
 	createDeploymentErr error
-	componentErr        error
-	openStream          func() (io.ReadCloser, error)
+	// deployRace makes :deployBlueprint lose a race: the named deployment
+	// appears, running revision raceRevision, and the call answers 409.
+	deployRace   bool
+	raceRevision int
+	updateErr    error
+	openStream   func() (io.ReadCloser, error)
 
 	calls          []string
-	deployedInputs []client.DeploymentDeployBlueprintInput
-	componentBody  *client.ComponentInput
-	blueprintBody  *client.BlueprintInput
+	deployedInputs []client.DeployBlueprintInput
+	updates        []client.DeploymentUpdateInput
 	getCount       int
 	endpointCount  int
 }
@@ -112,6 +373,32 @@ func (f *fakeAPI) recorded() []string {
 	return append([]string(nil), f.calls...)
 }
 
+// writes returns the recorded calls that change platform state.
+func (f *fakeAPI) writes() []string {
+	var out []string
+
+	for _, call := range f.recorded() {
+		for _, prefix := range []string{"Create", "Replace", "Publish", "DeployBlueprint", "UpdateDeployment", "DeploymentAction"} {
+			if strings.HasPrefix(call, prefix) {
+				out = append(out, call)
+
+				break
+			}
+		}
+	}
+
+	return out
+}
+
+func (f *fakeAPI) reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.calls = nil
+	f.deployedInputs = nil
+	f.updates = nil
+}
+
 func (f *fakeAPI) ListOrganizations(context.Context) ([]client.Organization, error) {
 	f.record("ListOrganizations")
 
@@ -122,6 +409,12 @@ func (f *fakeAPI) ListEnvironments(context.Context, string, string) ([]client.En
 	f.record("ListEnvironments")
 
 	return f.environments, nil
+}
+
+func (f *fakeAPI) ListComputeProfiles(context.Context) ([]client.ComputeProfile, error) {
+	f.record("ListComputeProfiles")
+
+	return f.profiles, f.profilesErr
 }
 
 func (f *fakeAPI) GetDeploymentByName(context.Context, string, string) (*client.Deployment, error) {
@@ -138,48 +431,194 @@ func (f *fakeAPI) GetDeploymentByName(context.Context, string, string) (*client.
 	return f.existing, nil
 }
 
-func (f *fakeAPI) CreateComponent(
-	_ context.Context, _ string, input *client.ComponentInput,
-) (*client.Component, error) {
-	f.record("CreateComponent")
+func (f *fakeAPI) ValidateComponent(_ context.Context, _ string, doc any, scope string) (*client.SpecValidationResult, error) {
+	f.record("ValidateComponent:" + scope)
 
 	f.mu.Lock()
-	f.componentBody = input
+	f.validated = append(f.validated, doc)
 	f.mu.Unlock()
 
-	if f.componentErr != nil {
-		return nil, f.componentErr
+	if f.validateErr != nil {
+		return nil, f.validateErr
 	}
 
-	return &client.Component{Metadata: client.ComponentMetadata{ID: "cmp-1", Slug: input.Metadata.Slug}}, nil
+	if f.validation != nil {
+		return f.validation, nil
+	}
+
+	return &client.SpecValidationResult{Status: client.ValidationValid}, nil
 }
 
-func (f *fakeAPI) PublishComponent(_ context.Context, id string) (*client.Component, error) {
-	f.record("PublishComponent")
+func componentVersion(id string, version *fakeVersion) *client.ComponentVersion {
+	return &client.ComponentVersion{
+		ComponentID: id, Revision: version.revision, Status: version.status,
+		Document: version.document, RowVersion: version.rowVersion,
+	}
+}
 
-	return &client.Component{Metadata: client.ComponentMetadata{ID: id, Slug: "api"}}, nil
+func blueprintVersion(id string, version *fakeVersion) *client.BlueprintVersion {
+	return &client.BlueprintVersion{
+		BlueprintID: id, Revision: version.revision, Status: version.status,
+		Document: version.document, RowVersion: version.rowVersion,
+	}
+}
+
+func (f *fakeAPI) ListComponentsBySlug(_ context.Context, _, slug string) ([]client.Component, error) {
+	f.record("ListComponentsBySlug")
+
+	if id := f.components.find(slug); id != "" {
+		return []client.Component{{ID: id, Slug: slug}}, nil
+	}
+
+	return nil, nil
+}
+
+func (f *fakeAPI) CreateComponent(
+	_ context.Context, _, slug string, doc *client.ComponentDocument,
+) (*client.ComponentVersion, error) {
+	f.record("CreateComponent")
+
+	id, version, err := f.components.create(slug, doc)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentVersion(id, version), nil
+}
+
+func (f *fakeAPI) LatestComponentRevision(_ context.Context, id string) (*client.VersionSummary, error) {
+	f.record("LatestComponentRevision")
+
+	return f.components.latest(id), nil
+}
+
+func (f *fakeAPI) GetComponentVersion(_ context.Context, id string, revision int) (*client.ComponentVersion, error) {
+	f.record("GetComponentVersion")
+
+	version, err := f.components.get(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentVersion(id, version), nil
+}
+
+func (f *fakeAPI) CreateComponentVersion(
+	_ context.Context, id string, doc *client.ComponentDocument,
+) (*client.ComponentVersion, error) {
+	f.record("CreateComponentVersion")
+
+	version, err := f.components.createVersion(id, doc)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentVersion(id, version), nil
+}
+
+func (f *fakeAPI) ReplaceComponentVersion(
+	_ context.Context, id string, revision int, doc *client.ComponentDocument, expected *int,
+) (*client.ComponentVersion, error) {
+	f.record("ReplaceComponentVersion")
+
+	version, err := f.components.replace(id, revision, doc, expected)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentVersion(id, version), nil
+}
+
+func (f *fakeAPI) PublishComponentVersion(_ context.Context, id string, revision int) (*client.ComponentVersion, error) {
+	f.record("PublishComponentVersion")
+
+	version, err := f.components.publish(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentVersion(id, version), nil
+}
+
+func (f *fakeAPI) ListBlueprintsBySlug(_ context.Context, _, slug string) ([]client.Blueprint, error) {
+	f.record("ListBlueprintsBySlug")
+
+	if id := f.blueprints.find(slug); id != "" {
+		return []client.Blueprint{{ID: id, Slug: slug}}, nil
+	}
+
+	return nil, nil
 }
 
 func (f *fakeAPI) CreateBlueprint(
-	_ context.Context, _ string, input *client.BlueprintInput,
-) (*client.Blueprint, error) {
+	_ context.Context, _, slug string, doc *client.BlueprintDocument,
+) (*client.BlueprintVersion, error) {
 	f.record("CreateBlueprint")
 
-	f.mu.Lock()
-	f.blueprintBody = input
-	f.mu.Unlock()
+	id, version, err := f.blueprints.create(slug, doc)
+	if err != nil {
+		return nil, err
+	}
 
-	return &client.Blueprint{Metadata: client.BlueprintMetadata{ID: "bp-1", Slug: input.Metadata.Slug}}, nil
+	return blueprintVersion(id, version), nil
 }
 
-func (f *fakeAPI) PublishBlueprint(_ context.Context, id string) (*client.Blueprint, error) {
-	f.record("PublishBlueprint")
+func (f *fakeAPI) LatestBlueprintRevision(_ context.Context, id string) (*client.VersionSummary, error) {
+	f.record("LatestBlueprintRevision")
 
-	return &client.Blueprint{Metadata: client.BlueprintMetadata{ID: id, Slug: "api"}}, nil
+	return f.blueprints.latest(id), nil
+}
+
+func (f *fakeAPI) GetBlueprintVersion(_ context.Context, id string, revision int) (*client.BlueprintVersion, error) {
+	f.record("GetBlueprintVersion")
+
+	version, err := f.blueprints.get(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	return blueprintVersion(id, version), nil
+}
+
+func (f *fakeAPI) CreateBlueprintVersion(
+	_ context.Context, id string, doc *client.BlueprintDocument,
+) (*client.BlueprintVersion, error) {
+	f.record("CreateBlueprintVersion")
+
+	version, err := f.blueprints.createVersion(id, doc)
+	if err != nil {
+		return nil, err
+	}
+
+	return blueprintVersion(id, version), nil
+}
+
+func (f *fakeAPI) ReplaceBlueprintVersion(
+	_ context.Context, id string, revision int, doc *client.BlueprintDocument, expected *int,
+) (*client.BlueprintVersion, error) {
+	f.record("ReplaceBlueprintVersion")
+
+	version, err := f.blueprints.replace(id, revision, doc, expected)
+	if err != nil {
+		return nil, err
+	}
+
+	return blueprintVersion(id, version), nil
+}
+
+func (f *fakeAPI) PublishBlueprintVersion(_ context.Context, id string, revision int) (*client.BlueprintVersion, error) {
+	f.record("PublishBlueprintVersion")
+
+	version, err := f.blueprints.publish(id, revision)
+	if err != nil {
+		return nil, err
+	}
+
+	return blueprintVersion(id, version), nil
 }
 
 func (f *fakeAPI) DeployBlueprint(
-	_ context.Context, _ string, input client.DeploymentDeployBlueprintInput,
+	_ context.Context, _ string, input client.DeployBlueprintInput,
 ) (*client.Deployment, error) {
 	f.record("DeployBlueprint")
 
@@ -191,10 +630,49 @@ func (f *fakeAPI) DeployBlueprint(
 		return nil, f.createDeploymentErr
 	}
 
-	return &client.Deployment{
-		Metadata: client.DeploymentMetadata{ID: "dep-1", Name: input.UserAssignedName},
+	if f.deployRace {
+		f.existing = &client.Deployment{
+			Metadata: client.DeploymentMetadata{ID: "dep-race", Name: input.Name},
+			Spec:     client.DeploymentSpec{BlueprintID: input.BlueprintID, BlueprintVersion: f.raceRevision},
+		}
+
+		return nil, problemError(http.StatusConflict, client.SlugResourceConflict, nil)
+	}
+
+	created := &client.Deployment{
+		Metadata: client.DeploymentMetadata{ID: "dep-1", Name: input.Name},
+		Spec:     client.DeploymentSpec{BlueprintID: input.BlueprintID, BlueprintVersion: input.Revision},
 		Status:   client.DeploymentStatus{Phase: workflow.PhaseProvisioning},
-	}, nil
+	}
+	f.existing = created
+
+	return created, nil
+}
+
+func (f *fakeAPI) UpdateDeployment(
+	_ context.Context, deploymentID string, input client.DeploymentUpdateInput,
+) (*client.Deployment, error) {
+	f.record("UpdateDeployment")
+
+	f.mu.Lock()
+	f.updates = append(f.updates, input)
+	f.mu.Unlock()
+
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+
+	updated := &client.Deployment{
+		Metadata: client.DeploymentMetadata{ID: deploymentID, Name: "api"},
+		Spec:     client.DeploymentSpec{BlueprintID: "bp-1", BlueprintVersion: input.Revision},
+		Status:   client.DeploymentStatus{Phase: workflow.PhaseProvisioning},
+	}
+
+	if f.existing != nil && input.Revision > 0 {
+		f.existing.Spec.BlueprintVersion = input.Revision
+	}
+
+	return updated, nil
 }
 
 func (f *fakeAPI) DeploymentAction(
@@ -206,6 +684,12 @@ func (f *fakeAPI) DeploymentAction(
 		Metadata: client.DeploymentMetadata{ID: deploymentID, Name: "api"},
 		Status:   client.DeploymentStatus{Phase: workflow.PhaseProvisioning},
 	}, nil
+}
+
+func (f *fakeAPI) ListReplicas(context.Context, string) ([]client.ReplicaGroup, error) {
+	f.record("ListReplicas")
+
+	return f.replicas, nil
 }
 
 func (f *fakeAPI) GetDeployment(context.Context, string) (*client.Deployment, error) {
@@ -280,15 +764,17 @@ func statusError(status int) error {
 type captureReporter struct {
 	mu         sync.Mutex
 	steps      []string
+	stepNotes  []string
 	activities []string
 	notes      []string
 }
 
-func (r *captureReporter) Step(id, state, _ string) {
+func (r *captureReporter) Step(id, state, note string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.steps = append(r.steps, id+"="+state)
+	r.stepNotes = append(r.stepNotes, id+"="+state+":"+note)
 }
 
 func (r *captureReporter) Activity(_, message string, _ time.Time) {
@@ -298,11 +784,17 @@ func (r *captureReporter) Activity(_, message string, _ time.Time) {
 	r.activities = append(r.activities, message)
 }
 
-func (r *captureReporter) Note(level, format string, _ ...any) {
+func (r *captureReporter) Note(level, format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.notes = append(r.notes, level+":"+format)
+
+	if len(args) > 0 {
+		if text, ok := args[0].(string); ok {
+			r.notes = append(r.notes, level+":"+text)
+		}
+	}
 }
 
 func (r *captureReporter) snapshot() (steps, activities, notes []string) {
@@ -314,7 +806,15 @@ func (r *captureReporter) snapshot() (steps, activities, notes []string) {
 		append([]string(nil), r.notes...)
 }
 
-// baseAPI returns a fake with a single org and a default STANDARD environment.
+func (r *captureReporter) stepNotesSnapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return append([]string(nil), r.stepNotes...)
+}
+
+// baseAPI returns a fake with a single org, a default STANDARD environment,
+// a recommended compute profile, and empty libraries.
 func baseAPI() *fakeAPI {
 	return &fakeAPI{
 		orgs: []client.Organization{{ID: "org-1", Name: "Acme", Handle: "acme"}},
@@ -325,17 +825,23 @@ func baseAPI() *fakeAPI {
 				Kind: client.EnvironmentKindStandard, IsDefaultForKind: true,
 			},
 		},
+		profiles: []client.ComputeProfile{
+			{Slug: "general.economy.nano", Status: client.ComputeProfileStatusActive},
+			{Slug: "general.standard.small", IsRecommended: true, Status: client.ComputeProfileStatusActive},
+		},
+		components: newFakeLibrary("cmp", client.ExtComponentID),
+		blueprints: newFakeLibrary("bp", client.ExtBlueprintID),
 	}
 }
 
 func baseInput() workflow.DeployInput {
 	return workflow.DeployInput{
-		Name:     "api",
-		Image:    "ghcr.io/acme/api:v1.4.2",
-		Kind:     "SERVICE",
-		Port:     8080,
-		Replicas: 2,
-		Env:      map[string]string{"LOG_LEVEL": "debug", "APP_ENV": "prod"},
+		Name:      "api",
+		Image:     "ghcr.io/acme/api:v1.4.2",
+		Kind:      "SERVICE",
+		Endpoints: map[string]workflow.DeployEndpoint{"http": {TargetPort: 8080}},
+		Replicas:  2,
+		Env:       map[string]string{"LOG_LEVEL": "debug", "APP_ENV": "prod"},
 	}
 }
 
@@ -394,9 +900,15 @@ func TestDeployCreatesPublishesAndSettles(t *testing.T) {
 		t.Errorf("environment = %q, want the default STANDARD one", result.Environment)
 	}
 
+	if result.Revision != 1 || result.Unchanged {
+		t.Errorf("revision = %d unchanged = %v, want a fresh revision 1", result.Revision, result.Unchanged)
+	}
+
 	want := []string{
-		"ListOrganizations", "ListEnvironments", "GetDeploymentByName",
-		"CreateComponent", "PublishComponent", "CreateBlueprint", "PublishBlueprint",
+		"ListOrganizations", "ListEnvironments", "ListComputeProfiles",
+		"ValidateComponent:PUBLICATION", "GetDeploymentByName",
+		"ListComponentsBySlug", "CreateComponent", "PublishComponentVersion",
+		"ListBlueprintsBySlug", "CreateBlueprint", "PublishBlueprintVersion",
 		"DeployBlueprint",
 	}
 	if got := api.recorded(); !strings.HasPrefix(strings.Join(got, ","), strings.Join(want, ",")) {
@@ -404,136 +916,45 @@ func TestDeployCreatesPublishesAndSettles(t *testing.T) {
 	}
 
 	steps, _, _ := rep.snapshot()
-	for _, wantStep := range []string{"validate=done", "resolve=done", "component=done", "blueprint=done", "deploy=done", "watch=done"} {
+	for _, wantStep := range []string{
+		"validate=done", "resolve=done", "verify=done", "component=done", "blueprint=done", "deploy=done", "watch=done",
+	} {
 		if !contains(steps, wantStep) {
 			t.Errorf("steps %v missing %s", steps, wantStep)
 		}
 	}
 }
 
-func TestDeployCompilesComponentAndBlueprintBodies(t *testing.T) {
-	t.Parallel()
-
-	api := baseAPI()
-	api.states = []*client.Deployment{deployment(workflow.PhaseActive, workflow.ReadinessReady)}
-
-	if _, err := workflow.Deploy(
-		t.Context(), api, nil, baseInput(), pollOptions(newFakeClock()),
-	); err != nil {
-		t.Fatalf("Deploy() error = %v", err)
-	}
-
-	workload := api.componentBody.Spec.Workload
-	if workload.Source.Type != client.SourceTypeImage || workload.Source.Ref != "ghcr.io/acme/api:v1.4.2" {
-		t.Errorf("source = %+v", workload.Source)
-	}
-
-	if endpoint, ok := workload.Endpoints["http"]; !ok || endpoint.ContainerPort != 8080 {
-		t.Errorf("endpoints = %+v", workload.Endpoints)
-	}
-
-	// Env vars are sorted so two identical deploys produce identical requests.
-	if len(workload.EnvVars) != 2 || workload.EnvVars[0].Key != "APP_ENV" || workload.EnvVars[1].Key != "LOG_LEVEL" {
-		t.Errorf("envVars = %+v, want sorted by key", workload.EnvVars)
-	}
-
-	if workload.EnvVars[0].Value.Type != client.EnvValueLiteral {
-		t.Errorf("env value type = %q", workload.EnvVars[0].Value.Type)
-	}
-
-	component, ok := api.blueprintBody.Spec.Components["api"]
-	if !ok || component.ComponentID != "cmp-1" {
-		t.Errorf("blueprint components = %+v", api.blueprintBody.Spec.Components)
-	}
-
-	if api.deployedInputs[0].UserAssignedName != "api" || api.deployedInputs[0].Replicas != 2 {
-		t.Errorf("deploy input = %+v", api.deployedInputs[0])
-	}
-}
-
-func TestDeployUpdatesExistingDeploymentInPlace(t *testing.T) {
-	t.Parallel()
-
-	api := baseAPI()
-	api.existing = deployment(workflow.PhaseActive, workflow.ReadinessReady)
-	api.states = []*client.Deployment{deployment(workflow.PhaseActive, workflow.ReadinessReady)}
-
-	result, err := workflow.Deploy(
-		t.Context(), api, nil, baseInput(), pollOptions(newFakeClock()))
-	if err != nil {
-		t.Fatalf("Deploy() error = %v", err)
-	}
-
-	calls := api.recorded()
-	if !contains(calls, "DeploymentAction:redeploy") {
-		t.Errorf("calls = %v, want a redeploy", calls)
-	}
-
-	if contains(calls, "DeployBlueprint") {
-		t.Error("an existing deployment must never be recreated")
-	}
-
-	if result.DeploymentID != "dep-1" {
-		t.Errorf("id = %q, want the existing id preserved", result.DeploymentID)
-	}
-}
-
-func TestDeployConflictOnCreateFallsBackToTheExisting(t *testing.T) {
-	t.Parallel()
-
-	api := baseAPI()
-	api.createDeploymentErr = statusError(http.StatusConflict)
-	api.states = []*client.Deployment{deployment(workflow.PhaseActive, workflow.ReadinessReady)}
-
-	// The lookup misses first (so the CLI creates), then hits (the race winner).
-	api.existing = nil
-
-	conflicting := &conflictAPI{fakeAPI: api, appearsAfter: 1}
-
-	result, err := workflow.Deploy(
-		t.Context(), conflicting, nil, baseInput(), pollOptions(newFakeClock()))
-	if err != nil {
-		t.Fatalf("Deploy() error = %v", err)
-	}
-
-	if !contains(api.recorded(), "DeploymentAction:redeploy") {
-		t.Errorf("calls = %v, want the conflict to converge on a redeploy", api.recorded())
-	}
-
-	if result.Outcome != workflow.OutcomeSucceeded {
-		t.Errorf("outcome = %v", result.Outcome)
-	}
-}
-
-// conflictAPI makes the deployment appear on the Nth lookup, modeling another
-// deploy of the same name winning the race.
-type conflictAPI struct {
-	*fakeAPI
-	appearsAfter int
-	lookups      int
-}
-
-func (c *conflictAPI) GetDeploymentByName(
-	ctx context.Context, orgID, name string,
-) (*client.Deployment, error) {
-	c.lookups++
-	if c.lookups > c.appearsAfter {
-		c.existing = deployment(workflow.PhaseActive, workflow.ReadinessReady)
-	}
-
-	return c.fakeAPI.GetDeploymentByName(ctx, orgID, name)
-}
-
-func TestDeployRejectsFloatingImageBeforeAnyNetworkCall(t *testing.T) {
+func TestDeployWarnsAboutFloatingTagsInsteadOfRefusing(t *testing.T) {
 	t.Parallel()
 
 	api := baseAPI()
 	input := baseInput()
 	input.Image = "ghcr.io/acme/api:latest"
+	rep := &captureReporter{}
+
+	if _, err := workflow.Deploy(t.Context(), api, rep, input, workflow.DeployOptions{Detach: true}); err != nil {
+		t.Fatalf("Deploy() error = %v; the platform accepts every tag", err)
+	}
+
+	_, _, notes := rep.snapshot()
+	if !slices.ContainsFunc(notes, func(note string) bool { return strings.Contains(note, "floating tag :latest") }) {
+		t.Errorf("notes = %v, want a floating-tag warning", notes)
+	}
+}
+
+func TestDeployRejectsAMalformedImageBeforeAnyNetworkCall(t *testing.T) {
+	t.Parallel()
+
+	api := baseAPI()
+	input := baseInput()
+	input.Image = "ghcr.io/Acme/API:v1"
 
 	_, err := workflow.Deploy(t.Context(), api, nil, input, pollOptions(newFakeClock()))
-	if err == nil {
-		t.Fatal("expected a floating tag to be rejected")
+
+	var usage *workflow.UsageError
+	if !errors.As(err, &usage) {
+		t.Fatalf("error = %v, want a UsageError", err)
 	}
 
 	if len(api.recorded()) != 0 {
@@ -1021,7 +1442,7 @@ func TestDeployComponentFailureStopsBeforeSubmitting(t *testing.T) {
 	t.Parallel()
 
 	api := baseAPI()
-	api.componentErr = statusError(http.StatusUnprocessableEntity)
+	api.components.createErr = statusError(http.StatusUnprocessableEntity)
 
 	if _, err := workflow.Deploy(
 		t.Context(), api, nil, baseInput(), pollOptions(newFakeClock()),

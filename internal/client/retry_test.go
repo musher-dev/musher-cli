@@ -573,9 +573,7 @@ func TestRetryOnTransportError(t *testing.T) {
 	t.Run("GET retries then fails", func(t *testing.T) {
 		t.Parallel()
 
-		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		addr := srv.URL
-		srv.Close() // Nothing is listening: every attempt is a transport error.
+		addr := droppingServerURL(t) // Every attempt is a transport error.
 
 		created, rec := retryClient(addr, 3)
 
@@ -597,9 +595,7 @@ func TestRetryOnTransportError(t *testing.T) {
 	t.Run("POST does not retry", func(t *testing.T) {
 		t.Parallel()
 
-		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		addr := srv.URL
-		srv.Close()
+		addr := droppingServerURL(t)
 
 		created, rec := retryClient(addr, 3)
 
@@ -727,4 +723,33 @@ func TestSleepContext(t *testing.T) {
 			t.Errorf("error = %v, want context.Canceled", err)
 		}
 	})
+}
+
+// droppingServerURL starts a server that accepts each connection and closes it
+// without answering, so every request fails at the transport layer. Unlike
+// closing an httptest server and reusing its URL, the port stays bound for the
+// whole test, so a parallel test cannot pick it up and answer instead.
+func droppingServerURL(t *testing.T) string {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("response writer does not support hijacking")
+
+			return
+		}
+
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+
+			return
+		}
+
+		_ = conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv.URL
 }

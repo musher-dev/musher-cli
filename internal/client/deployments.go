@@ -20,6 +20,7 @@ const (
 	routeDeployBlueprint  = "/v1/organizations/{org}/deployments:deployBlueprint"
 	routeDeployment       = "/v1/deployments/{id}"
 	routeDeploymentAction = "/v1/deployments/{id}:{action}"
+	routeDeploymentUpdate = "/v1/deployments/{id}:update"
 	routeDeploymentRepl   = "/v1/deployments/{id}/replicas"
 	routeDeploymentActs   = "/v1/deployments/{id}/activity"
 	routeDeploymentLogs   = "/v1/deployments/{id}/log-entries"
@@ -39,8 +40,37 @@ const (
 	ActionRollback = "rollback"
 )
 
-// LogStreamRuntime selects the runtime log stream on the log-entries routes.
-const LogStreamRuntime = "RUNTIME"
+// Log streams accepted by the log-entries and log-tail routes.
+const (
+	// LogStreamRuntime is the workload's own output.
+	LogStreamRuntime = "RUNTIME"
+	// LogStreamSystem is the platform's account of the workload.
+	LogStreamSystem = "SYSTEM"
+	// LogStreamBuild is image build output.
+	LogStreamBuild = "BUILD"
+)
+
+// logSeverityRanks orders the platform's severity vocabulary.
+var logSeverityRanks = map[string]int{
+	"TRACE": 0,
+	"DEBUG": 1,
+	"INFO":  2,
+	"WARN":  3,
+	"ERROR": 4,
+	"FATAL": 5,
+}
+
+// LogSeverityRank orders a log severity for minimum-severity filters. Unknown
+// values rank above everything, so a new severity is never silently filtered
+// away.
+func LogSeverityRank(value string) int {
+	rank, ok := logSeverityRanks[strings.ToUpper(strings.TrimSpace(value))]
+	if !ok {
+		return len(logSeverityRanks)
+	}
+
+	return rank
+}
 
 // APITime is a timestamp that decodes leniently.
 //
@@ -107,9 +137,12 @@ type DeploymentMetadata struct {
 
 // DeploymentSpec is the desired state of a deployment.
 type DeploymentSpec struct {
-	BlueprintID     string         `json:"blueprintId,omitempty"`
-	EnvironmentID   string         `json:"environmentId,omitempty"`
-	ParameterValues map[string]any `json:"parameterValues,omitempty"`
+	BlueprintID string `json:"blueprintId,omitempty"`
+	// BlueprintVersion is the blueprint revision the deployment runs. It is
+	// what lets a redeploy of an unchanged file be a no-op.
+	BlueprintVersion int    `json:"blueprintVersion,omitempty"`
+	EnvironmentID    string `json:"environmentId,omitempty"`
+	ResolutionID     string `json:"resolutionId,omitempty"`
 }
 
 // DeploymentCondition is one entry of status.conditions.
@@ -236,13 +269,36 @@ type Deployment struct {
 	Status   DeploymentStatus   `json:"status"`
 }
 
-// DeploymentDeployBlueprintInput is the body of :deployBlueprint.
-type DeploymentDeployBlueprintInput struct {
-	BlueprintID      string         `json:"blueprintId"`
-	EnvironmentID    string         `json:"environmentId"`
-	ParameterValues  map[string]any `json:"parameterValues,omitempty"`
-	Replicas         int            `json:"replicas,omitempty"`
-	UserAssignedName string         `json:"userAssignedName,omitempty"`
+// DeployBlueprintInput is the body of :deployBlueprint.
+//
+// The route declares additionalProperties:false, so this type carries exactly
+// the members the contract names and nothing else.
+type DeployBlueprintInput struct {
+	BlueprintID   string         `json:"blueprintId"`
+	Revision      int            `json:"revision"`
+	Name          string         `json:"name"`
+	EnvironmentID string         `json:"environmentId,omitempty"`
+	Replicas      int            `json:"replicas,omitempty"`
+	Parameters    map[string]any `json:"parameters,omitempty"`
+}
+
+// Refresh scopes accepted by :update. IMAGES re-resolves floating image tags
+// without a new blueprint revision.
+const (
+	RefreshVariables   = "VARIABLES"
+	RefreshImages      = "IMAGES"
+	RefreshCompute     = "COMPUTE"
+	RefreshConnections = "CONNECTIONS"
+)
+
+// DeploymentUpdateInput is the body of POST /v1/deployments/{id}:update.
+type DeploymentUpdateInput struct {
+	// Revision moves the deployment to another published blueprint revision.
+	Revision int `json:"revision,omitempty"`
+	// Parameters replaces parameter values.
+	Parameters map[string]any `json:"parameters,omitempty"`
+	// Refresh re-resolves the named scopes in place.
+	Refresh []string `json:"refresh,omitempty"`
 }
 
 // deploymentActionInput is the body shared by every lifecycle action.
@@ -310,9 +366,9 @@ func (c *Client) ListDeployments(
 
 // GetDeploymentByName resolves a deployment by its user-assigned name.
 //
-// This is the natural-key read that makes `musher deploy` idempotent: the write
-// routes do not accept an Idempotency-Key, so create-vs-update is decided by
-// looking the name up first.
+// This is the natural-key read that makes `musher deploy` idempotent:
+// create-vs-update is decided by looking the name up first, so re-running the
+// same command converges instead of duplicating.
 func (c *Client) GetDeploymentByName(ctx context.Context, orgID, name string) (*Deployment, error) {
 	query := url.Values{}
 	query.Set("name", name)
@@ -334,7 +390,7 @@ func (c *Client) GetDeploymentByName(ctx context.Context, orgID, name string) (*
 func (c *Client) DeployBlueprint(
 	ctx context.Context,
 	orgID string,
-	input DeploymentDeployBlueprintInput,
+	input DeployBlueprintInput,
 ) (*Deployment, error) {
 	deployment, _, err := c.DeployBlueprintWithMeta(ctx, orgID, input)
 
@@ -346,7 +402,7 @@ func (c *Client) DeployBlueprint(
 func (c *Client) DeployBlueprintWithMeta(
 	ctx context.Context,
 	orgID string,
-	input DeploymentDeployBlueprintInput,
+	input DeployBlueprintInput,
 ) (*Deployment, *ResponseMeta, error) {
 	return do[Deployment](ctx, c, request{
 		method: http.MethodPost,
@@ -362,6 +418,26 @@ func (c *Client) GetDeployment(ctx context.Context, deploymentID string) (*Deplo
 		method: http.MethodGet,
 		path:   []string{"v1", "deployments", deploymentID},
 		op:     routeDeployment,
+	})
+
+	return deployment, err
+}
+
+// UpdateDeployment moves a deployment to a new blueprint revision, changes
+// its parameters, or refreshes it in place.
+//
+// This, not :redeploy, is how a new image reaches a running deployment:
+// :redeploy replays the recorded resolution and cannot change what runs.
+func (c *Client) UpdateDeployment(
+	ctx context.Context,
+	deploymentID string,
+	input DeploymentUpdateInput,
+) (*Deployment, error) {
+	deployment, _, err := do[Deployment](ctx, c, request{
+		method: http.MethodPost,
+		path:   []string{"v1", "deployments", deploymentID + ":update"},
+		body:   input,
+		op:     routeDeploymentUpdate,
 	})
 
 	return deployment, err

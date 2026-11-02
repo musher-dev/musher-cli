@@ -19,3 +19,11 @@ stdout 'list'
 stdout 'active'
 stdout 'create'
 stdout 'delete'
+
+# build commands
+exec $MUSHER_BIN --no-color --no-input init --help
+stdout '--repository'
+stdout '--buildpacks'
+exec $MUSHER_BIN --no-color --no-input build --help
+stdout '--dockerfile'
+stdout '--platform'

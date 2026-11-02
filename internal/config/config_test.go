@@ -23,6 +23,9 @@ var clearedEnv = []string{
 	"MUSHER_DEPLOY_WAIT",
 	"MUSHER_DEPLOY_TIMEOUT",
 	"MUSHER_DEPLOY_SIZE",
+	"MUSHER_BUILD_REPOSITORY",
+	"MUSHER_BUILD_PLATFORM",
+	"MUSHER_BUILD_BUILDKIT_HOST",
 	"MUSHER_PROFILE",
 }
 
@@ -111,6 +114,18 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Errorf("DeploySize() = %q, want empty", got)
 	}
 
+	if got := cfg.BuildRepository(); got != "" {
+		t.Errorf("BuildRepository() = %q, want empty", got)
+	}
+
+	if got := cfg.BuildPlatform(); got != DefaultBuildPlatform {
+		t.Errorf("BuildPlatform() = %q, want %q", got, DefaultBuildPlatform)
+	}
+
+	if got := cfg.BuildKitHost(); got != "" {
+		t.Errorf("BuildKitHost() = %q, want empty", got)
+	}
+
 	if got := cfg.APIKeyOverride(); got != "" {
 		t.Errorf("APIKeyOverride() = %q, want empty", got)
 	}
@@ -147,6 +162,10 @@ deploy:
   wait: false
   timeout: 30m
   size: cpu-small
+build:
+  repository: " ghcr.io/acme/web "
+  platform: linux/arm64
+  buildkit_host: tcp://buildkitd:1234
 `)
 
 	cfg := Load()
@@ -181,6 +200,18 @@ deploy:
 
 	if got := cfg.DeploySize(); got != "cpu-small" {
 		t.Errorf("DeploySize() = %q, want %q", got, "cpu-small")
+	}
+
+	if got := cfg.BuildRepository(); got != "ghcr.io/acme/web" {
+		t.Errorf("BuildRepository() = %q, want %q", got, "ghcr.io/acme/web")
+	}
+
+	if got := cfg.BuildPlatform(); got != "linux/arm64" {
+		t.Errorf("BuildPlatform() = %q, want %q", got, "linux/arm64")
+	}
+
+	if got := cfg.BuildKitHost(); got != "tcp://buildkitd:1234" {
+		t.Errorf("BuildKitHost() = %q, want %q", got, "tcp://buildkitd:1234")
 	}
 }
 
@@ -377,6 +408,9 @@ func TestIsKnownKey(t *testing.T) {
 		{"deploy.wait", true},
 		{"deploy.timeout", true},
 		{"deploy.size", true},
+		{"build.repository", true},
+		{"build.platform", true},
+		{"build.buildkit_host", true},
 		{"oci.registry_url", false},
 		{"harness.scrollback_lines", false},
 		{"unknown.key", false},
@@ -549,5 +583,19 @@ func TestFromContext_NilFallsBack(t *testing.T) {
 	got := FromContext(t.Context())
 	if got == nil {
 		t.Fatal("FromContext returned nil for empty context")
+	}
+}
+
+func TestBuildPlatform_BlankFallsBackToDefault(t *testing.T) {
+	dir := isolateConfig(t)
+
+	writeConfigFile(t, dir, `build:
+  platform: "  "
+`)
+
+	cfg := Load()
+
+	if got := cfg.BuildPlatform(); got != DefaultBuildPlatform {
+		t.Errorf("BuildPlatform() = %q, want %q", got, DefaultBuildPlatform)
 	}
 }

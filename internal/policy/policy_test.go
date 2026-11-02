@@ -25,6 +25,7 @@ var (
 
 	platformCore = map[string]bool{
 		moduleRoot + "/internal/auth":          true,
+		moduleRoot + "/internal/build":         true,
 		moduleRoot + "/internal/buildinfo":     true,
 		moduleRoot + "/internal/client":        true,
 		moduleRoot + "/internal/config":        true,

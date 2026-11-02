@@ -11,15 +11,19 @@ exec $MUSHER_BIN --no-color --no-input --quiet version
 exec $MUSHER_BIN --no-color --no-input --help
 stdout 'Deploy and manage containerized applications on the Musher platform'
 
-# the documented flag set, with --no-tui gone along with the TUI
+# the documented flag set
 stdout '--api-key'
 stdout '--api-url'
 stdout '--json'
 stdout '--no-color'
 stdout '--no-input'
+stdout '--no-tui'
 stdout '--profile'
 stdout '--quiet'
-! stdout '--no-tui'
 
-# --no-tui is no longer accepted at all
-! exec $MUSHER_BIN --no-color --no-input --no-tui version
+# --no-tui is accepted by every command
+exec $MUSHER_BIN --no-color --no-input --no-tui version
+
+# a bare musher without a terminal prints help instead of opening the TUI
+exec $MUSHER_BIN --no-color
+stdout 'Deploy and manage containerized applications on the Musher platform'

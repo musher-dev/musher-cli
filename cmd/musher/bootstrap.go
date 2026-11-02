@@ -13,36 +13,48 @@ import (
 	"github.com/musher-dev/musher-cli/internal/output"
 )
 
-type rootRuntimeState struct {
-	out *output.Writer
+// rootFlags are the persistent flag values the root command hands to
+// configureRootRuntime.
+type rootFlags struct {
+	jsonOutput bool
+	quiet      bool
+	noInput    bool
+	noColor    bool
+	noTUI      bool
+	logLevel   string
+	logFormat  string
+	logFile    string
+	logStderr  string
 }
 
-func configureRootRuntime(
-	cmd *cobra.Command,
-	out *output.Writer,
-	jsonOutput bool,
-	quiet bool,
-	noInput bool,
-	noColor bool,
-	logLevel string,
-	logFormat string,
-	logFile string,
-	logStderr string,
-) (*rootRuntimeState, error) {
-	out.JSON = pickBoolFlagOrEnv(jsonOutput, env.JSON)
-	out.Quiet = pickBoolFlagOrEnv(quiet, env.Quiet)
-	out.NoInput = pickBoolFlagOrEnv(noInput, env.NoInput) || pickBoolFlagOrEnv(false, env.CI)
+type rootRuntimeState struct {
+	out *output.Writer
 
-	if noColor {
+	// launchTUI reports that this invocation is a bare `musher` that will
+	// open the interactive home screen rather than print help.
+	launchTUI bool
+}
+
+func configureRootRuntime(cmd *cobra.Command, out *output.Writer, flags *rootFlags) (*rootRuntimeState, error) {
+	out.JSON = pickBoolFlagOrEnv(flags.jsonOutput, env.JSON)
+	out.Quiet = pickBoolFlagOrEnv(flags.quiet, env.Quiet)
+	out.NoInput = pickBoolFlagOrEnv(flags.noInput, env.NoInput) || pickBoolFlagOrEnv(false, env.CI)
+
+	if flags.noColor {
 		out.SetNoColor(true)
 	}
 
+	// Decided before the logger exists: the home screen owns the terminal
+	// through the alternate screen, and structured logs written to stderr
+	// would draw over it.
+	launchTUI := cmd == cmd.Root() && shouldLaunchTUI(gatherTUIConditions(out, flags.noTUI))
+
 	logCfg := observability.Config{
-		Level:          pickFlagOrEnv(logLevel, env.LogLevel, "info"),
-		Format:         pickFlagOrEnv(logFormat, env.LogFormat, "json"),
-		LogFile:        pickFlagOrEnv(logFile, env.LogFile, ""),
-		StderrMode:     pickFlagOrEnv(logStderr, env.LogStderr, "auto"),
-		InteractiveTTY: false,
+		Level:          pickFlagOrEnv(flags.logLevel, env.LogLevel, "info"),
+		Format:         pickFlagOrEnv(flags.logFormat, env.LogFormat, "json"),
+		LogFile:        pickFlagOrEnv(flags.logFile, env.LogFile, ""),
+		StderrMode:     tuiStderrMode(pickFlagOrEnv(flags.logStderr, env.LogStderr, "auto"), launchTUI),
+		InteractiveTTY: launchTUI,
 		SessionID:      uuid.NewString(),
 		CommandPath:    cmd.CommandPath(),
 		Version:        version,
@@ -66,7 +78,25 @@ func configureRootRuntime(
 		cmd.PostRunE = wrapPostRunCleanup(cmd.PostRunE, cleanup)
 	}
 
-	return &rootRuntimeState{out: out}, nil
+	return &rootRuntimeState{out: out, launchTUI: launchTUI}, nil
+}
+
+// tuiStderrMode keeps structured logs off stderr while the TUI runs: "auto"
+// already resolves to off for an interactive terminal, and an explicit "on"
+// is downgraded because it would corrupt the alternate screen. Logs still go
+// to --log-file or the default log file. Unknown values pass through so the
+// logger reports them.
+func tuiStderrMode(mode string, launchTUI bool) string {
+	if !launchTUI {
+		return mode
+	}
+
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "on", "true", "1":
+		return "off"
+	default:
+		return mode
+	}
 }
 
 func wrapPostRunCleanup(postRun func(*cobra.Command, []string) error, cleanup func() error) func(*cobra.Command, []string) error {

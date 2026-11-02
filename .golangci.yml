@@ -154,11 +154,31 @@ linters:
             - "**/internal/workflow/**/*.go"
             - "**/internal/deployspec/*.go"
             - "**/internal/deployspec/**/*.go"
+            - "**/internal/build/*.go"
+            - "**/internal/build/**/*.go"
           deny:
             - pkg: github.com/musher-dev/musher-cli/internal/output
               desc: platform/core packages must not depend on output
             - pkg: github.com/musher-dev/musher-cli/internal/prompt
               desc: platform/core packages must not depend on prompt
+        build_engine_isolation:
+          # The container toolchains (BuildKit, pack, the docker CLI and Engine
+          # client, go-containerregistry) are a large dependency surface. Only
+          # the build engine may touch them, so the rest of the CLI stays
+          # independent of their APIs and release cadence.
+          files:
+            - "**/*.go"
+            - "!**/internal/build/*.go"
+            - "!**/internal/build/**/*.go"
+          deny:
+            - pkg: github.com/moby
+              desc: only internal/build may import BuildKit and the Docker Engine client
+            - pkg: github.com/buildpacks
+              desc: only internal/build may import the pack library
+            - pkg: github.com/docker
+              desc: only internal/build may import the docker CLI packages
+            - pkg: github.com/google/go-containerregistry
+              desc: only internal/build may import go-containerregistry
         testutil_no_production:
           files:
             - "!**/*_test.go"

@@ -131,10 +131,9 @@
   },
 
   "waitFor": "postCreateCommand",
-  "postCreateCommand": {
-    "fix-crlf": "find .devcontainer/scripts -type f -name '*.sh' -exec sed -i 's/\\r$//' {} +",
-    "setup": ["bash", ".devcontainer/scripts/post-create.sh"]
-  },
+  // A single string runs sequentially; the object form runs entries in
+  // parallel, which let setup start before the CRLF strip finished.
+  "postCreateCommand": "find .devcontainer/scripts -type f -name '*.sh' -exec sed -i 's/\\r$//' {} + && bash .devcontainer/scripts/post-create.sh",
   "postStartCommand": ["bash", ".devcontainer/scripts/startup.sh"],
   // post-attach finishes the GitHub credential once VS Code has copied the
   // host's ~/.gitconfig, which happens only after post-create.
