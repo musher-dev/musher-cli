@@ -695,7 +695,7 @@ func TestConvergeWarnsWhenReplicasCannotChange(t *testing.T) {
 	}
 }
 
-func TestConvergeBuildWithoutAnImageIsNotSupportedYet(t *testing.T) {
+func TestConvergeBuildWithoutABuilderIsAUsageError(t *testing.T) {
 	t.Parallel()
 
 	api := baseAPI()
@@ -706,8 +706,8 @@ func TestConvergeBuildWithoutAnImageIsNotSupportedYet(t *testing.T) {
 	_, err := workflow.Deploy(t.Context(), api, nil, input, detached())
 
 	var usage *workflow.UsageError
-	if !errors.As(err, &usage) || !strings.Contains(err.Error(), "build support arrives in the next commit") {
-		t.Fatalf("error = %v, want a usage error about build support", err)
+	if !errors.As(err, &usage) || !strings.Contains(err.Error(), "this deploy does not build") {
+		t.Fatalf("error = %v, want a usage error asking for --image", err)
 	}
 
 	if len(api.recorded()) != 0 {

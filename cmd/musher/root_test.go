@@ -242,6 +242,7 @@ func TestRootCmdGroups(t *testing.T) {
 
 	groups := root.Groups()
 	wantGroups := map[string]bool{
+		groupBuild:       false,
 		groupDeploy:      false,
 		groupAuth:        false,
 		groupMaintenance: false,
@@ -268,6 +269,8 @@ func TestRootCmdRegistersAllTopLevelCommands(t *testing.T) {
 	root := newRootCmd()
 
 	want := map[string]bool{
+		"init":       false,
+		"build":      false,
 		"deploy":     false,
 		"list":       false,
 		"status":     false,

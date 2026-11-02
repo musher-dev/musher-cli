@@ -312,3 +312,37 @@ func TestLoad(t *testing.T) {
 		t.Error("expected an error for a missing file")
 	}
 }
+
+func TestEncodeRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	app := &App{
+		APIVersion: APIVersion,
+		Kind:       KindApp,
+		Metadata:   AppMetadata{Name: "web"},
+		Spec: AppSpec{Workload: AppWorkload{
+			Kind: KindService,
+			Build: &AppBuild{
+				Repository: "ghcr.io/acme/web",
+				Dockerfile: "Dockerfile",
+				Arguments:  map[string]string{"NODE_ENV": "production"},
+				Secrets:    map[string]AppBuildSecret{"NPM_TOKEN": {Env: "NPM_TOKEN"}},
+			},
+			Endpoints: map[string]AppEndpoint{"http": {TargetPort: 8080}},
+		}},
+	}
+
+	data, err := Encode(app)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	parsed, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse(Encode()) error = %v\n%s", err, data)
+	}
+
+	if parsed.Spec.Workload.Build.Secrets["NPM_TOKEN"].Env != "NPM_TOKEN" || parsed.Spec.Workload.Endpoints["http"].Port() != 8080 {
+		t.Errorf("parsed = %+v", parsed.Spec.Workload)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/musher-dev/musher-cli/internal/build"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/client/stream"
 	"github.com/musher-dev/musher-cli/internal/deployspec"
@@ -19,11 +20,11 @@ import (
 // a front end can key a checklist off them without parsing prose.
 const (
 	StepValidate = "validate"
-	// StepBuild builds the image from a local recipe. Reserved for the build
-	// engine; this package does not emit it yet.
+	// StepBuild builds the image from a local recipe. It runs first, and only
+	// when the input has a recipe, no image, and DeployOptions.Build is set.
 	StepBuild = "build"
-	// StepPush pushes the built image to its repository. Reserved for the
-	// build engine; this package does not emit it yet.
+	// StepPush pushes the built image to its repository. It follows StepBuild;
+	// its done note is the pushed, digest-pinned reference.
 	StepPush      = "push"
 	StepResolve   = "resolve"
 	StepVerify    = "verify"
@@ -88,8 +89,8 @@ type DeployInput struct {
 	// Name is the natural key: the deployment name, and the slug of the
 	// component and blueprint compiled for it.
 	Name string
-	// Image is the container image to run. Required unless Build is set, and
-	// even then until the build engine lands.
+	// Image is the container image to run. Required unless Build is set and
+	// DeployOptions.Build can build it.
 	Image        string
 	Environment  string
 	Organization string
@@ -109,6 +110,9 @@ type DeployInput struct {
 	// Build is the local build recipe from musher.yaml. It is never sent to
 	// the platform.
 	Build *deployspec.AppBuild
+	// BuildRoot is the directory the recipe's context is relative to: the
+	// directory holding musher.yaml. Empty is the working directory.
+	BuildRoot string
 }
 
 // DeployOptions tunes how the deploy is driven.
@@ -134,6 +138,12 @@ type DeployOptions struct {
 	// revision: a digest-pinned image is redeployed, a tagged one has its
 	// image re-resolved.
 	Force bool
+	// Build builds the image when the input carries a recipe and no image.
+	// Nil makes such an input a usage error.
+	Build *DeployBuild
+	// ImageIsPublic probes whether the image is anonymously pullable, for the
+	// advisory registry credential check. Nil skips the check.
+	ImageIsPublic ImageProbe
 }
 
 // DeployError is the platform's own account of why a deployment failed.
@@ -187,10 +197,13 @@ type DeployResult struct {
 	// Unchanged is true when the deployment already ran Revision and nothing
 	// was submitted.
 	Unchanged bool
-	Duration  time.Duration
-	Detached  bool
-	Outcome   Outcome
-	Err       *DeployError
+	// Built is the image this deploy built and pushed, or nil when it
+	// deployed an existing image.
+	Built    *build.Result
+	Duration time.Duration
+	Detached bool
+	Outcome  Outcome
+	Err      *DeployError
 }
 
 // Reporter receives the narrative of a deploy.
@@ -331,14 +344,21 @@ type deployRun struct {
 
 // execute runs the deploy sequence end to end.
 func (r *deployRun) execute(ctx context.Context, input *DeployInput) (*DeployResult, error) {
-	if err := r.validate(input); err != nil {
+	built, err := r.buildImage(ctx, input)
+	if err != nil {
 		return nil, err
+	}
+
+	if validateErr := r.validate(input); validateErr != nil {
+		return nil, validateErr
 	}
 
 	environment, err := r.resolve(ctx, input)
 	if err != nil {
 		return nil, err
 	}
+
+	r.checkRegistryCredential(ctx, input.Image)
 
 	deployment, err := r.submit(ctx, input, environment)
 	if err != nil {
@@ -356,6 +376,7 @@ func (r *deployRun) execute(ctx context.Context, input *DeployInput) (*DeployRes
 		Replicas:     input.Replicas,
 		Revision:     r.revision,
 		Unchanged:    r.unchanged,
+		Built:        built,
 		Outcome:      OutcomePending,
 	}
 
@@ -441,8 +462,7 @@ func (r *deployRun) validate(input *DeployInput) error {
 		r.rep.Step(StepValidate, StateFailed, "no image to deploy")
 
 		return &UsageError{Err: repoerrors.Errorf(
-			"musher.yaml has a build recipe, but building is not supported yet " +
-				"(build support arrives in the next commit); build and push the image yourself and pass --image")}
+			"musher.yaml has a build recipe, but this deploy does not build; pass --image to deploy an existing image")}
 	}
 
 	if err := deployspec.ValidateImageRef(input.Image); err != nil {

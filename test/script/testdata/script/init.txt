@@ -1,0 +1,56 @@
+# init writes an explicit Dockerfile recipe and prints only the path on stdout
+exec $MUSHER_BIN --no-color --no-input init app --repository ghcr.io/acme/web --port 3000
+stdout 'musher.yaml$'
+! stdout 'Recipe'
+stderr 'Recipe: Dockerfile Dockerfile'
+exists app/musher.yaml
+grep 'dockerfile: Dockerfile' app/musher.yaml
+grep 'repository: ghcr.io/acme/web' app/musher.yaml
+grep 'targetPort: 3000' app/musher.yaml
+grep 'name: app' app/musher.yaml
+
+# it refuses to overwrite without --force
+! exec $MUSHER_BIN --no-color --no-input init app --repository ghcr.io/acme/web
+stderr 'already exists'
+stderr '--force'
+
+# --force overwrites; --json answers with one object
+exec $MUSHER_BIN --no-color --no-input --json init app --repository ghcr.io/acme/web --force
+stdout '"path":'
+stdout '"dockerfile":"Dockerfile"'
+
+# several Dockerfiles need a choice when prompting is off
+! exec $MUSHER_BIN --no-color --no-input init multi --repository ghcr.io/acme/multi
+stderr 'Found several Dockerfiles'
+stderr '--dockerfile'
+
+# no Dockerfile means buildpacks; --no-pin keeps the builder tag offline
+exec $MUSHER_BIN --no-color --no-input init node --repository ghcr.io/acme/node --no-pin
+grep 'builderImage: paketobuildpacks/builder-jammy-base' node/musher.yaml
+stderr 'detected node'
+
+# without a repository there is nothing to write
+! exec $MUSHER_BIN --no-color --no-input init bare
+stderr 'No image repository'
+
+# build never guesses a recipe
+! exec $MUSHER_BIN --no-color --no-input build bare
+stderr 'No build recipe'
+stderr 'musher init'
+
+# build --help lists its flags
+exec $MUSHER_BIN --no-color --no-input build --help
+stdout '--build-arg'
+stdout '--secret'
+stdout '--progress'
+stdout '--builder'
+
+-- app/Dockerfile --
+FROM scratch
+-- multi/Dockerfile --
+FROM scratch
+-- multi/worker.Dockerfile --
+FROM scratch
+-- node/package.json --
+{}
+-- bare/.keep --

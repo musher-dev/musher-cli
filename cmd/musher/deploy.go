@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/musher-dev/musher-cli/internal/build"
+	"github.com/musher-dev/musher-cli/internal/build/registry"
 	"github.com/musher-dev/musher-cli/internal/config"
 	"github.com/musher-dev/musher-cli/internal/deployspec"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
@@ -54,6 +57,9 @@ type deployFlags struct {
 	watch         bool
 	yes           bool
 	force         bool
+	noBuild       bool
+	platform      string
+	tag           string
 	timeout       time.Duration
 	degradedGrace time.Duration
 }
@@ -74,13 +80,17 @@ The deployment name is the natural key: deploying the same name again updates
 the existing deployment in place, keeping its id, its timeline, and its URL.
 An unchanged file is a no-op; --force rolls the deployment anyway.
 
+When musher.yaml has a build recipe (spec.workload.build) and no --image is
+given, the image is built and pushed first, and the deployment runs that exact
+digest. --no-build skips the build; it needs --image.
+
 The file is compiled into a v2 component and blueprint, validated by the
 platform before anything is written, and published as new revisions only when
 something changed.`,
 		Example: `  # Deploy an image directly
   musher deploy api --image ghcr.io/acme/api:v1.4.2 --port 8080
 
-  # Deploy from ./musher.yaml
+  # Deploy from ./musher.yaml (building first when it has a recipe)
   musher deploy
 
   # Submit and return immediately
@@ -120,6 +130,9 @@ func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 	set.StringVar(&flags.waitFor, "wait-for", "ready", "Success condition: ready or url")
 	set.BoolVarP(&flags.yes, "yes", "y", false, "Do not ask for confirmation")
 	set.BoolVar(&flags.force, "force", false, "Roll the deployment even when nothing changed")
+	set.BoolVar(&flags.noBuild, "no-build", false, "Do not build from the recipe; deploy --image instead")
+	set.StringVar(&flags.platform, "platform", "", "Platform to build for as os/arch (default: build.platform, linux/amd64)")
+	set.StringVar(&flags.tag, "tag", "", "Tag for the built image (default: the git commit, or a timestamp)")
 }
 
 // runDeploy is the whole command: resolve intent, confirm, run, report.
@@ -136,6 +149,12 @@ func runDeploy(cmd *cobra.Command, args []string, flags *deployFlags) error {
 	if err != nil {
 		return err
 	}
+
+	if input.Build != nil && strings.TrimSpace(input.Image) == "" {
+		opts.Build = deployBuildOptions(flags, cfg)
+	}
+
+	opts.ImageIsPublic = registry.IsPublic
 
 	if confirmErr := confirmDeploy(out, input, flags.yes); confirmErr != nil {
 		return confirmErr
@@ -157,10 +176,10 @@ func executeDeploy(
 	input *workflow.DeployInput,
 	opts workflow.DeployOptions,
 ) error {
-	reporter := newDeployReporter(out)
-
 	watchCtx, guard, stop := watchWithInterrupt(ctx, out, input.Name)
 	defer stop()
+
+	reporter := &buildAwareReporter{Reporter: newDeployReporter(out), guard: guard}
 
 	result, err := workflow.Deploy(watchCtx, api, reporter, *input, opts)
 
@@ -211,13 +230,14 @@ func resolveDeployInput(
 		Size:         cfg.DeploySize(),
 	}
 
-	app, err := loadDeploySpec(flags)
+	path, app, err := loadDeploySpec(flags)
 	if err != nil {
 		return nil, err
 	}
 
 	if app != nil {
 		applyAppSpec(input, app)
+		input.BuildRoot = filepath.Dir(path)
 
 		for _, warning := range app.Warnings() {
 			out.Warning("%s", warning)
@@ -230,6 +250,14 @@ func resolveDeployInput(
 
 	if len(args) == 1 {
 		input.Name = args[0]
+	}
+
+	if flags.noBuild && strings.TrimSpace(input.Image) == "" {
+		return nil, &clierrors.CLIError{
+			Message: "--no-build needs --image",
+			Hint:    "Pass the image to deploy, e.g. --image \"$(musher build -q)\"",
+			Code:    clierrors.ExitUsage,
+		}
 	}
 
 	if input.Name == "" {
@@ -256,26 +284,27 @@ func resolveDeployInput(
 	return input, nil
 }
 
-// loadDeploySpec reads the deployment file, if there is one to read.
-func loadDeploySpec(flags *deployFlags) (*deployspec.App, error) {
+// loadDeploySpec reads the deployment file, if there is one to read, and
+// returns its path with it.
+func loadDeploySpec(flags *deployFlags) (string, *deployspec.App, error) {
 	path := strings.TrimSpace(flags.file)
 	if path == "" {
 		if strings.TrimSpace(flags.image) != "" {
 			// An explicit image is a complete request; do not surprise the
 			// caller by silently merging a file they did not mention.
-			return nil, nil //nolint:nilnil // "no file involved" is a valid answer
+			return "", nil, nil
 		}
 
 		workdir, err := os.Getwd()
 		if err != nil {
-			return nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot determine the working directory", err)
+			return "", nil, clierrors.Wrap(clierrors.ExitGeneral, "Cannot determine the working directory", err)
 		}
 
 		path = deployspec.Discover(workdir)
 	}
 
 	if path == "" {
-		return nil, &clierrors.CLIError{
+		return "", nil, &clierrors.CLIError{
 			Message: "Nothing to deploy",
 			Hint:    "Pass --image, or run this from a directory containing musher.yaml",
 			Code:    clierrors.ExitUsage,
@@ -284,11 +313,11 @@ func loadDeploySpec(flags *deployFlags) (*deployspec.App, error) {
 
 	app, err := deployspec.Load(path)
 	if err != nil {
-		return nil, clierrors.Wrap(clierrors.ExitInvalidSpec, "Invalid deployment file", err).
+		return "", nil, clierrors.Wrap(clierrors.ExitInvalidSpec, "Invalid deployment file", err).
 			WithHint("Fix " + path + " and run the command again")
 	}
 
-	return app, nil
+	return path, app, nil
 }
 
 // applyAppSpec copies the file's intent onto the request: every endpoint, the
@@ -534,6 +563,30 @@ type deployInterrupt struct {
 	mu    sync.Mutex
 	first time.Time
 	hard  bool
+	// building is set while the deploy builds its image. A build is local
+	// work, so an interrupt then cancels it instead of detaching.
+	building bool
+}
+
+// setBuilding records whether a local build is running.
+func (d *deployInterrupt) setBuilding(building bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.building = building
+}
+
+// cancelBuild reports whether a build was running, and if so turns the
+// interrupt into an abort.
+func (d *deployInterrupt) cancelBuild() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.building {
+		d.hard = true
+	}
+
+	return d.building
 }
 
 // record notes an interrupt and reports whether it was the deliberate second.
@@ -588,6 +641,15 @@ func watchWithInterrupt(
 			case <-done:
 				return
 			case <-signals:
+				if guard.cancelBuild() {
+					out.Errorln()
+					out.Warning("Build canceled. Nothing was deployed.")
+					signal.Stop(signals)
+					cancel()
+
+					return
+				}
+
 				if guard.record(time.Now()) {
 					// Hand SIGINT back to the runtime so a third one always
 					// terminates, even if the watch is wedged.
@@ -620,4 +682,38 @@ func renderDetachNotice(out *output.Writer, name string) {
 	out.Warning("Stopped watching. The deployment is still running.")
 	out.Muted("  Follow it:  musher status %s --watch", name)
 	out.Muted("  Read logs:  musher logs %s --follow", name)
+}
+
+// buildAwareReporter tells the interrupt guard when the deploy is building,
+// so Ctrl-C during a build cancels it rather than claiming a detach.
+type buildAwareReporter struct {
+	workflow.Reporter
+
+	guard *deployInterrupt
+}
+
+// Step forwards the transition and tracks the build/push window.
+func (b *buildAwareReporter) Step(id, state, note string) {
+	if id == workflow.StepBuild || id == workflow.StepPush {
+		finished := state == workflow.StateFailed || (id == workflow.StepPush && state != workflow.StateRunning)
+		b.guard.setBuilding(!finished)
+	}
+
+	b.Reporter.Step(id, state, note)
+}
+
+// deployBuildOptions configures the deploy's build step. Engine progress is
+// not drawn: the reporter summarizes the build under its checklist instead of
+// interleaving a BuildKit display with it.
+func deployBuildOptions(flags *deployFlags, cfg *config.Config) *workflow.DeployBuild {
+	platform := strings.TrimSpace(flags.platform)
+	if platform == "" {
+		platform = cfg.BuildPlatform()
+	}
+
+	return &workflow.DeployBuild{
+		Engine:   engineFor(build.Options{BuildKitAddress: cfg.BuildKitHost()}),
+		Tag:      strings.TrimSpace(flags.tag),
+		Platform: platform,
+	}
 }

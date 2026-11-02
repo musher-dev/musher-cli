@@ -241,6 +241,11 @@ func deployFailure(err error, name string) error {
 		return deploymentFailedError(deployErr, name)
 	}
 
+	var buildErr *workflow.BuildError
+	if errors.As(err, &buildErr) {
+		return buildFailure(err, "deploy")
+	}
+
 	if cliErr := convergeFailure(err, name); cliErr != nil {
 		return cliErr
 	}

@@ -65,9 +65,8 @@ The Musher platform moved from a bundle registry to a deployment product. This
 CLI is being rebuilt to match. The bundle and hub commands have been removed:
 their backend endpoints were deleted (platform ADR 0062) and returned `404`.
 
-Deployment commands (`musher deploy`, `status`, `logs`) are landing in
-subsequent releases. Today the CLI covers authentication, configuration, and
-diagnostics.
+The CLI covers building (`init`, `build`), deploying (`deploy`, `list`,
+`status`, `logs`), authentication, configuration, and diagnostics.
 
 ## Core Concepts
 
@@ -81,6 +80,22 @@ diagnostics.
   replicas.
 
 ## Commands
+
+### Build
+
+| Command | Description |
+|---------|-------------|
+| `musher init [dir]` | Detect the project and write `musher.yaml` with an explicit build recipe |
+| `musher build [dir]` | Build and push the image; stdout is the pushed `repo:tag@sha256:…` |
+
+### Deploy
+
+| Command | Description |
+|---------|-------------|
+| `musher deploy [name]` | Deploy an image, or build from the recipe first; `--no-build --image …` skips the build |
+| `musher list` | List deployments |
+| `musher status <name>` | Show the state of a deployment |
+| `musher logs <name>` | Read a deployment's logs |
 
 ### Authentication
 
