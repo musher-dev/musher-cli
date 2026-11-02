@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.0](https://github.com/musher-dev/musher-cli/compare/v0.3.14...v0.4.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deploy:** spec.workload.kind CRON is rejected (use JOB with schedule.cron), and deploy requires a server that serves the v2 component/blueprint routes.
+* all bundle and hub commands are removed, along with the cache, search, load, run, and history commands. `musher auth status` no longer reports publisher namespaces; it reports the credential's organization. The oci.registry_url and harness.scrollback_lines config keys are retired. Exit code 7 (ExitHarness) is retired and will not be reassigned.
+
+### Features
+
+* add musher init and musher build; deploy builds from a recipe ([294498a](https://github.com/musher-dev/musher-cli/commit/294498a88601e1408e6a5bd87f5c0fd7958ed129))
+* build repos with BuildKit/buildpacks, deploy on the v2 contract, and restore the TUI ([00d4c51](https://github.com/musher-dev/musher-cli/commit/00d4c51f7591ef16de6ed5e53e86d9ee874760c6))
+* **build:** embedded BuildKit and buildpacks engine ([be0deae](https://github.com/musher-dev/musher-cli/commit/be0deae03aa65f783ea75607dc91881aab48adca))
+* **deploy:** add the deployment golden path, transport core, and SSE client ([328d9bd](https://github.com/musher-dev/musher-cli/commit/328d9bd4ca871bdb5b82d5b701190929c449bbb6))
+* rebuild as a deployment CLI, remove the bundle/hub surface ([94ae1cf](https://github.com/musher-dev/musher-cli/commit/94ae1cffab4c0468eaa9f9c493e447b48c4fc5de))
+* **tui:** deployments, logs, build, deploy and init screens ([74c9710](https://github.com/musher-dev/musher-cli/commit/74c9710fdcf48e67ebc947e1e7c38d57d75d28f1))
+* **tui:** reopen the TUI on bare musher ([e9c54ab](https://github.com/musher-dev/musher-cli/commit/e9c54ab97e2c794440867aff6aeea10e74e4e2db))
+
+
+### Bug Fixes
+
+* **deploy:** speak the v2 component/blueprint/deployment contract ([9ac7f35](https://github.com/musher-dev/musher-cli/commit/9ac7f3569415cf20d3125f0b7f0d2ee5e5781a63))
+* **deps:** bump Go to 1.26.10 and patch vulnerable modules ([c070e9d](https://github.com/musher-dev/musher-cli/commit/c070e9dc004dce57b35653728cc07e26f8cab89c))
+* **devcontainer:** enforce LF line endings and run CRLF guard sequentially ([46ae947](https://github.com/musher-dev/musher-cli/commit/46ae947e25d0faed55677e829b3d88025b1247d6))
+* **devcontainer:** enforce LF via .gitattributes and run CRLF guard sequentially ([ba3b0a7](https://github.com/musher-dev/musher-cli/commit/ba3b0a72c35a8f760a860bf2ebcabf8d3adfce7d))
+* **devcontainer:** keep .claude.json on the Claude config volume ([c640663](https://github.com/musher-dev/musher-cli/commit/c640663f1fa20da995e546386489cdc2fe85a66a))
+* **devcontainer:** keep .claude.json on the Claude config volume ([79731d9](https://github.com/musher-dev/musher-cli/commit/79731d99384ee525de11ee2cc27544465afaf928))
+* **test:** skip the Unix-only permission assertion on Windows ([3d6d29c](https://github.com/musher-dev/musher-cli/commit/3d6d29c1f1df0b4aeaa5d6eba1426b793a5e2a8e))
+
 ## [0.3.14](https://github.com/musher-dev/musher-cli/compare/v0.3.13...v0.3.14) (2026-04-09)
 
 
