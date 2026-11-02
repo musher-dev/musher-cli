@@ -60,6 +60,17 @@ const (
 	// GitHubToken is consulted by the self-updater to avoid rate limits.
 	GitHubToken = "GITHUB_TOKEN" //nolint:gosec // G101: env var name, not a credential
 
+	// BuildKitHost is the musher-specific address of a standalone buildkitd. It
+	// outranks the generic BUILDKIT_HOST.
+	BuildKitHost = "MUSHER_BUILDKIT_HOST"
+	// GenericBuildKitHost is the address of a standalone buildkitd, as read by
+	// buildctl and buildx.
+	GenericBuildKitHost = "BUILDKIT_HOST"
+	// DockerHost is the Docker Engine endpoint, as read by the docker CLI.
+	DockerHost = "DOCKER_HOST"
+	// DockerContext selects a docker CLI context by name.
+	DockerContext = "DOCKER_CONTEXT"
+
 	// OTELServiceName overrides the OpenTelemetry service.name resource attribute.
 	OTELServiceName = "OTEL_SERVICE_NAME"
 	// OTELEnvironment overrides the deployment.environment resource attribute.

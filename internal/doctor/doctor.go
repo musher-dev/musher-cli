@@ -7,6 +7,7 @@
 //   - API connectivity and response time
 //   - Authentication status and credential source
 //   - CLI version against latest release
+//   - Build engine (Docker Engine or buildkitd), image store and registry credentials
 package doctor
 
 import (
@@ -24,6 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/musher-dev/musher-cli/internal/auth"
+	"github.com/musher-dev/musher-cli/internal/build"
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
 	"github.com/musher-dev/musher-cli/internal/client"
 	"github.com/musher-dev/musher-cli/internal/config"
@@ -82,6 +84,9 @@ func New() *Runner {
 	r.AddCheck("Clock Skew", checkClockSkew)
 	r.AddCheck("Authentication", checkAuthentication)
 	r.AddCheck("CLI Version", checkCLIVersion)
+	r.AddCheck("Build Engine", checkBuildEngine)
+	r.AddCheck("Image Store", checkImageStore)
+	r.AddCheck("Registry Credentials", checkRegistryCredentials)
 
 	return r
 }
@@ -627,4 +632,38 @@ func findFileBlockingPath(dir string) string {
 	}
 
 	return ""
+}
+
+// buildProbes reaches the real Docker Engine, buildkitd and credential store;
+// tests replace it.
+var buildProbes = build.DefaultProbes
+
+// checkBuildEngine reports whether a builder is reachable for 'musher build'.
+func checkBuildEngine(ctx context.Context) Result {
+	return fromBuildCheck(build.CheckBuilder(ctx, config.Load().BuildKitHost(), buildProbes()))
+}
+
+// checkImageStore reports the Docker Engine image store.
+func checkImageStore(ctx context.Context) Result {
+	return fromBuildCheck(build.CheckImageStore(ctx, config.Load().BuildKitHost(), buildProbes()))
+}
+
+// checkRegistryCredentials reports whether docker holds credentials for build.repository.
+func checkRegistryCredentials(context.Context) Result {
+	return fromBuildCheck(build.CheckRegistryCredentials(config.Load().BuildRepository(), buildProbes()))
+}
+
+func fromBuildCheck(res build.CheckResult) Result {
+	status := StatusPass
+
+	switch res.Status {
+	case build.CheckPass:
+		status = StatusPass
+	case build.CheckWarn:
+		status = StatusWarn
+	case build.CheckFail:
+		status = StatusFail
+	}
+
+	return Result{Status: status, Message: res.Message, Detail: res.Detail}
 }

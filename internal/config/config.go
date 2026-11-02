@@ -40,6 +40,10 @@ const (
 	DefaultUpdateCheckInterval = "24h"
 	// DefaultDeployTimeout is how long 'musher deploy' watches before giving up.
 	DefaultDeployTimeout = "15m"
+	// DefaultBuildPlatform is the platform images are built for. Compute hosts are
+	// x86_64 Linux, so building for the workstation's own architecture (arm64 on
+	// Apple Silicon) would produce images the platform cannot run.
+	DefaultBuildPlatform = "linux/amd64"
 	// DefaultAPIRetries is the default number of retry attempts for retryable requests.
 	DefaultAPIRetries = 4
 )
@@ -65,6 +69,9 @@ var defaults = map[string]any{
 	"deploy.wait":           true,
 	"deploy.timeout":        DefaultDeployTimeout,
 	"deploy.size":           "",
+	"build.repository":      "",
+	"build.platform":        DefaultBuildPlatform,
+	"build.buildkit_host":   "",
 }
 
 // retiredKeys were recognized by earlier versions and are now inert. They are
@@ -256,6 +263,26 @@ func (c *Config) DeployTimeout() time.Duration {
 // DeploySize returns the default compute profile slug, or "" to let the server choose.
 func (c *Config) DeploySize() string {
 	return strings.TrimSpace(c.GetString("deploy.size"))
+}
+
+// BuildRepository returns the default image repository builds push to, or "".
+func (c *Config) BuildRepository() string {
+	return strings.TrimSpace(c.GetString("build.repository"))
+}
+
+// BuildPlatform returns the platform images are built for.
+func (c *Config) BuildPlatform() string {
+	if platform := strings.TrimSpace(c.GetString("build.platform")); platform != "" {
+		return platform
+	}
+
+	return DefaultBuildPlatform
+}
+
+// BuildKitHost returns the configured standalone buildkitd address, or "" to
+// use the environment or the Docker Engine's embedded BuildKit.
+func (c *Config) BuildKitHost() string {
+	return strings.TrimSpace(c.GetString("build.buildkit_host"))
 }
 
 // APIRetries returns the number of attempts for retryable requests.

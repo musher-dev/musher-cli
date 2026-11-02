@@ -20,7 +20,8 @@ Checks performed:
   - Credential file security
   - API connectivity and response time
   - Authentication status
-  - CLI version`,
+  - CLI version
+  - Build engine, image store and registry credentials`,
 		Example: `  musher doctor`,
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
