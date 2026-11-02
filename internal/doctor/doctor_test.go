@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/musher-dev/musher-cli/internal/build"
+	"github.com/musher-dev/musher-cli/internal/build/daemon"
 	"github.com/musher-dev/musher-cli/internal/buildinfo"
 )
 
@@ -39,6 +41,9 @@ func TestNew(t *testing.T) {
 		"Clock Skew",
 		"Authentication",
 		"CLI Version",
+		"Build Engine",
+		"Image Store",
+		"Registry Credentials",
 	}
 
 	if len(r.checks) != len(wantNames) {
@@ -1137,5 +1142,47 @@ func TestIsNotDirError_Nil(t *testing.T) {
 
 	if isNotDirError(nil) {
 		t.Error("isNotDirError returned true for nil")
+	}
+}
+
+func TestBuildChecks(t *testing.T) {
+	t.Setenv("MUSHER_CONFIG_HOME", t.TempDir())
+	t.Setenv("MUSHER_BUILD_REPOSITORY", "ghcr.io/acme/web")
+	t.Setenv("MUSHER_BUILD_BUILDKIT_HOST", "")
+	t.Setenv("MUSHER_BUILDKIT_HOST", "")
+	t.Setenv("BUILDKIT_HOST", "")
+
+	original := buildProbes
+
+	t.Cleanup(func() { buildProbes = original })
+
+	buildProbes = func() build.Probes {
+		return build.Probes{
+			Daemon: func(context.Context) (daemon.Info, error) {
+				return daemon.Info{ServerVersion: "29.0.0", APIVersion: "1.52"}, nil
+			},
+			Standalone:     func(context.Context, string) (string, error) { return "", errors.New("unused") },
+			HasCredentials: func(string) bool { return false },
+		}
+	}
+
+	ctx := t.Context()
+
+	if res := checkBuildEngine(ctx); res.Status != StatusPass || !strings.Contains(res.Message, "29.0.0") {
+		t.Errorf("checkBuildEngine = %+v", res)
+	}
+
+	if res := checkImageStore(ctx); res.Status != StatusWarn {
+		t.Errorf("checkImageStore = %+v, want warn for the classic store", res)
+	}
+
+	if res := checkRegistryCredentials(ctx); res.Status != StatusWarn || !strings.Contains(res.Detail, "docker login ghcr.io") {
+		t.Errorf("checkRegistryCredentials = %+v", res)
+	}
+
+	t.Setenv("MUSHER_BUILD_REPOSITORY", "UPPER/Case")
+
+	if res := checkRegistryCredentials(ctx); res.Status != StatusFail {
+		t.Errorf("invalid repository = %+v, want fail", res)
 	}
 }

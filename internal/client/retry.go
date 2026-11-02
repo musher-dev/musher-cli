@@ -112,8 +112,8 @@ func isRetryableStatus(status int) bool {
 
 // isRetryableMethod reports whether re-sending the request is safe. GET and
 // HEAD are safe by definition; anything else needs an explicit opt-in, because
-// the API does not honor Idempotency-Key on writes yet and a blind POST retry
-// could create a duplicate deployment.
+// a blind POST retry could create a duplicate resource. Callers converge on
+// natural keys instead of leaning on Idempotency-Key.
 func isRetryableMethod(method string, idempotent bool) bool {
 	switch strings.ToUpper(method) {
 	case http.MethodGet, http.MethodHead:

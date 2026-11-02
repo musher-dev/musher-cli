@@ -135,8 +135,10 @@ func (c *Client) setRequestHeaders(req *http.Request, r *request, auth, hasBody 
 	}
 
 	if r.idempotent {
-		// The API does not consume Idempotency-Key on writes today. Sending it
-		// is harmless and makes the CLI forward-compatible with the day it does.
+		// The write routes accept Idempotency-Key. The deploy workflow still
+		// converges on natural keys (slug, deployment name) rather than on this
+		// header, because a key minted per invocation cannot make a re-run of
+		// the same command idempotent.
 		req.Header.Set("Idempotency-Key", uuid.NewString())
 	}
 

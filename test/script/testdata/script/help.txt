@@ -2,11 +2,16 @@
 exec $MUSHER_BIN --no-color --no-input --help
 stdout 'Deploy and manage containerized applications on the Musher platform'
 
-# only two command groups survive the deployment-CLI conversion
+# the command groups
+stdout 'Build:'
+stdout 'Deploy:'
 stdout 'Authentication:'
 stdout 'Maintenance:'
 
-# the surviving verbs are listed under them
+# the verbs are listed under them
+stdout 'init        Write a musher.yaml for a project'
+stdout 'build       Build and push an image from musher.yaml'
+stdout 'deploy      Deploy a container image'
 stdout 'auth        Manage authentication'
 stdout 'config      Manage Musher configuration'
 stdout 'doctor      Diagnose common issues'

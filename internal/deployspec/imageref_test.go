@@ -5,113 +5,36 @@ import (
 	"testing"
 )
 
-func TestValidateImageRef(t *testing.T) {
+var testDigest = "@sha256:" + strings.Repeat("a", 64)
+
+// The platform accepts every tag (component v2 COMP-SRC-002), so the client
+// checks grammar only. A client stricter than the server rejects references
+// the platform would happily run.
+func TestValidateImageRefIsGrammarOnly(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
 		ref     string
 		wantErr bool
-		// reason documents WHY, so a future edit that flips a case has to
-		// justify itself against the server's behavior rather than a vibe.
-		reason string
 	}{
-		// Digest pins — always accepted, checked before anything else.
-		{
-			name:   "digest pin",
-			ref:    "ghcr.io/acme/api@sha256:" + strings.Repeat("a", 64),
-			reason: "immutable reference, the strongest guarantee",
-		},
-		{
-			name:   "digest pin on a floating tag still wins",
-			ref:    "ghcr.io/acme/api:latest@sha256:" + strings.Repeat("f", 64),
-			reason: "server checks the digest regex first and returns early",
-		},
-		{
-			name:   "digest with uppercase hex",
-			ref:    "ghcr.io/acme/api@sha256:" + strings.Repeat("A", 64),
-			reason: "the digest regex is [0-9a-f] so uppercase does not match it, but the ref then falls through to tag parsing where the text after the last colon is the hex string — not a floating tag, so the server accepts it. Mirrored rather than corrected.",
-		},
-
-		// Rejected: no tag at all.
-		{
-			name:    "no tag",
-			ref:     "ghcr.io/acme/api",
-			wantErr: true,
-			reason:  "implicit :latest",
-		},
-		{
-			name:    "empty",
-			ref:     "",
-			wantErr: true,
-			reason:  "nothing to validate",
-		},
-		{
-			name:    "whitespace only",
-			ref:     "   ",
-			wantErr: true,
-			reason:  "trimmed to empty",
-		},
-
-		// Rejected: every floating tag in the upstream set.
-		{name: "latest", ref: "ghcr.io/acme/api:latest", wantErr: true, reason: "floating"},
-		{name: "main", ref: "ghcr.io/acme/api:main", wantErr: true, reason: "floating"},
-		{name: "main-stable", ref: "ghcr.io/acme/api:main-stable", wantErr: true, reason: "floating"},
-		{name: "master", ref: "ghcr.io/acme/api:master", wantErr: true, reason: "floating"},
-		{name: "stable", ref: "ghcr.io/acme/api:stable", wantErr: true, reason: "floating"},
-		{name: "edge", ref: "ghcr.io/acme/api:edge", wantErr: true, reason: "floating"},
-		{name: "nightly", ref: "ghcr.io/acme/api:nightly", wantErr: true, reason: "floating"},
-		{name: "dev", ref: "ghcr.io/acme/api:dev", wantErr: true, reason: "floating"},
-		{name: "rolling", ref: "ghcr.io/acme/api:rolling", wantErr: true, reason: "floating"},
-		{
-			name:    "floating tag is case-insensitive",
-			ref:     "ghcr.io/acme/api:LATEST",
-			wantErr: true,
-			reason:  "server lowercases before the set lookup",
-		},
-
-		// Accepted: anything not in the denylist. These are the cases a
-		// semver allowlist would have wrongly rejected.
-		{name: "semver tag", ref: "ghcr.io/acme/api:v1.2.3", reason: "conventional pin"},
-		{name: "date tag", ref: "ghcr.io/acme/api:2026-04-01", reason: "date-stamp pin"},
-		{
-			name:   "pr tag",
-			ref:    "ghcr.io/acme/api:pr-441",
-			reason: "not floating; an allowlist would have rejected this",
-		},
-		{
-			name:   "commit sha tag",
-			ref:    "ghcr.io/acme/api:abc1234",
-			reason: "not floating; an allowlist would have rejected this",
-		},
-		{
-			name:   "tag merely containing a floating word",
-			ref:    "ghcr.io/acme/api:latest-stable-v2",
-			reason: "set membership is exact, not substring",
-		},
-		{
-			name:   "docker hub short form with tag",
-			ref:    "nginx:1.27",
-			reason: "no registry host required",
-		},
-
-		// The upstream quirk, mirrored deliberately.
-		{
-			name:   "registry port read as a tag",
-			ref:    "registry.example.com:5000/acme/api",
-			reason: "server splits on the LAST colon of the whole ref, so '5000' is the tag and is not floating — accepted despite having no real tag. Mirrored bug-for-bug so the client is never stricter than the server.",
-		},
-		{
-			name:    "registry port with a floating tag",
-			ref:     "registry.example.com:5000/acme/api:latest",
-			wantErr: true,
-			reason:  "last colon yields 'latest'",
-		},
-		{
-			name:   "registry port with a real tag",
-			ref:    "registry.example.com:5000/acme/api:v2",
-			reason: "last colon yields 'v2'",
-		},
+		{name: "digest pin", ref: "ghcr.io/acme/api" + testDigest},
+		{name: "tag and digest", ref: "ghcr.io/acme/api:v1" + testDigest},
+		{name: "semver tag", ref: "ghcr.io/acme/api:v1.2.3"},
+		{name: "floating tag is accepted", ref: "ghcr.io/acme/api:latest"},
+		{name: "no tag is accepted", ref: "ghcr.io/acme/api"},
+		{name: "docker hub short form", ref: "nginx:1.27"},
+		{name: "registry with port", ref: "registry.example.com:5000/acme/api:v2"},
+		{name: "registry with port and no tag", ref: "registry.example.com:5000/acme/api"},
+		{name: "surrounding whitespace is trimmed", ref: "  nginx:1.27  "},
+		{name: "empty", ref: "", wantErr: true},
+		{name: "whitespace only", ref: "   ", wantErr: true},
+		{name: "uppercase repository path", ref: "ghcr.io/Acme/api:v1", wantErr: true},
+		{name: "uppercase digest hex", ref: "ghcr.io/acme/api@sha256:" + strings.Repeat("A", 64), wantErr: true},
+		{name: "short digest", ref: "ghcr.io/acme/api@sha256:abc", wantErr: true},
+		{name: "space inside", ref: "ghcr.io/acme/api :v1", wantErr: true},
+		{name: "tag too long", ref: "nginx:" + strings.Repeat("a", 129), wantErr: true},
+		{name: "reference too long", ref: strings.Repeat("a", 513), wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -119,32 +42,73 @@ func TestValidateImageRef(t *testing.T) {
 			t.Parallel()
 
 			err := ValidateImageRef(tt.ref)
-
-			if tt.wantErr && err == nil {
-				t.Errorf("ValidateImageRef(%q) = nil, want error\nreason: %s", tt.ref, tt.reason)
-			}
-
-			if !tt.wantErr && err != nil {
-				t.Errorf("ValidateImageRef(%q) = %v, want nil\nreason: %s", tt.ref, err, tt.reason)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateImageRef(%q) = %v, wantErr %v", tt.ref, err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestValidateImageRefMessageIsActionable(t *testing.T) {
+func TestFloatingTagWarning(t *testing.T) {
 	t.Parallel()
 
-	err := ValidateImageRef("ghcr.io/acme/api:latest")
-	if err == nil {
-		t.Fatal("expected an error for a floating tag")
+	tests := []struct {
+		ref  string
+		want string
+	}{
+		{ref: "ghcr.io/acme/api:latest", want: "floating tag :latest"},
+		{ref: "ghcr.io/acme/api:MAIN", want: "floating tag :MAIN"},
+		{ref: "ghcr.io/acme/api", want: "has no tag"},
+		{ref: "registry.example.com:5000/acme/api", want: "has no tag"},
+		{ref: "registry.example.com:5000/acme/api:nightly", want: "floating tag :nightly"},
+		{ref: "ghcr.io/acme/api:v1.2.3"},
+		{ref: "ghcr.io/acme/api:latest-stable-v2"},
+		{ref: "ghcr.io/acme/api:latest" + testDigest},
+		{ref: "ghcr.io/acme/api" + testDigest},
+		{ref: ""},
 	}
 
-	// The message has to tell the user what to type instead; "invalid image"
-	// would leave them guessing.
-	for _, want := range []string{"latest", "v1.2.3", "sha256"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err.Error(), want)
+	for _, tt := range tests {
+		got := FloatingTagWarning(tt.ref)
+
+		switch {
+		case tt.want == "" && got != "":
+			t.Errorf("FloatingTagWarning(%q) = %q, want none", tt.ref, got)
+		case tt.want != "" && !strings.Contains(got, tt.want):
+			t.Errorf("FloatingTagWarning(%q) = %q, want it to mention %q", tt.ref, got, tt.want)
+		case tt.want != "" && !strings.Contains(got, "sha256"):
+			t.Errorf("FloatingTagWarning(%q) = %q, want it to recommend a digest", tt.ref, got)
 		}
+	}
+}
+
+func TestImageTagIgnoresRegistryPorts(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"nginx:1.27":                         "1.27",
+		"registry.example.com:5000/acme/api": "",
+		"registry.example.com:5000/api:v2":   "v2",
+		"ghcr.io/acme/api:v1" + testDigest:   "v1",
+		"ghcr.io/acme/api" + testDigest:      "",
+	}
+
+	for ref, want := range tests {
+		if got := ImageTag(ref); got != want {
+			t.Errorf("ImageTag(%q) = %q, want %q", ref, got, want)
+		}
+	}
+}
+
+func TestIsDigestPinned(t *testing.T) {
+	t.Parallel()
+
+	if !IsDigestPinned(" ghcr.io/acme/api:v1" + testDigest + " ") {
+		t.Error("a digest reference is pinned")
+	}
+
+	if IsDigestPinned("ghcr.io/acme/api:v1") {
+		t.Error("a tag is not a digest pin")
 	}
 }
 
@@ -157,5 +121,21 @@ func TestIsFloatingTag(t *testing.T) {
 
 	if IsFloatingTag("v1.0.0") {
 		t.Error("a semver tag is not floating")
+	}
+}
+
+func TestValidateRepository(t *testing.T) {
+	t.Parallel()
+
+	for _, good := range []string{"ghcr.io/acme/web", "localhost:5000/app", "acme/web"} {
+		if err := ValidateRepository(good); err != nil {
+			t.Errorf("ValidateRepository(%q) = %v", good, err)
+		}
+	}
+
+	for _, bad := range []string{"", "ghcr.io/acme/web:v1", "ghcr.io/acme/web" + testDigest, "ghcr.io/ACME/web"} {
+		if err := ValidateRepository(bad); err == nil {
+			t.Errorf("ValidateRepository(%q) = nil, want error", bad)
+		}
 	}
 }

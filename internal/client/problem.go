@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -34,12 +35,75 @@ const (
 	aboutBlank = "about:blank"
 )
 
-// ProblemItem is one field-level error inside an RFC 9457 document's "errors"
-// extension member. Pointer is a JSON Pointer into the offending request body.
+// Problem slugs the deploy workflow branches on. They are the trailing segment
+// of the problem type, the server's stable machine token.
+const (
+	SlugResourceConflict    = "resource-conflict"
+	SlugRevisionConflict    = "revision-conflict"
+	SlugDraftAlreadyOpen    = "draft-already-open"
+	SlugImmutableState      = "immutable-state"
+	SlugSpecDocumentInvalid = "spec-document-invalid"
+	SlugResolutionInvalid   = "resolution-invalid"
+	SlugValidationError     = "validation-error"
+)
+
+// Problem extension members that name the resource a conflict is about.
+const (
+	ExtComponentID      = "componentId"
+	ExtBlueprintID      = "blueprintId"
+	ExtOpenDraftVersion = "openDraftVersion"
+)
+
+// ProblemItem is one entry of an RFC 9457 document's "errors" member.
+//
+// The platform fills it in two shapes. Spec-document and resolution failures
+// carry a full diagnostic — pointer, code, phase, message, severity, and for
+// resolution findings a stage. Request-validation failures carry field,
+// message and type. Every member is optional so either decodes.
 type ProblemItem struct {
+	// Pointer is an RFC 6901 JSON Pointer into the submitted document.
 	Pointer string `json:"pointer,omitempty"`
-	Detail  string `json:"detail,omitempty"`
-	Code    string `json:"code,omitempty"`
+	// Field is a dotted request location, used by validation-error.
+	Field string `json:"field,omitempty"`
+	// Detail is a legacy free-text explanation.
+	Detail string `json:"detail,omitempty"`
+	// Message is the human-readable explanation.
+	Message string `json:"message,omitempty"`
+	// Code is the stable diagnostic code, such as ERR_UNKNOWN_ENDPOINT.
+	Code string `json:"code,omitempty"`
+	// Type is the validation-error machine token, such as "missing".
+	Type string `json:"type,omitempty"`
+	// Severity is ERROR or WARNING.
+	Severity string `json:"severity,omitempty"`
+	// Phase is the validation layer that found the problem.
+	Phase string `json:"phase,omitempty"`
+	// Stage is the resolution stage, for RESOLUTION-phase findings.
+	Stage string `json:"stage,omitempty"`
+	// File names the document in a multi-file submission.
+	File string `json:"file,omitempty"`
+	// Related lists locations in other artifacts.
+	Related []SpecRelatedLocation `json:"related,omitempty"`
+}
+
+// Text returns the most specific explanation the item carries.
+func (i *ProblemItem) Text() string {
+	switch {
+	case strings.TrimSpace(i.Message) != "":
+		return strings.TrimSpace(i.Message)
+	case strings.TrimSpace(i.Detail) != "":
+		return strings.TrimSpace(i.Detail)
+	default:
+		return strings.TrimSpace(i.Type)
+	}
+}
+
+// Location returns the pointer, or the field when there is no pointer.
+func (i *ProblemItem) Location() string {
+	if i.Pointer != "" {
+		return i.Pointer
+	}
+
+	return i.Field
 }
 
 // Problem is a decoded RFC 9457 "problem details" document as returned by the
@@ -75,6 +139,13 @@ type Problem struct {
 	// Errors holds field-level validation failures when present.
 	Errors []ProblemItem
 
+	// Deferred holds the obligations a spec validation could not complete,
+	// on spec-document-invalid and resolution-invalid.
+	Deferred []SpecDeferredObligation
+
+	// ValidationStatus is INVALID or INCOMPLETE on resolution-invalid.
+	ValidationStatus string
+
 	// Extensions holds all non-standard members, undecoded.
 	Extensions map[string]json.RawMessage
 }
@@ -88,6 +159,9 @@ type problemWire struct {
 	Instance string        `json:"instance"`
 	TraceID  string        `json:"traceId"`
 	Errors   []ProblemItem `json:"errors"`
+
+	Deferred         []SpecDeferredObligation `json:"deferred"`
+	ValidationStatus string                   `json:"validationStatus"`
 }
 
 // standardProblemMembers are the members represented by named fields on
@@ -158,6 +232,56 @@ func (p *Problem) Error() string {
 	return strconv.Itoa(p.Status) + " " + text
 }
 
+// ExtensionString returns a string extension member, or "" when it is absent
+// or not a string.
+func (p *Problem) ExtensionString(name string) string {
+	if p == nil {
+		return ""
+	}
+
+	raw, ok := p.Extensions[name]
+	if !ok {
+		return ""
+	}
+
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+
+	return value
+}
+
+// ExtensionInt returns an integer extension member and whether it was present.
+func (p *Problem) ExtensionInt(name string) (int, bool) {
+	if p == nil {
+		return 0, false
+	}
+
+	raw, ok := p.Extensions[name]
+	if !ok {
+		return 0, false
+	}
+
+	var value int
+	if json.Unmarshal(raw, &value) != nil {
+		return 0, false
+	}
+
+	return value, true
+}
+
+// ProblemOf returns the problem document carried by err, or nil when err is
+// not an HTTP status error or the server sent no problem document.
+func ProblemOf(err error) *Problem {
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) {
+		return nil
+	}
+
+	return statusErr.Problem
+}
+
 // Message is an alias for Error that reads better at call sites that treat the
 // problem as data rather than as an error value.
 func (p *Problem) Message() string { return p.Error() }
@@ -187,11 +311,11 @@ func exitCodeForSlug(slug string) (int, bool) {
 		return repoerrors.ExitEntitlement, true
 	case "forbidden":
 		return repoerrors.ExitPermission, true
-	case "resource-conflict", "revision-conflict", "immutable-state",
+	case SlugResourceConflict, SlugRevisionConflict, SlugImmutableState, SlugDraftAlreadyOpen,
 		"management-locked", "host-has-live-workloads", "region-has-live-workloads",
 		"last-sign-in-method":
 		return repoerrors.ExitConflict, true
-	case "validation-error", "bad-request":
+	case SlugValidationError, "bad-request", SlugSpecDocumentInvalid, SlugResolutionInvalid:
 		return repoerrors.ExitInvalidSpec, true
 	case "rate-limit-exceeded":
 		return repoerrors.ExitRateLimited, true
@@ -268,6 +392,8 @@ func decodeProblem(resp *http.Response) *Problem {
 	prob.Detail = wire.Detail
 	prob.Instance = wire.Instance
 	prob.Errors = wire.Errors
+	prob.Deferred = wire.Deferred
+	prob.ValidationStatus = wire.ValidationStatus
 
 	if prob.Status == 0 {
 		prob.Status = wire.Status

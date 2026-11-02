@@ -134,16 +134,16 @@ spec:
 			wantText: "metadata.name",
 		},
 		{
-			name: "floating image tag",
+			name: "malformed image reference",
 			src: `apiVersion: musher.dev/v1
 kind: App
 metadata:
   name: api
 spec:
   workload:
-    image: ghcr.io/acme/api:latest
+    image: ghcr.io/Acme/API:v1
 `,
-			wantText: "floating tag",
+			wantText: "spec.workload.image",
 		},
 		{
 			name: "bad env key",
@@ -172,7 +172,7 @@ spec:
       http:
         containerPort: 99999
 `,
-			wantText: "containerPort",
+			wantText: "targetPort must be between",
 		},
 		{
 			name: "bad protocol",
@@ -232,7 +232,7 @@ metadata:
   name: BAD_NAME
 spec:
   workload:
-    image: ghcr.io/acme/api:latest
+    image: ghcr.io/ACME/api
 `
 
 	_, err := Parse([]byte(src))
@@ -310,5 +310,39 @@ func TestLoad(t *testing.T) {
 
 	if _, err := Load(filepath.Join(dir, "missing.yaml")); err == nil {
 		t.Error("expected an error for a missing file")
+	}
+}
+
+func TestEncodeRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	app := &App{
+		APIVersion: APIVersion,
+		Kind:       KindApp,
+		Metadata:   AppMetadata{Name: "web"},
+		Spec: AppSpec{Workload: AppWorkload{
+			Kind: KindService,
+			Build: &AppBuild{
+				Repository: "ghcr.io/acme/web",
+				Dockerfile: "Dockerfile",
+				Arguments:  map[string]string{"NODE_ENV": "production"},
+				Secrets:    map[string]AppBuildSecret{"NPM_TOKEN": {Env: "NPM_TOKEN"}},
+			},
+			Endpoints: map[string]AppEndpoint{"http": {TargetPort: 8080}},
+		}},
+	}
+
+	data, err := Encode(app)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	parsed, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse(Encode()) error = %v\n%s", err, data)
+	}
+
+	if parsed.Spec.Workload.Build.Secrets["NPM_TOKEN"].Env != "NPM_TOKEN" || parsed.Spec.Workload.Endpoints["http"].Port() != 8080 {
+		t.Errorf("parsed = %+v", parsed.Spec.Workload)
 	}
 }

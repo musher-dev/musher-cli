@@ -308,11 +308,14 @@ tasks:
       - ./{{.CONTRACTS_BIN}} ls --help > /dev/null
       - ./{{.CONTRACTS_BIN}} status --help > /dev/null
       - ./{{.CONTRACTS_BIN}} logs --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} init --help > /dev/null
+      - ./{{.CONTRACTS_BIN}} build --help > /dev/null
       # Flags that scripts and CI pipelines depend on.
       - |
         for flag in --image --port --name --env --env-file --replicas --size \
                     --environment --kind --file --detach --watch --timeout \
-                    --degraded-grace --wait-for --yes; do
+                    --degraded-grace --wait-for --yes --force --no-build \
+                    --platform --tag; do
           if ! ./{{.CONTRACTS_BIN}} deploy --help | grep -q -- "$flag"; then
             echo "FAIL: musher deploy is missing $flag"
             exit 1
@@ -321,6 +324,20 @@ tasks:
         for flag in --follow --stream --replica --severity --tail --timestamps; do
           if ! ./{{.CONTRACTS_BIN}} logs --help | grep -q -- "$flag"; then
             echo "FAIL: musher logs is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --name --repository --port --dockerfile --buildpacks \
+                    --kind --force --no-pin; do
+          if ! ./{{.CONTRACTS_BIN}} init --help | grep -q -- "$flag"; then
+            echo "FAIL: musher init is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --file --repository --tag --platform --dockerfile --builder \
+                    --build-arg --secret --progress --buildkit-host; do
+          if ! ./{{.CONTRACTS_BIN}} build --help | grep -q -- "$flag"; then
+            echo "FAIL: musher build is missing $flag"
             exit 1
           fi
         done

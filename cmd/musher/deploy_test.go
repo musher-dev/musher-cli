@@ -26,10 +26,13 @@ import (
 // server on purpose: cmd/ may not import net/http, and a command's job is to
 // translate flags and render results, not to speak HTTP.
 type stubAPI struct {
-	phase     string
-	readiness string
-	endpoints []client.Endpoint
-	failure   *client.DeploymentError
+	phase        string
+	readiness    string
+	endpoints    []client.Endpoint
+	failure      *client.DeploymentError
+	existing     *client.Deployment
+	validation   *client.SpecValidationResult
+	componentErr error
 }
 
 func (s *stubAPI) ListOrganizations(context.Context) ([]client.Organization, error) {
@@ -43,37 +46,123 @@ func (s *stubAPI) ListEnvironments(context.Context, string, string) ([]client.En
 	}}, nil
 }
 
+func (s *stubAPI) ListComputeProfiles(context.Context) ([]client.ComputeProfile, error) {
+	return []client.ComputeProfile{{Slug: "general.standard.small", IsRecommended: true}}, nil
+}
+
 func (s *stubAPI) GetDeploymentByName(context.Context, string, string) (*client.Deployment, error) {
+	if s.existing != nil {
+		return s.existing, nil
+	}
+
 	return nil, &client.HTTPStatusError{Operation: "test", Status: statusNotFound}
 }
 
-func (s *stubAPI) CreateComponent(
-	_ context.Context, _ string, input *client.ComponentInput,
-) (*client.Component, error) {
-	return &client.Component{Metadata: client.ComponentMetadata{ID: "cmp-1", Slug: input.Metadata.Slug}}, nil
+func (s *stubAPI) ValidateComponent(context.Context, string, any, string) (*client.SpecValidationResult, error) {
+	if s.validation != nil {
+		return s.validation, nil
+	}
+
+	return &client.SpecValidationResult{Status: client.ValidationValid}, nil
 }
 
-func (s *stubAPI) PublishComponent(_ context.Context, id string) (*client.Component, error) {
-	return &client.Component{Metadata: client.ComponentMetadata{ID: id}}, nil
+func stubComponentVersion(status string) *client.ComponentVersion {
+	return &client.ComponentVersion{ComponentID: "cmp-1", Revision: 1, Status: status}
+}
+
+func stubBlueprintVersion(status string) *client.BlueprintVersion {
+	return &client.BlueprintVersion{BlueprintID: "bp-1", Revision: 1, Status: status}
+}
+
+func (s *stubAPI) ListComponentsBySlug(context.Context, string, string) ([]client.Component, error) {
+	return nil, nil
+}
+
+func (s *stubAPI) CreateComponent(
+	context.Context, string, string, *client.ComponentDocument,
+) (*client.ComponentVersion, error) {
+	if s.componentErr != nil {
+		return nil, s.componentErr
+	}
+
+	return stubComponentVersion(client.VersionStatusDraft), nil
+}
+
+func (s *stubAPI) LatestComponentRevision(context.Context, string) (*client.VersionSummary, error) {
+	return nil, nil //nolint:nilnil // "no revisions yet" is the contract's answer for an empty lineage
+}
+
+func (s *stubAPI) GetComponentVersion(context.Context, string, int) (*client.ComponentVersion, error) {
+	return stubComponentVersion(client.VersionStatusPublished), nil
+}
+
+func (s *stubAPI) CreateComponentVersion(
+	context.Context, string, *client.ComponentDocument,
+) (*client.ComponentVersion, error) {
+	return stubComponentVersion(client.VersionStatusDraft), nil
+}
+
+func (s *stubAPI) ReplaceComponentVersion(
+	context.Context, string, int, *client.ComponentDocument, *int,
+) (*client.ComponentVersion, error) {
+	return stubComponentVersion(client.VersionStatusDraft), nil
+}
+
+func (s *stubAPI) PublishComponentVersion(context.Context, string, int) (*client.ComponentVersion, error) {
+	return stubComponentVersion(client.VersionStatusPublished), nil
+}
+
+func (s *stubAPI) ListBlueprintsBySlug(context.Context, string, string) ([]client.Blueprint, error) {
+	return nil, nil
 }
 
 func (s *stubAPI) CreateBlueprint(
-	_ context.Context, _ string, input *client.BlueprintInput,
-) (*client.Blueprint, error) {
-	return &client.Blueprint{Metadata: client.BlueprintMetadata{ID: "bp-1", Slug: input.Metadata.Slug}}, nil
+	context.Context, string, string, *client.BlueprintDocument,
+) (*client.BlueprintVersion, error) {
+	return stubBlueprintVersion(client.VersionStatusDraft), nil
 }
 
-func (s *stubAPI) PublishBlueprint(_ context.Context, id string) (*client.Blueprint, error) {
-	return &client.Blueprint{Metadata: client.BlueprintMetadata{ID: id}}, nil
+func (s *stubAPI) LatestBlueprintRevision(context.Context, string) (*client.VersionSummary, error) {
+	return nil, nil //nolint:nilnil // "no revisions yet" is the contract's answer for an empty lineage
+}
+
+func (s *stubAPI) GetBlueprintVersion(context.Context, string, int) (*client.BlueprintVersion, error) {
+	return stubBlueprintVersion(client.VersionStatusPublished), nil
+}
+
+func (s *stubAPI) CreateBlueprintVersion(
+	context.Context, string, *client.BlueprintDocument,
+) (*client.BlueprintVersion, error) {
+	return stubBlueprintVersion(client.VersionStatusDraft), nil
+}
+
+func (s *stubAPI) ReplaceBlueprintVersion(
+	context.Context, string, int, *client.BlueprintDocument, *int,
+) (*client.BlueprintVersion, error) {
+	return stubBlueprintVersion(client.VersionStatusDraft), nil
+}
+
+func (s *stubAPI) PublishBlueprintVersion(context.Context, string, int) (*client.BlueprintVersion, error) {
+	return stubBlueprintVersion(client.VersionStatusPublished), nil
 }
 
 func (s *stubAPI) DeployBlueprint(
-	_ context.Context, _ string, input client.DeploymentDeployBlueprintInput,
+	_ context.Context, _ string, input client.DeployBlueprintInput,
 ) (*client.Deployment, error) {
 	return &client.Deployment{
-		Metadata: client.DeploymentMetadata{ID: "dep-1", Name: input.UserAssignedName},
+		Metadata: client.DeploymentMetadata{ID: "dep-1", Name: input.Name},
 		Status:   client.DeploymentStatus{Phase: workflow.PhaseProvisioning},
 	}, nil
+}
+
+func (s *stubAPI) UpdateDeployment(
+	_ context.Context, id string, _ client.DeploymentUpdateInput,
+) (*client.Deployment, error) {
+	return &client.Deployment{Metadata: client.DeploymentMetadata{ID: id, Name: "api"}}, nil
+}
+
+func (s *stubAPI) ListReplicas(context.Context, string) ([]client.ReplicaGroup, error) {
+	return nil, nil
 }
 
 func (s *stubAPI) DeploymentAction(
@@ -136,11 +225,11 @@ func settledAPI() *stubAPI {
 
 func deployInput() *workflow.DeployInput {
 	return &workflow.DeployInput{
-		Name:     "api",
-		Image:    "ghcr.io/acme/api:v1.4.2",
-		Kind:     "SERVICE",
-		Port:     8080,
-		Replicas: 1,
+		Name:      "api",
+		Image:     "ghcr.io/acme/api:v1.4.2",
+		Kind:      "SERVICE",
+		Endpoints: map[string]workflow.DeployEndpoint{"http": {TargetPort: 8080}},
+		Replicas:  1,
 	}
 }
 
@@ -420,7 +509,7 @@ spec:
 		envPairs: []string{"FROM_FLAG=1"},
 	}
 
-	input, err := resolveDeployInput(nil, flags, config.Load())
+	input, err := resolveDeployInput(discardWriter(), nil, flags, config.Load())
 	if err != nil {
 		t.Fatalf("resolveDeployInput() error = %v", err)
 	}
@@ -433,8 +522,8 @@ spec:
 		t.Errorf("image = %q, want the flag to win", input.Image)
 	}
 
-	if input.Port != 8080 || input.Replicas != 5 {
-		t.Errorf("port/replicas = %d/%d, want the flags to win", input.Port, input.Replicas)
+	if input.Endpoints["http"].TargetPort != 8080 || input.Replicas != 5 {
+		t.Errorf("endpoints/replicas = %+v/%d, want the flags to win", input.Endpoints, input.Replicas)
 	}
 
 	if input.Environment != "staging" || input.Size != "small" {
@@ -451,7 +540,7 @@ func TestResolveDeployInputPositionalNameWins(t *testing.T) {
 
 	flags := &deployFlags{image: "ghcr.io/acme/api:v1", name: "flag-name"}
 
-	input, err := resolveDeployInput([]string{"positional"}, flags, config.Load())
+	input, err := resolveDeployInput(discardWriter(), []string{"positional"}, flags, config.Load())
 	if err != nil {
 		t.Fatalf("resolveDeployInput() error = %v", err)
 	}
@@ -469,7 +558,7 @@ func TestResolveDeployInputNeedsSomething(t *testing.T) {
 
 		// The test binary runs in cmd/musher, which has no musher.yaml, so
 		// discovery legitimately finds nothing here.
-		_, err := resolveDeployInput(nil, &deployFlags{}, config.Load())
+		_, err := resolveDeployInput(discardWriter(), nil, &deployFlags{}, config.Load())
 		if err == nil {
 			t.Fatal("expected a usage error")
 		}
@@ -478,7 +567,7 @@ func TestResolveDeployInputNeedsSomething(t *testing.T) {
 	t.Run("no name anywhere", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := resolveDeployInput(nil, &deployFlags{image: "ghcr.io/acme/api:v1"}, config.Load())
+		_, err := resolveDeployInput(discardWriter(), nil, &deployFlags{image: "ghcr.io/acme/api:v1"}, config.Load())
 		if err == nil {
 			t.Fatal("expected a missing name to be a usage error")
 		}
@@ -490,7 +579,7 @@ func TestResolveDeployInputNeedsSomething(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "musher.yaml")
 		writeTestFile(t, path, "not: a valid app\n")
 
-		_, err := resolveDeployInput(nil, &deployFlags{file: path}, config.Load())
+		_, err := resolveDeployInput(discardWriter(), nil, &deployFlags{file: path}, config.Load())
 
 		var cliErr *clierrors.CLIError
 		if !clierrors.As(err, &cliErr) || cliErr.Code != clierrors.ExitInvalidSpec {
@@ -694,7 +783,7 @@ func TestDeployCommandFlags(t *testing.T) {
 	for _, name := range []string{
 		"image", "port", "name", "env", "env-file", "replicas", "size",
 		"environment", "kind", "file", "detach", "watch", "timeout",
-		"degraded-grace", "wait-for", "yes",
+		"degraded-grace", "wait-for", "yes", "force",
 	} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing flag --%s", name)
@@ -706,6 +795,13 @@ func TestDeployCommandFlags(t *testing.T) {
 			t.Errorf("--%s shorthand = %q, want %q", flag, got, short)
 		}
 	}
+}
+
+// discardWriter is a non-interactive writer whose output is thrown away.
+func discardWriter() *output.Writer {
+	writer, _, _ := testWriter(false, false)
+
+	return writer
 }
 
 // writeTestFile writes content to path, failing the test on error.

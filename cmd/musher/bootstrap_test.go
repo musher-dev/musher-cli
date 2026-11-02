@@ -143,9 +143,7 @@ func TestConfigureRootRuntimeDefaults(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(t.Context())
 
-	state, err := configureRootRuntime(cmd, out,
-		false, false, false, false,
-		"", "", "", "")
+	state, err := configureRootRuntime(cmd, out, &rootFlags{})
 	if err != nil {
 		t.Fatalf("configureRootRuntime() error = %v", err)
 	}
@@ -168,9 +166,10 @@ func TestConfigureRootRuntimeWithFlags(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(t.Context())
 
-	state, err := configureRootRuntime(cmd, out,
-		true, true, true, true,
-		"debug", "text", "", "off")
+	state, err := configureRootRuntime(cmd, out, &rootFlags{
+		jsonOutput: true, quiet: true, noInput: true, noColor: true,
+		logLevel: "debug", logFormat: "text", logStderr: "off",
+	})
 	if err != nil {
 		t.Fatalf("configureRootRuntime() error = %v", err)
 	}
@@ -206,9 +205,7 @@ func TestConfigureRootRuntimeInvalidLogLevel(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(t.Context())
 
-	_, err := configureRootRuntime(cmd, out,
-		false, false, false, false,
-		"INVALID_LEVEL", "", "", "")
+	_, err := configureRootRuntime(cmd, out, &rootFlags{logLevel: "INVALID_LEVEL"})
 	if err == nil {
 		t.Fatal("expected error for invalid log level")
 	}

@@ -216,13 +216,9 @@ func TestRootCmdPersistentFlags(t *testing.T) {
 	root := newRootCmd()
 
 	flags := []string{
-		"json", "quiet", "no-color", "no-input",
+		"json", "quiet", "no-color", "no-input", "no-tui",
 		"log-level", "log-format", "log-file", "log-stderr",
 		"api-url", "api-key", "profile",
-	}
-
-	if root.PersistentFlags().Lookup("no-tui") != nil {
-		t.Error("--no-tui should have been removed along with the TUI")
 	}
 
 	for _, name := range flags {
@@ -246,6 +242,7 @@ func TestRootCmdGroups(t *testing.T) {
 
 	groups := root.Groups()
 	wantGroups := map[string]bool{
+		groupBuild:       false,
 		groupDeploy:      false,
 		groupAuth:        false,
 		groupMaintenance: false,
@@ -272,6 +269,8 @@ func TestRootCmdRegistersAllTopLevelCommands(t *testing.T) {
 	root := newRootCmd()
 
 	want := map[string]bool{
+		"init":       false,
+		"build":      false,
 		"deploy":     false,
 		"list":       false,
 		"status":     false,
