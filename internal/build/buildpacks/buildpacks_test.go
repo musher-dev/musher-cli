@@ -315,7 +315,9 @@ func TestEventLoggerVerboseAndFormatting(t *testing.T) {
 }
 
 func TestNewPackClientWithUnreachableDocker(t *testing.T) {
-	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "no-docker.sock"))
+	// A refused loopback port is unreachable on every OS. A socket under
+	// t.TempDir() is not: macOS temp paths exceed the 104-byte unix socket limit.
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
 
 	// pack's client constructor does not dial, so this succeeds offline.
 	client, release, err := newPackClient(newEventLogger(nil, nil, false))

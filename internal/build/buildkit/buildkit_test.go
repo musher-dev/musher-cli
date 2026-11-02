@@ -354,7 +354,9 @@ func TestDialStandaloneAndProbeFailures(t *testing.T) {
 func TestDialDockerEngineUnreachable(t *testing.T) {
 	t.Setenv("MUSHER_BUILDKIT_HOST", "")
 	t.Setenv("BUILDKIT_HOST", "")
-	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "no-docker.sock"))
+	// A refused loopback port is unreachable on every OS. A socket under
+	// t.TempDir() is not: macOS temp paths exceed the 104-byte unix socket limit.
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
