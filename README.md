@@ -33,7 +33,7 @@ curl -fsSL https://get.musher.dev | sh
 irm https://get.musher.dev/install.ps1 | iex
 ```
 
-**From source** (requires Go 1.26.2+):
+**From source** (requires Go 1.26.10+):
 
 ```bash
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
@@ -58,6 +58,58 @@ Verify your setup:
 ```bash
 musher doctor
 ```
+
+Build your repository and deploy it:
+
+```bash
+musher init      # detect the project, write musher.yaml with an explicit build recipe
+musher deploy    # build, push, and deploy by digest; prints the URL
+```
+
+Run `musher` with no arguments in a terminal to open the interactive UI:
+deployments, live logs, and guided init, build, and deploy screens.
+
+## Building from Source Code
+
+`musher build` and `musher deploy` build images on your machine and push them
+to **your own registry** (GHCR, Docker Hub, …); the platform then deploys the
+image pinned by digest.
+
+- **Dockerfile** recipes build with BuildKit — Docker Engine's built-in BuildKit,
+  or a standalone `buildkitd` via `build.buildkit_host` / `MUSHER_BUILDKIT_HOST`.
+- **Buildpacks** recipes build with Cloud Native Buildpacks (default builder:
+  Paketo `builder-jammy-base`, pinned by digest when `musher init` writes it).
+  They need a Docker daemon.
+- Images default to `linux/amd64`, the platform's host architecture, so builds
+  on Apple Silicon still run. Override with `--platform`.
+- Push credentials come from your Docker config (`docker login <registry>`).
+  For a **private** image, add a pull credential for its registry in the Musher
+  Console (Configuration → Registry Credentials); `musher deploy` warns when
+  one is missing.
+
+The recipe lives in `musher.yaml` and mirrors the component v2 `build` grammar;
+it is used locally and never sent to the platform:
+
+```yaml
+apiVersion: musher.dev/v1
+kind: App
+metadata:
+  name: web
+spec:
+  workload:
+    kind: SERVICE
+    build:
+      repository: ghcr.io/acme/web   # where to push
+      context: .
+      dockerfile: Dockerfile          # or: buildpacks: {builderImage: …}
+      arguments: {NODE_ENV: production}
+      secrets: {NPM_TOKEN: {env: NPM_TOKEN}}   # RUN --mount=type=secret,id=NPM_TOKEN
+    endpoints:
+      http: {targetPort: 8080}
+```
+
+A build never guesses a recipe: `musher init` detects one and writes it down,
+so what you review is what builds.
 
 ## Status
 
@@ -131,6 +183,10 @@ The CLI covers building (`init`, `build`), deploying (`deploy`, `list`,
 | Credentials (keyring) | OS keyring, service `musher/<api-host>` |
 | Credentials (fallback) | `~/.local/share/musher/credentials/<hostID>/api-key` |
 | Logs | `~/.local/state/musher/logs/musher.log` |
+
+**Build settings:** `build.repository` (default push target), `build.platform`
+(default `linux/amd64`), `build.buildkit_host` (standalone BuildKit; otherwise
+Docker's). Set them with `musher config set`.
 
 **Auth precedence:** `MUSHER_API_KEY` env var / `--api-key` flag > OS keyring > credentials file.
 

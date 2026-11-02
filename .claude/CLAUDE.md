@@ -3,7 +3,9 @@
 ## What This Is
 
 Musher is the **deployment CLI** for the Musher platform — it authenticates,
-deploys container images, and observes running deployments.
+builds images from a repository (BuildKit or Cloud Native Buildpacks), deploys
+container images, and observes running deployments. Bare `musher` in a terminal
+opens an interactive TUI over the same use cases.
 
 **IS**: Intent delivery and observability. It resolves local context, submits
 deployment intent, and streams progress back.
@@ -50,6 +52,32 @@ Key API facts that constrain the design:
   comes from natural keys (read-before-write, 409-tolerance, adopting the
   `componentId`/`blueprintId` a `resource-conflict` names).
 
+## Builds (read this before changing `internal/build`)
+
+The platform cannot build from source yet. Component v2 specifies
+`workload.source.{git,upload}` + `workload.build`, but platform-api refuses both
+at admission (`GIT_SOURCE_UNSUPPORTED` / `UPLOAD_SOURCE_UNSUPPORTED`), and there
+is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
+`ImageBuild` / `ImageRegistry` are `TO_BE`). So the CLI builds **locally**:
+
+- The recipe lives in `musher.yaml` `spec.workload.build` and mirrors the
+  component v2 `build` grammar plus the CLI-only `repository`. It is consumed
+  locally and **never sent**: the server gets `source.image: repo:tag@sha256:…`
+  with no `build` (v2 forbids `build` beside `image`).
+- A recipe is **never inferred at build time** (COMP-BUILD-007). `musher init`
+  detects and *writes* one (allowed by specifications ADR 0040 §7).
+- `internal/build` is the only package allowed to import moby/buildkit,
+  buildpacks/pack, docker, and go-containerregistry (depguard
+  `build_engine_isolation`). Drivers sit behind `core.Builder`, so a future
+  server-side driver (upload → ImageBuild) can replace them without UX changes.
+- Default platform `linux/amd64`: compute hosts are x86_64.
+- The digest deployed is the pushed **manifest** digest, never an image ID.
+- Pelorus exclusion **X-19** (no deploy client for a team's own code until the
+  CLI's deploy/build-runner/preview roles are designed together) and bet B-08
+  (Musher-side builds in Firecracker guests) are in tension with local builds.
+  This path is the interim image-source route; keep recipes spec-conformant so
+  the remote path stays open.
+
 ## Directory Overview
 
 ### CLI Entry — `cmd/musher/`
@@ -62,6 +90,9 @@ Key API facts that constrain the design:
 - `auth.go`, `auth_login.go`, `auth_logout.go`, `auth_status.go`
 - `config.go`, `config_get.go`, `config_list.go`, `config_set.go`, `config_profile.go`
 - `doctor.go`, `update.go`, `version.go`, `completion.go`
+- `init.go`, `build.go` — recipe detection/writing and local builds
+- `deploy.go`, `deploy_report.go`, `list.go`, `status.go`, `logs.go` — deploy and observe
+- `root_tui.go`, `tui_adapters.go` — TUI launch decision and service adapters
 
 ### Internal Packages — `internal/`
 
@@ -69,7 +100,10 @@ Key API facts that constrain the design:
 
 - `auth/` — Credential storage (keyring + file fallback), profile-scoped
 - `buildinfo/` — Build metadata
+- `build/` — Local image builds: `core` (types, `Builder`), `buildkit`,
+  `buildpacks`, `daemon`, `detect`, `registry`; doctor checks
 - `client/` — HTTP client for the Musher API
+- `deployspec/` — `musher.yaml` schema, parsing, validation, encoding
 - `config/` — Viper-based configuration, profiles, overrides
 - `env/` — Centralized environment-variable access (single source of truth)
 - `errors/` — CLIError with exit codes and hints
@@ -79,13 +113,18 @@ Key API facts that constrain the design:
 - `terminal/` — TTY detection and capabilities
 - `update/` — Self-update from GitHub Releases
 - `validate/` — Input validation utilities
-- `workflow/` — Transport-agnostic use-case layer (`Progress`, `Confirmer`)
+- `workflow/` — Transport-agnostic use cases: `Deploy` (compile → validate →
+  converge → watch), `Build`, scaffolding for `init`
 
 #### Presentation
 
 - `output/` — CLI output (colors, spinners, TTY detection)
 - `prompt/` — Interactive prompts
 - `doctor/` — Diagnostic framework (output-agnostic)
+- `tui/` — Bubbletea UI: home, deployments, logs, init, build, deploy screens.
+  Screens declare narrow service interfaces (adapted in `cmd/musher`); never
+  store a `context.Context` in a struct (containedctx). Does not import
+  `workflow`, so the build engine stays out of TUI tests.
 
 ## Stable Code Patterns
 
@@ -126,6 +165,10 @@ task check:test     # Run tests only
 task check:contracts # Assert the command tree (incl. that bundle/hub stay gone)
 task fmt            # Format code
 ```
+
+golangci-lint must run with the pinned go1.26.10 toolchain (a newer local Go
+breaks its typecheck). Docker-backed build tests are behind
+`-tags integration` (`go test -tags integration ./internal/build/...`).
 
 ## Quick Reference
 
