@@ -92,11 +92,6 @@
     // lands in ~/ -- outside the claude volume -- and is lost on every rebuild.
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
 
-    // Every Claude Code session starts at max effort. An env var because the
-    // settings file's effortLevel has no "max"; it also outranks /effort, so
-    // start a lighter session as `CLAUDE_CODE_EFFORT_LEVEL=auto claude`.
-    "CLAUDE_CODE_EFFORT_LEVEL": "max",
-
     // REPL histories join the shell's on its volume; post-create points zsh
     // and bash there.
     "NODE_REPL_HISTORY": "/home/vscode/.shell-history/node_repl_history",
