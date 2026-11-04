@@ -191,3 +191,82 @@ jobs:
 
       - name: Run tests
         run: go test -race ./...
+
+  # ---------------------------------------------------------------------------
+  # Dev Container — built and started only when the change touches it
+  # ---------------------------------------------------------------------------
+  # Decides whether this change touches what the dev container is built from.
+  # The dev container job is the slowest here and proves only those files, so
+  # it runs when one of them changed and is skipped otherwise.
+  detect:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      devcontainer: ${{ steps.scope.outputs.devcontainer }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # The base commit must be in the clone to diff against.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide whether the dev container needs testing
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          # What the change builds on: the pull request's base, or the
+          # previous tip of main on a push.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # Its inputs: .devcontainer/ (devcontainer.json, the Features
+          # lockfile, .env.example, the compose stack and its config, the
+          # lifecycle scripts) and this workflow, which holds the job.
+          inputs='^(\.devcontainer/|\.github/workflows/ci\.yml$)'
+          decide() {
+            echo "devcontainer=$1" >> "$GITHUB_OUTPUT"
+            echo "devcontainer=$1: $2"
+          }
+          case "$EVENT" in
+            pull_request | push) ;;
+            *)
+              decide true "a ${EVENT} run tests it"
+              exit 0
+              ;;
+          esac
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2> /dev/null; then
+            decide true "no base commit to diff against"
+            exit 0
+          fi
+          # Three dots: what the change made since it left its base, not
+          # what landed on the base since.
+          changed="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+          if grep -qE "$inputs" <<< "$changed"; then
+            decide true "a dev container input changed"
+          else
+            decide false "no dev container input changed"
+          fi
+
+  devcontainer:
+    name: Dev Container
+    needs: detect
+    if: needs.detect.outputs.devcontainer == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      # --frozen-lockfile fails when devcontainer-lock.json is missing or no
+      # longer matches devcontainer.json.
+      - name: Build the dev container
+        run: npx -y @devcontainers/cli@0.89.0 build --workspace-folder . --frozen-lockfile
+
+      # Runs every lifecycle script: post-create ends with base_verify_tools
+      # and `task setup`, and startup brings up the compose services and fails
+      # on one that exits or turns unhealthy.
+      - name: Start it and run its lifecycle
+        run: npx -y @devcontainers/cli@0.89.0 up --workspace-folder .
