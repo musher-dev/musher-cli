@@ -1,0 +1,13 @@
+# The releases of other Musher repositories this repository builds against
+# (engineering-conventions DEPS).
+#
+# Copied by hand into contracts/vendor/<repository>/ and pinned by digest in
+# its vendored.json, which internal/runner/contract_test.go proves offline.
+# platform-api 24.0.0 published no release.json, so the copy comes from its tag.
+
+[[dependencies]]
+repository = "platform-api"
+output = "contracts"
+version = "24.0.0"
+interfaces = ["runner-http"]
+description = "The runner surface (/runner/v1) runner mode calls with the run attempt token: internal/runner/api is generated from openapi/runner.json (task generate:runner-client)."
