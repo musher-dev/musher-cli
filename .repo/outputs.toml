@@ -1,0 +1,29 @@
+# What this repository publishes for others to consume (engineering-conventions
+# EC-0007, OUT-01), and the interfaces those outputs deliver (EC-0030). Pelorus
+# observes the CLI's releases through this file.
+#
+# This repository has not adopted the conventions' tooling yet, so nothing here
+# is checked by `conventions check`; internal/runner's tests hold the
+# runner-self-test interface to its schema.
+schema_version = 2
+
+[[outputs]]
+id = "binaries"
+kind = "bundle"
+description = "Each vX.Y.Z release: the musher binary for linux, darwin and windows on amd64 and arm64, built with CGO off (so linux/amd64 is the static binary host-images bakes into the musher-build-runner guest), checksums.txt, install.sh and install.ps1, and the runner self-test schema."
+source = "cmd/musher/"
+publish_workflow = "release.yml"
+location = "https://github.com/musher-dev/musher-cli/releases"
+docs = "README.md#install"
+
+# --- Interfaces --------------------------------------------------------------
+
+[[interfaces]]
+id = "runner-self-test"
+format = "json-schema"
+description = "The results document `musher runner self-test` writes to MUSHER_RESULTS_FILE inside an isolation guest: the runner version, BuildKit readiness, API and registry egress, the denied-egress probes and scratch. Consumed by host-agent's deep canary, which maps each check to an isolation condition."
+definitions = ["contracts/runner/self-test.schema.json"]
+delivered_by = "binaries"
+compatibility = "gated"
+audience = "internal"
+docs = "docs/runner-mode.md#self-test"
