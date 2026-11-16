@@ -19,6 +19,8 @@ import (
 type (
 	// RegistryAuth supplies registry credentials by host.
 	RegistryAuth = core.RegistryAuth
+	// CredentialRenewer replaces a registry credential on demand.
+	CredentialRenewer = core.CredentialRenewer
 	// Stage is the step of a build a failure belongs to.
 	Stage = core.Stage
 )

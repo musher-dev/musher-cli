@@ -15,6 +15,14 @@ type RegistryAuth interface {
 	Credentials(ctx context.Context, host string) (username, password string, ok bool, err error)
 }
 
+// CredentialRenewer is a RegistryAuth whose credential for a host can be
+// replaced on demand. A push the registry refused for its credential asks for
+// a fresh one through it and retries, so a credential that ended (or was
+// revoked) early does not fail a push that outlives it.
+type CredentialRenewer interface {
+	Renew(ctx context.Context, host string) error
+}
+
 // Stage is the step of a build a failure belongs to. The runner reports it as
 // the failure kind, so the platform can tell a recipe or source fault (never
 // retried) from an infrastructure one (retried).

@@ -203,6 +203,7 @@ type fakeEngine struct {
 	passwords []string
 	hold      time.Duration // between the first and the second credential read
 	waitCtx   bool          // block until ctx ends
+	refused   bool          // the registry refuses the first credential: renew it
 	err       error
 	digest    string
 	lines     []string
@@ -243,6 +244,25 @@ func (e *fakeEngine) Build(ctx context.Context, b *runner.EngineBuild, auth runn
 
 	if err := read(); err != nil {
 		return "", err
+	}
+
+	if e.refused {
+		renewer, ok := auth.(build.CredentialRenewer)
+		if !ok {
+			return "", &runner.EngineError{Kind: runner.KindPushFailed, Err: errors.New("the grant cannot be renewed on a refusal")}
+		}
+
+		if err := renewer.Renew(ctx, "index.docker.io"); err == nil {
+			return "", errors.New("renewed a grant for a host it is not for")
+		}
+
+		if err := renewer.Renew(ctx, "registry.musher.test"); err != nil {
+			return "", err //nolint:wrapcheck // the fake hands the grant's error back as the engine would
+		}
+
+		if err := read(); err != nil {
+			return "", err
+		}
 	}
 
 	if e.waitCtx {
@@ -305,7 +325,7 @@ func TestBuildPushesAndReports(t *testing.T) {
 
 	b := engine.build
 	if b.Kind != build.KindDockerfile || b.Dockerfile != "Dockerfile" || b.Repository != "registry.musher.test/org-1/src-42" ||
-		b.Tag != "c0ffee" || string(b.Secrets["NPM_TOKEN"]) != "s3cr3t-value" || b.Arguments["A"] != "1" {
+		b.Tag != imageTag || string(b.Secrets["NPM_TOKEN"]) != "s3cr3t-value" || b.Arguments["A"] != "1" {
 		t.Fatalf("engine got %+v", b)
 	}
 
@@ -473,6 +493,29 @@ func TestBuildRefreshesThePushGrantDuringALongBuild(t *testing.T) {
 	}
 
 	assertLogLines(t, got.logLines)
+}
+
+// TestBuildRenewsARefusedGrant: a registry that refuses the grant's
+// credential before it is due (both engines' pushes ask through
+// CredentialRenewer) gets a newly asked grant at once.
+func TestBuildRenewsARefusedGrant(t *testing.T) {
+	t.Parallel()
+
+	f := newFakeAPI(t)
+	engine := &fakeEngine{digest: pushedDigest, refused: true}
+
+	if err := newBuilder(t, f, engine).Run(t.Context(), uuid.MustParse(buildID), ""); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got := f.snapshot()
+	if got.grants != 2 || len(engine.passwords) != 2 || engine.passwords[0] == engine.passwords[1] {
+		t.Fatalf("grants = %d, passwords %v; want one renewal with a new password", got.grants, engine.passwords)
+	}
+
+	if len(got.buildReports) != 1 || got.buildReports[0]["imageDigest"] != pushedDigest {
+		t.Fatalf("reports = %v, want PUSHED %s", got.buildReports, pushedDigest)
+	}
 }
 
 func TestBuildStopsBeforeItsDeadline(t *testing.T) {

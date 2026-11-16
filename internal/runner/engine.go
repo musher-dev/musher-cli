@@ -24,6 +24,10 @@ type EngineBuild = build.GuestBuild
 // RegistryAuth supplies registry credentials by host.
 type RegistryAuth = build.RegistryAuth
 
+// The grant source answers both engines' credential requests and renews on a
+// registry's refusal.
+var _ build.CredentialRenewer = (*GrantSource)(nil)
+
 // LogFunc receives one line of build output.
 type LogFunc func(severity api.BuildLogLineSeverity, message string, at time.Time)
 

@@ -62,7 +62,10 @@ const (
 	snapshotID = "6b3f0f8e-5c1a-4d7e-9a5e-0d6c1c1f0a01"
 	buildID    = "8c2d1e7a-3b4f-4a6e-8d9c-1e2f3a4b5c02"
 	commit     = "0123456789abcdef0123456789abcdef01234567"
-	attempt    = "mush_run_kid01.0123456789abcdef0123456789abcdef.1.4102444800.sig"
+	// imageTag is platform-api's build-<uuid hex>; the runner pushes exactly
+	// imageRepository:imageTag.
+	imageTag = "build-8c2d1e7a3b4f4a6e8d9c1e2f3a4b5c02"
+	attempt  = "mush_run_kid01.0123456789abcdef0123456789abcdef.1.4102444800.sig"
 )
 
 func newFakeAPI(t *testing.T) *fakeAPI {
@@ -185,7 +188,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 				"snapshotId": snapshotID, "commitSha": commit, "archiveUrl": f.srv.URL + "/storage/archive",
 				"archiveDigest": f.archiveDigest, "archiveSizeBytes": len(f.archive),
 			},
-			"secrets": f.secrets, "imageRepository": f.registryHost() + "/org-1/src-42", "imageTag": "c0ffee",
+			"secrets": f.secrets, "imageRepository": f.registryHost() + "/org-1/src-42", "imageTag": imageTag,
 			"deadlineAt": f.deadline,
 		})
 	case strings.HasSuffix(path, ":grantPushAccess"):
