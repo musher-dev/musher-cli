@@ -195,7 +195,7 @@ task check:contracts # Assert the command tree (incl. that bundle/hub stay gone)
 task fmt            # Format code
 ```
 
-golangci-lint must run with the pinned go1.26.10 toolchain (a newer local Go
+golangci-lint must run with the pinned go1.26.11 toolchain (a newer local Go
 breaks its typecheck). Docker-backed build tests are behind
 `-tags integration` (`go test -tags integration ./internal/build/...`).
 
