@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -129,6 +130,9 @@ const maxPushAttempts = 3
 // are skipped, so the retry resumes with the blob or manifest that was in
 // flight. When the attempt failed on the refusal itself and auth is a
 // core.CredentialRenewer, a fresh credential is obtained first.
+//
+// A token that expires mid-push is re-exchanged in place, without a retry,
+// even from a registry that refuses it with no challenge (see pushTransport).
 func PushLayout(ctx context.Context, dir, ref string, auth core.RegistryAuth) (string, error) {
 	img, err := layoutImage(dir)
 	if err != nil {
@@ -144,7 +148,7 @@ func PushLayout(ctx context.Context, dir, ref string, auth core.RegistryAuth) (s
 	renewer, canRenew := auth.(core.CredentialRenewer)
 
 	for attempt := 1; ; attempt++ {
-		recorder := &refusalRecorder{inner: remote.DefaultTransport}
+		recorder := &pushTransport{inner: remote.DefaultTransport}
 
 		pushErr := remote.Write(tag, img,
 			remote.WithContext(ctx),
@@ -212,23 +216,57 @@ func PushedDigest(ctx context.Context, ref string, auth core.RegistryAuth) (stri
 	return desc.Digest.String(), nil
 }
 
-// refusalRecorder notes whether the registry or its token realm refused a
-// credential (401 or 403) during a push. The anonymous ping that discovers
-// the challenge (GET /v2/) is expected to be refused and does not count.
-type refusalRecorder struct {
+// pushTransport sits under go-containerregistry's bearer transport during a
+// push. It notes whether the registry or its token realm refused a credential
+// (401 or 403); the anonymous ping that discovers the challenge (GET /v2/) is
+// expected to be refused and does not count.
+//
+// It also lets the bearer transport renew an expired token in place. That
+// transport exchanges a new token only when a refusal carries a
+// WWW-Authenticate challenge, but zot (2.1.x) answers an expired token with a
+// bare 401 UNSUPPORTED, so a blob upload that outlives its token could never
+// be committed: every attempt would start a new token, upload, and be refused
+// the commit. A bare 401 to a request that carried a credential therefore gets
+// the Bearer challenge the ping answered. The bearer transport then exchanges
+// a new token and sends the request again; net/http rewinds its body with
+// GetBody, which go-containerregistry sets on every body it can resend.
+type pushTransport struct {
 	inner   http.RoundTripper
 	refused atomic.Bool
+
+	mu        sync.Mutex
+	challenge string // the ping's Bearer challenge
 }
 
-func (r *refusalRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
+func (r *pushTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.inner.RoundTrip(req)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // a transport passes errors through
 	}
 
+	challenge := resp.Header.Get("WWW-Authenticate")
+
 	ping := req.Method == http.MethodGet && strings.TrimSuffix(req.URL.Path, "/") == "/v2"
-	if !ping && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+	if ping {
+		if resp.StatusCode == http.StatusUnauthorized && strings.HasPrefix(challenge, "Bearer ") {
+			r.mu.Lock()
+			r.challenge = challenge
+			r.mu.Unlock()
+		}
+
+		return resp, nil
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		r.refused.Store(true)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized && challenge == "" && req.Header.Get("Authorization") != "" {
+		r.mu.Lock()
+		if r.challenge != "" {
+			resp.Header.Set("WWW-Authenticate", r.challenge)
+		}
+		r.mu.Unlock()
 	}
 
 	return resp, nil
