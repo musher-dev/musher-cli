@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/docker/cli/cli/config"
+	"github.com/docker/cli/cli/config/types"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
@@ -47,6 +48,13 @@ type Options struct {
 	ProgressMode string
 	// LookupEnv reads secret env sources; nil reads the process environment.
 	LookupEnv core.LookupFunc
+	// Auth, when set, is the only source of registry credentials: the docker
+	// credential store is never read, and a host it holds nothing for is
+	// reached anonymously. The runner sets it to the build's push grant.
+	Auth core.RegistryAuth
+	// Secrets, when set, are the build secret values by id, used instead of
+	// resolving the recipe's local sources.
+	Secrets map[string][]byte
 }
 
 // solver is the slice of the BuildKit client the driver needs.
@@ -72,6 +80,8 @@ type Driver struct {
 }
 
 // New returns a Dockerfile driver.
+//
+//nolint:gocritic // hugeParam: Options is a value-typed configuration literal at every call site.
 func New(opts Options) *Driver {
 	drv := &Driver{opts: opts, head: registry.Digest}
 	drv.connect = drv.dial
@@ -123,21 +133,21 @@ func (d *Driver) Build(ctx context.Context, req core.Request, events chan<- core
 
 	conn, err := d.connect(ctx)
 	if err != nil {
-		return core.Result{}, err
+		return core.Result{}, core.AtStage(core.StageInfrastructure, err) //nolint:wrapcheck // the dial error already names the endpoint
 	}
 
 	defer conn.release()
 
 	resp, err := d.solve(ctx, conn.solver, &solveOpt, events)
 	if err != nil {
-		return core.Result{}, clierrors.Errorf("build failed: %w", err)
+		return core.Result{}, staged(classifySolveError(ctx, err), clierrors.Errorf("build failed: %w", err))
 	}
 
 	digest := resp.ExporterResponse[exporterDigestKey]
 	if conn.verifyDigest || digest == "" {
 		digest, err = d.head(ctx, req.Ref())
 		if err != nil {
-			return core.Result{}, clierrors.Errorf("read pushed digest of %s: %w", req.Ref(), err)
+			return core.Result{}, staged(core.StagePush, clierrors.Errorf("read pushed digest of %s: %w", req.Ref(), err))
 		}
 	}
 
@@ -159,12 +169,17 @@ func (d *Driver) solveOpt(req *core.Request) (client.SolveOpt, error) {
 	dockerfile := filepath.Join(contextDir, filepath.FromSlash(req.Recipe.Dockerfile))
 
 	if info, err := os.Stat(dockerfile); err != nil || info.IsDir() {
-		return client.SolveOpt{}, clierrors.Errorf("dockerfile %s not found", dockerfile)
+		return client.SolveOpt{}, staged(core.StageRecipe, clierrors.Errorf("dockerfile %s not found", dockerfile))
 	}
 
-	secrets, err := core.ResolveSecrets(req.Recipe.Secrets, req.Root, d.opts.LookupEnv)
-	if err != nil {
-		return client.SolveOpt{}, err //nolint:wrapcheck // already a CLI error naming the secret
+	secrets := d.opts.Secrets
+	if secrets == nil {
+		resolved, err := core.ResolveSecrets(req.Recipe.Secrets, req.Root, d.opts.LookupEnv)
+		if err != nil {
+			return client.SolveOpt{}, staged(core.StageRecipe, err)
+		}
+
+		secrets = resolved
 	}
 
 	contextFS, err := fsutil.NewFS(contextDir)
@@ -192,12 +207,75 @@ func (d *Driver) solveOpt(req *core.Request) (client.SolveOpt, error) {
 			},
 		}},
 		Session: []session.Attachable{
-			authprovider.NewDockerAuthProvider(authprovider.DockerAuthProviderConfig{
-				AuthConfigProvider: authprovider.LoadAuthConfig(config.LoadDefaultConfigFile(io.Discard)),
-			}),
+			d.authAttachable(),
 			secretsprovider.FromMap(secrets),
 		},
 	}, nil
+}
+
+// authAttachable answers BuildKit's registry credential requests: from
+// Options.Auth when set, otherwise from the docker credential store.
+func (d *Driver) authAttachable() session.Attachable {
+	if d.opts.Auth == nil {
+		return authprovider.NewDockerAuthProvider(authprovider.DockerAuthProviderConfig{
+			AuthConfigProvider: authprovider.LoadAuthConfig(config.LoadDefaultConfigFile(io.Discard)),
+		})
+	}
+
+	auth := d.opts.Auth
+
+	return authprovider.NewDockerAuthProvider(authprovider.DockerAuthProviderConfig{
+		AuthConfigProvider: func(ctx context.Context, host string, _ []string, _ authprovider.ExpireCachedAuthCheck) (types.AuthConfig, error) {
+			user, pass, ok, err := auth.Credentials(ctx, host)
+			if err != nil {
+				return types.AuthConfig{}, clierrors.Errorf("registry credentials for %s: %w", host, err)
+			}
+
+			if !ok {
+				return types.AuthConfig{}, nil
+			}
+
+			return types.AuthConfig{ServerAddress: host, Username: user, Password: pass}, nil
+		},
+		// A grant is refreshed while the build runs, so never reuse a
+		// credential BuildKit cached more than a minute ago.
+		ExpireCachedAuth: func(created time.Time, _ string) bool {
+			return time.Since(created) > time.Minute
+		},
+	})
+}
+
+// classifySolveError attributes a failed solve to the step that failed. The
+// solve reports one error for the whole graph, so this reads its text: the
+// Dockerfile frontend's parse errors are the recipe's, the image exporter's
+// push errors are the registry's, a canceled or lost connection is the
+// engine's, and everything else is the build's own.
+func classifySolveError(ctx context.Context, err error) core.Stage {
+	if ctx.Err() != nil {
+		return core.StageInfrastructure
+	}
+
+	msg := strings.ToLower(err.Error())
+
+	for _, marker := range []string{"failed to push", "push access denied", "unexpected status from push", "failed to do request: put", "insufficient_scope"} {
+		if strings.Contains(msg, marker) {
+			return core.StagePush
+		}
+	}
+
+	for _, marker := range []string{"dockerfile parse error", "failed to read dockerfile", "failed to parse dockerfile", "unknown instruction", "failed to create llb definition", "no build stage in current context"} {
+		if strings.Contains(msg, marker) {
+			return core.StageRecipe
+		}
+	}
+
+	for _, marker := range []string{"connection refused", "error reading from server", "transport is closing", "connection error", "code = unavailable"} {
+		if strings.Contains(msg, marker) {
+			return core.StageInfrastructure
+		}
+	}
+
+	return core.StageBuild
 }
 
 func frontendAttrs(req *core.Request, filename string) map[string]string {
@@ -354,4 +432,9 @@ func emitAll(ctx context.Context, events chan<- core.Event, batch []core.Event) 
 
 func closeQuietly(closer io.Closer) {
 	closer.Close()
+}
+
+// staged attributes an already wrapped error to a build stage.
+func staged(stage core.Stage, err error) error {
+	return core.AtStage(stage, err) //nolint:wrapcheck // attributes; the cause is already a CLI error
 }
