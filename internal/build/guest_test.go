@@ -3,6 +3,7 @@ package build
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	dockerconfig "github.com/docker/cli/cli/config"
@@ -52,7 +53,8 @@ func TestGuestBuildUsesAPrivateDockerConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if perm := info.Mode().Perm(); perm != 0o700 {
+	// Windows has no POSIX permission bits to assert.
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o700 {
 		t.Errorf("mode = %o, want 700", perm)
 	}
 

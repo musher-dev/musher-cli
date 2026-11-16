@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/musher-dev/musher-cli/internal/runner"
@@ -88,7 +89,8 @@ func TestExtractUnpacksAGitHubTarball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if info.Mode()&os.ModeSetuid != 0 || info.Mode().Perm() != 0o755 {
+	// Windows has no POSIX permission or setuid bits to assert.
+	if runtime.GOOS != "windows" && (info.Mode()&os.ModeSetuid != 0 || info.Mode().Perm() != 0o755) {
 		t.Fatalf("mode = %v, want 0755 without setuid", info.Mode())
 	}
 
