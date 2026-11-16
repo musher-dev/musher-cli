@@ -30,6 +30,7 @@ agree.
 | `MUSHER_BUILDKIT_HOST` | buildkitd. `--buildkit-host` wins over it, and the default is `unix:///run/buildkit/buildkitd.sock`. The generic `BUILDKIT_HOST` and the Docker Engine are never used. |
 | `MUSHER_REGISTRY_HOST` | The registry `self-test` probes. `--registry` wins over it. |
 | `TMPDIR` | Scratch, `/scratch` in the guest. The archive, the source and the engine's layouts are kept here. |
+| `DOCKER_CONFIG` | Set by `build` itself, never read from the guest: a new private (`0700`) directory under the build's scratch work directory. BuildKit's session auth provider writes its token seed there, because the guest's `HOME` is on the read-only root filesystem. The user's `~/.docker` is never used. |
 | `MUSHER_UPDATE_DISABLED` | Set by guest protocol v2. Runner mode never checks for updates either way. |
 
 ## Rules

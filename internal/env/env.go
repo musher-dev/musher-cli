@@ -84,6 +84,9 @@ const (
 	DockerHost = "DOCKER_HOST"
 	// DockerContext selects a docker CLI context by name.
 	DockerContext = "DOCKER_CONTEXT"
+	// DockerConfig is the docker configuration directory; runner mode points
+	// it at a private directory on the scratch disk.
+	DockerConfig = "DOCKER_CONFIG"
 
 	// OTELServiceName overrides the OpenTelemetry service.name resource attribute.
 	OTELServiceName = "OTEL_SERVICE_NAME"

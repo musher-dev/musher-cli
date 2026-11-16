@@ -3,11 +3,15 @@ package build
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
+
+	dockerconfig "github.com/docker/cli/cli/config"
 
 	"github.com/musher-dev/musher-cli/internal/build/buildkit"
 	"github.com/musher-dev/musher-cli/internal/build/cnb"
 	"github.com/musher-dev/musher-cli/internal/build/core"
+	"github.com/musher-dev/musher-cli/internal/env"
 	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
@@ -74,6 +78,10 @@ type GuestEngine struct {
 // Build builds and pushes b, returning the pushed manifest digest. Every
 // error carries the Stage it failed at.
 func (e *GuestEngine) Build(ctx context.Context, spec *GuestBuild, auth RegistryAuth, events chan<- Event) (string, error) {
+	if err := usePrivateDockerConfig(spec.WorkDir); err != nil {
+		return "", core.AtStage(core.StageInfrastructure, err) //nolint:wrapcheck // already a CLI error
+	}
+
 	switch spec.Kind {
 	case KindDockerfile:
 		drv := buildkit.New(buildkit.Options{
@@ -115,6 +123,42 @@ func (e *GuestEngine) Build(ctx context.Context, spec *GuestBuild, auth Registry
 	default:
 		return "", core.AtStage(core.StageRecipe, clierrors.Errorf("unknown recipe kind %q", spec.Kind)) //nolint:wrapcheck // already a CLI error
 	}
+}
+
+// guestDockerConfig is the docker configuration directory a guest build uses,
+// under its WorkDir.
+const guestDockerConfig = "docker-config"
+
+// usePrivateDockerConfig points the docker configuration directory at a new
+// private (0700) directory under workDir, for the whole process. BuildKit's
+// session auth provider writes its token seed there, and in a guest HOME is
+// the read-only root filesystem; the only writable disk is the scratch disk
+// workDir lives on. It is never the user's ~/.docker: no credential is read
+// from it, and the seed is not left behind.
+func usePrivateDockerConfig(workDir string) error {
+	if workDir == "" {
+		return clierrors.Errorf("a guest build needs a work directory")
+	}
+
+	dir := filepath.Join(workDir, guestDockerConfig)
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return clierrors.Errorf("create the build's docker configuration directory: %w", err)
+	}
+
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: a directory, owner-only
+		return clierrors.Errorf("restrict %s: %w", dir, err)
+	}
+
+	if err := os.Setenv(env.DockerConfig, dir); err != nil {
+		return clierrors.Errorf("set %s: %w", env.DockerConfig, err)
+	}
+
+	// The docker CLI reads DOCKER_CONFIG once per process; set it directly
+	// too, in case anything read it before this build.
+	dockerconfig.SetDir(dir)
+
+	return nil
 }
 
 // ProbeWorkers lists the workers of the buildkitd at address.
