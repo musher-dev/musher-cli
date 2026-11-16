@@ -39,7 +39,8 @@ reads no config file, profile or keyring, and never checks for updates.
 
 Exit codes: 0 success reported, 20 failure reported, 21 fenced (the API no
 longer accepts the attempt), 22 deadline reached, 23 outcome not reported,
-24 self-test failed, 4 missing environment, 64 usage.`,
+4 missing environment, 64 usage. self-test exits 0 whenever it wrote its
+results, failed checks included.`,
 		Hidden: true,
 		Args:   noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -132,7 +133,9 @@ func newRunnerSelfTestCmd() *cobra.Command {
 		Short: "Check the guest can build: BuildKit, egress, scratch",
 		Long: `Run the in-guest half of the host canary and write the results document
 (docs/runner-mode.md) to --results-file, MUSHER_RESULTS_FILE, and stdout.
-Exits 0 when no check failed and 24 when one did.`,
+Exits 0 whenever the results were written, even when a check failed: the
+verdicts are in the document. --api-url (or MUSHER_API_URL) is the API whose
+egress is proved.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			environ, err := runner.LoadEnvironment()
@@ -142,6 +145,12 @@ Exits 0 when no check failed and 24 when one did.`,
 
 			if registryHost == "" {
 				registryHost = env.Get(env.RegistryHost)
+			}
+
+			// --api-url is the root's persistent flag; in runner mode it only
+			// names the API this check proves egress to.
+			if apiURL, flagErr := cmd.Flags().GetString("api-url"); flagErr == nil && strings.TrimSpace(apiURL) != "" {
+				environ.APIURL = strings.TrimSpace(apiURL)
 			}
 
 			test := runner.NewSelfTest(environ, runnerBuildKitHost(buildkitHost), strings.TrimSpace(registryHost))
@@ -166,7 +175,7 @@ Exits 0 when no check failed and 24 when one did.`,
 
 	set := cmd.Flags()
 	addBuildKitHostFlag(cmd, &buildkitHost)
-	set.StringVar(&registryHost, "registry-host", "", "Registry host[:port] to prove TCP+TLS to (or set MUSHER_REGISTRY_HOST; empty skips)")
+	set.StringVar(&registryHost, "registry", "", "Registry host[:port] to prove TCP+TLS to (or set MUSHER_REGISTRY_HOST)")
 	set.StringVar(&resultsFile, "results-file", "", "Where to write the results (default: MUSHER_RESULTS_FILE)")
 	set.StringVar(&denyMetadata, "deny-metadata", runner.DefaultDenyMetadata, "Metadata endpoint that must be unreachable")
 	set.StringVar(&denyPrivate, "deny-rfc1918", runner.DefaultDenyPrivate, "RFC 1918 address that must be unreachable")

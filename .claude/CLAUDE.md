@@ -83,7 +83,7 @@ is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
 `musher runner {fetch-source,build,self-test}` is the CLI inside an isolation
 guest, run by the host agent for one attempt of a platform-owned run (hidden
 from help). docs/runner-mode.md is the reference: its environment, exit codes
-20-24, failure classification and the self-test document
+20-23, failure classification and the self-test document
 (`contracts/runner/self-test.schema.json`).
 
 - **Only the run attempt token** (`MUSHER_API_KEY`, `mush_run_…`) and **only
@@ -210,5 +210,5 @@ breaks its typecheck). Docker-backed build tests are behind
 - **Auth**: `MUSHER_API_KEY` env var or `musher auth login`
 - **Exit codes**: 0 ok, 1 general, 2 auth, 3 network, 4 config, 5 timeout,
   6 execution, 64 usage. 7 is retired and must never be reassigned. Runner
-  mode adds 20 failure reported, 21 fenced, 22 deadline, 23 unreported,
-  24 self-test failed.
+  mode adds 20 failure reported, 21 fenced, 22 deadline, 23 unreported
+  (self-test exits 0 whenever it wrote its results).

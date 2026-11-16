@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 	"github.com/musher-dev/musher-cli/internal/runner"
 )
 
@@ -74,12 +73,12 @@ func TestSelfTestPassesAHealthyGuest(t *testing.T) {
 
 	res := selfTest(t).Run(t.Context())
 
-	if !res.Passed || res.SchemaVersion != runner.SelfTestSchemaVersion || res.RunnerVersion != "1.2.3" {
+	if !res.Passed() || res.SchemaVersion != runner.SelfTestSchemaVersion || res.RunnerVersion != "1.2.3" {
 		t.Fatalf("results = %+v", res)
 	}
 
 	for name, c := range res.Checks {
-		if c.Status != runner.StatusPass {
+		if !c.OK || c.Detail == "" {
 			t.Errorf("%s = %+v", name, c)
 		}
 	}
@@ -90,7 +89,7 @@ func TestSelfTestPassesAHealthyGuest(t *testing.T) {
 	}
 }
 
-func TestSelfTestFailsOpenEgress(t *testing.T) {
+func TestSelfTestFailsOpenEgressAndStillWrites(t *testing.T) {
 	t.Parallel()
 
 	test := selfTest(t, runner.DefaultDenyMetadata)
@@ -98,31 +97,40 @@ func TestSelfTestFailsOpenEgress(t *testing.T) {
 
 	res := test.Run(t.Context())
 
-	if res.Passed {
+	if res.Passed() {
 		t.Fatal("a guest that reaches the metadata endpoint passed")
 	}
 
-	if res.Checks[runner.CheckDeniedMetadata].Status != runner.StatusFail || res.Checks[runner.CheckBuildKitWorkers].Status != runner.StatusFail {
-		t.Fatalf("checks = %+v", res.Checks)
+	denied := res.Checks[runner.CheckDeniedEgress]
+	if denied.OK || !strings.Contains(denied.Detail, runner.DefaultDenyMetadata+": CONNECTED") {
+		t.Fatalf("deniedEgress = %+v", denied)
 	}
 
-	err := runner.WriteSelfTest("", res)
+	if got := res.Failed(); !slices.Equal(got, []string{runner.CheckBuildEngine, runner.CheckDeniedEgress}) {
+		t.Fatalf("failed = %v", got)
+	}
 
-	var cliErr *clierrors.CLIError
-	if !errors.As(err, &cliErr) || cliErr.Code != clierrors.ExitRunnerSelfTestFailed || !strings.Contains(cliErr.Message, runner.CheckDeniedMetadata) {
-		t.Fatalf("err = %v, want exit 24 naming the failed check", err)
+	// A failed check is a verdict, not an error: the command exits 0 once
+	// the document is written.
+	path := filepath.Join(t.TempDir(), "results.json")
+	if err := runner.WriteSelfTest(path, res); err != nil {
+		t.Fatalf("WriteSelfTest: %v", err)
+	}
+
+	if err := runner.WriteSelfTest(filepath.Join(t.TempDir(), "missing", "results.json"), res); err == nil {
+		t.Fatal("an unwritable results file was not an error")
 	}
 }
 
-func TestSelfTestSkipsAnUnsetRegistry(t *testing.T) {
+func TestSelfTestFailsAnUnsetRegistry(t *testing.T) {
 	t.Parallel()
 
 	test := selfTest(t)
 	test.RegistryHost = ""
 
 	res := test.Run(t.Context())
-	if !res.Passed || res.Checks[runner.CheckRegistryReach].Status != runner.StatusSkip {
-		t.Fatalf("registry check = %+v", res.Checks[runner.CheckRegistryReach])
+	if c := res.Checks[runner.CheckRegistryEgress]; c.OK || !strings.Contains(c.Detail, "no registry configured") {
+		t.Fatalf("registry check = %+v", c)
 	}
 }
 
@@ -146,7 +154,7 @@ func TestSelfTestDocumentMatchesItsSchema(t *testing.T) {
 		} `json:"properties"`
 		Defs struct {
 			Check struct {
-				Properties map[string]json.RawMessage `json:"properties"`
+				Required []string `json:"required"`
 			} `json:"check"`
 		} `json:"$defs"`
 	}
@@ -175,11 +183,7 @@ func TestSelfTestDocumentMatchesItsSchema(t *testing.T) {
 	assertSameKeys(t, "checks", keys(checks), schema.Properties.Checks.Required)
 
 	for name, c := range checks {
-		for key := range c {
-			if _, ok := schema.Defs.Check.Properties[key]; !ok {
-				t.Errorf("check %s has key %q the schema does not define", name, key)
-			}
-		}
+		assertSameKeys(t, "check "+name, keys(c), schema.Defs.Check.Required)
 	}
 }
 

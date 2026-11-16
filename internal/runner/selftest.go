@@ -16,53 +16,82 @@ import (
 	"time"
 
 	"github.com/musher-dev/musher-cli/internal/build"
-	clierrors "github.com/musher-dev/musher-cli/internal/errors"
 )
 
 // SelfTestSchemaVersion is the version of the self-test results document,
-// contracts/runner/self-test.schema.json. It changes only when a key is
-// removed or changes meaning; added checks keep it.
+// contracts/runner/self-test.schema.json, which host-agent's canary parses.
+// It changes only when a key is removed or changes meaning.
 const SelfTestSchemaVersion = 1
 
-// Check statuses.
+// Check names, the keys of SelfTestResults.Checks. Fixed with host-agent's
+// canary, which maps each to an isolation condition.
 const (
-	StatusPass = "pass"
-	StatusFail = "fail"
-	StatusSkip = "skip"
+	CheckBuildEngine    = "buildEngine"
+	CheckLocalBuild     = "localBuild"
+	CheckAPIEgress      = "apiEgress"
+	CheckRegistryEgress = "registryEgress"
+	CheckDeniedEgress   = "deniedEgress"
+	CheckScratch        = "scratch"
 )
 
-// Check names, the keys of SelfTestResults.Checks. Stable: the host agent
-// maps each to an isolation condition.
 const (
-	CheckBuildKitWorkers  = "buildkit_workers"
-	CheckBuildKitScratch  = "buildkit_scratch_build"
-	CheckAPIReachable     = "api_reachable"
-	CheckRegistryReach    = "registry_reachable"
-	CheckDeniedMetadata   = "egress_denied_metadata"
-	CheckDeniedPrivate    = "egress_denied_rfc1918"
-	CheckDeniedCGNAT      = "egress_denied_cgnat"
-	CheckScratchWritable  = "scratch_writable"
 	defaultDenyTimeout    = 3 * time.Second
 	defaultReachTimeout   = 10 * time.Second
 	defaultBuildKitBudget = 60 * time.Second
 )
 
-// SelfTestCheck is one check's verdict.
+// SelfTestCheck is one check's verdict, as the canary reads it.
 type SelfTestCheck struct {
-	Status     string `json:"status"`
-	Target     string `json:"target,omitempty"`
-	Detail     string `json:"detail,omitempty"`
-	DurationMS int64  `json:"duration_ms"`
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail"`
 }
 
 // SelfTestResults is the document `musher runner self-test` writes.
 type SelfTestResults struct {
-	SchemaVersion int                      `json:"schema_version"`
-	RunnerVersion string                   `json:"runner_version"`
-	StartedAt     time.Time                `json:"started_at"`
-	FinishedAt    time.Time                `json:"finished_at"`
-	Passed        bool                     `json:"passed"`
+	SchemaVersion int                      `json:"schemaVersion"`
+	RunnerVersion string                   `json:"runnerVersion"`
 	Checks        map[string]SelfTestCheck `json:"checks"`
+}
+
+// Passed reports whether every check is ok.
+func (r *SelfTestResults) Passed() bool {
+	for _, c := range r.Checks {
+		if !c.OK {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Failed names the checks that are not ok, sorted.
+func (r *SelfTestResults) Failed() []string {
+	failed := []string{}
+
+	for name, c := range r.Checks {
+		if !c.OK {
+			failed = append(failed, name)
+		}
+	}
+
+	return slices.Sorted(slices.Values(failed))
+}
+
+// probe is one probe's outcome before it is folded into a check.
+type probe struct {
+	ok      bool
+	target  string
+	detail  string
+	elapsed time.Duration
+}
+
+func (p probe) check() SelfTestCheck {
+	detail := p.detail
+	if p.target != "" {
+		detail = p.target + ": " + detail
+	}
+
+	return SelfTestCheck{OK: p.ok, Detail: detail + " (" + p.elapsed.Round(time.Millisecond).String() + ")"}
 }
 
 // SelfTest is the guest canary's in-guest half.
@@ -70,10 +99,11 @@ type SelfTest struct {
 	Version      string
 	BuildKitHost string
 	APIURL       string
-	// RegistryHost is host[:port]; empty skips the registry check.
+	// RegistryHost is host[:port]; empty fails the registry check.
 	RegistryHost string
 	ScratchDir   string
-	// Deny targets (host:port) that must not be reachable.
+	// Deny targets (host:port) that must not be reachable; an empty one is
+	// left out.
 	DenyMetadata string
 	DenyPrivate  string
 	DenyCGNAT    string
@@ -98,22 +128,19 @@ const (
 func (s *SelfTest) Run(ctx context.Context) *SelfTestResults {
 	s.defaults()
 
+	checks := map[string]func(ctx context.Context) SelfTestCheck{
+		CheckBuildEngine:    timed(s.checkWorkers),
+		CheckLocalBuild:     timed(s.checkScratchBuild),
+		CheckAPIEgress:      timed(func(ctx context.Context) probe { return s.checkReach(ctx, apiTarget(s.APIURL), "API URL") }),
+		CheckRegistryEgress: timed(func(ctx context.Context) probe { return s.checkReach(ctx, withPort(s.RegistryHost), "registry") }),
+		CheckDeniedEgress:   s.checkAllDenied,
+		CheckScratch:        timed(s.checkScratch),
+	}
+
 	res := &SelfTestResults{
 		SchemaVersion: SelfTestSchemaVersion,
 		RunnerVersion: s.Version,
-		StartedAt:     time.Now().UTC(),
-		Checks:        map[string]SelfTestCheck{},
-	}
-
-	checks := map[string]func(ctx context.Context) SelfTestCheck{
-		CheckBuildKitWorkers: s.checkWorkers,
-		CheckBuildKitScratch: s.checkScratchBuild,
-		CheckAPIReachable:    func(ctx context.Context) SelfTestCheck { return s.checkReach(ctx, apiTarget(s.APIURL)) },
-		CheckRegistryReach:   func(ctx context.Context) SelfTestCheck { return s.checkReach(ctx, withPort(s.RegistryHost)) },
-		CheckDeniedMetadata:  func(ctx context.Context) SelfTestCheck { return s.checkDenied(ctx, s.DenyMetadata) },
-		CheckDeniedPrivate:   func(ctx context.Context) SelfTestCheck { return s.checkDenied(ctx, s.DenyPrivate) },
-		CheckDeniedCGNAT:     func(ctx context.Context) SelfTestCheck { return s.checkDenied(ctx, s.DenyCGNAT) },
-		CheckScratchWritable: s.checkScratch,
+		Checks:        make(map[string]SelfTestCheck, len(checks)),
 	}
 
 	var (
@@ -123,9 +150,7 @@ func (s *SelfTest) Run(ctx context.Context) *SelfTestResults {
 
 	for name, check := range checks {
 		wg.Go(func() {
-			start := time.Now()
 			verdict := check(ctx)
-			verdict.DurationMS = time.Since(start).Milliseconds()
 
 			mu.Lock()
 			res.Checks[name] = verdict
@@ -135,16 +160,57 @@ func (s *SelfTest) Run(ctx context.Context) *SelfTestResults {
 
 	wg.Wait()
 
-	res.FinishedAt = time.Now().UTC()
-	res.Passed = true
+	return res
+}
 
-	for _, c := range res.Checks {
-		if c.Status == StatusFail {
-			res.Passed = false
+func timed(run func(ctx context.Context) probe) func(ctx context.Context) SelfTestCheck {
+	return func(ctx context.Context) SelfTestCheck {
+		start := time.Now()
+		p := run(ctx)
+		p.elapsed = time.Since(start)
+
+		return p.check()
+	}
+}
+
+// checkAllDenied runs every deny probe at once; it is ok only when none of
+// them connected.
+func (s *SelfTest) checkAllDenied(ctx context.Context) SelfTestCheck {
+	targets := []string{}
+
+	for _, t := range []string{s.DenyMetadata, s.DenyPrivate, s.DenyCGNAT} {
+		if strings.TrimSpace(t) != "" {
+			targets = append(targets, t)
 		}
 	}
 
-	return res
+	if len(targets) == 0 {
+		return SelfTestCheck{OK: false, Detail: "no deny targets configured"}
+	}
+
+	results := make([]probe, len(targets))
+
+	var wg sync.WaitGroup
+
+	for i, target := range targets {
+		wg.Go(func() {
+			start := time.Now()
+			results[i] = s.checkDenied(ctx, target)
+			results[i].elapsed = time.Since(start)
+		})
+	}
+
+	wg.Wait()
+
+	ok := true
+	details := make([]string, 0, len(results))
+
+	for _, p := range results {
+		ok = ok && p.ok
+		details = append(details, p.check().Detail)
+	}
+
+	return SelfTestCheck{OK: ok, Detail: strings.Join(details, "; ")}
 }
 
 func (s *SelfTest) defaults() {
@@ -166,7 +232,7 @@ func (s *SelfTest) defaults() {
 	}
 }
 
-func (s *SelfTest) checkWorkers(ctx context.Context) SelfTestCheck {
+func (s *SelfTest) checkWorkers(ctx context.Context) probe {
 	ctx, cancel := context.WithTimeout(ctx, defaultBuildKitBudget)
 	defer cancel()
 
@@ -182,7 +248,7 @@ func (s *SelfTest) checkWorkers(ctx context.Context) SelfTestCheck {
 	return pass(s.BuildKitHost, strings.Join(workers, "; "))
 }
 
-func (s *SelfTest) checkScratchBuild(ctx context.Context) SelfTestCheck {
+func (s *SelfTest) checkScratchBuild(ctx context.Context) probe {
 	ctx, cancel := context.WithTimeout(ctx, defaultBuildKitBudget)
 	defer cancel()
 
@@ -200,10 +266,11 @@ func (s *SelfTest) checkScratchBuild(ctx context.Context) SelfTestCheck {
 	return pass(s.BuildKitHost, "FROM scratch built, nothing pushed")
 }
 
-// checkReach proves TCP and a verified TLS handshake to target.
-func (s *SelfTest) checkReach(ctx context.Context, target string) SelfTestCheck {
+// checkReach proves TCP and a verified TLS handshake to target; what names
+// the kind of target, for the detail when none is configured.
+func (s *SelfTest) checkReach(ctx context.Context, target, what string) probe {
 	if target == "" {
-		return SelfTestCheck{Status: StatusSkip, Detail: "no target configured"}
+		return fail("", "no "+what+" configured")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, defaultReachTimeout)
@@ -240,11 +307,7 @@ func (s *SelfTest) checkReach(ctx context.Context, target string) SelfTestCheck 
 
 // checkDenied passes when target cannot be connected to within the timeout:
 // a reject (refused, unreachable) or a silent drop (timeout) both count.
-func (s *SelfTest) checkDenied(ctx context.Context, target string) SelfTestCheck {
-	if target == "" {
-		return SelfTestCheck{Status: StatusSkip, Detail: "no target configured"}
-	}
-
+func (s *SelfTest) checkDenied(ctx context.Context, target string) probe {
 	ctx, cancel := context.WithTimeout(ctx, s.DenyTimeout)
 	defer cancel()
 
@@ -252,13 +315,13 @@ func (s *SelfTest) checkDenied(ctx context.Context, target string) SelfTestCheck
 	if err == nil {
 		closeQuietly(conn)
 
-		return fail(target, "connected: egress to this address is not denied")
+		return fail(target, "CONNECTED: egress to this address is not denied")
 	}
 
 	return pass(target, "denied: "+denialKind(err))
 }
 
-func (s *SelfTest) checkScratch(_ context.Context) SelfTestCheck {
+func (s *SelfTest) checkScratch(_ context.Context) probe {
 	probe := filepath.Join(s.ScratchDir, ".musher-self-test")
 	payload := []byte("musher runner self-test\n")
 
@@ -318,12 +381,12 @@ func withPort(hostport string) string {
 	return net.JoinHostPort(hostport, "443")
 }
 
-func pass(target, detail string) SelfTestCheck {
-	return SelfTestCheck{Status: StatusPass, Target: target, Detail: detail}
+func pass(target, detail string) probe {
+	return probe{ok: true, target: target, detail: detail}
 }
 
-func fail(target, detail string) SelfTestCheck {
-	return SelfTestCheck{Status: StatusFail, Target: target, Detail: detail}
+func fail(target, detail string) probe {
+	return probe{ok: false, target: target, detail: detail}
 }
 
 func errText(err error) string {
@@ -334,27 +397,9 @@ func errText(err error) string {
 	return err.Error()
 }
 
-// WriteSelfTest writes the results to path (when set) and returns the exit
-// error: nil when every check passed or was skipped.
+// WriteSelfTest writes the results to path (when set). A failed check is
+// not an error: the canary reads the verdicts from the file, so the command
+// exits 0 whenever the file was written, and fails only when it cannot be.
 func WriteSelfTest(path string, res *SelfTestResults) error {
-	if err := writeResults(path, res); err != nil {
-		return err
-	}
-
-	if !res.Passed {
-		failed := []string{}
-
-		for name, c := range res.Checks {
-			if c.Status == StatusFail {
-				failed = append(failed, name)
-			}
-		}
-
-		return &clierrors.CLIError{
-			Message: "Self-test failed: " + strings.Join(slices.Sorted(slices.Values(failed)), ", "),
-			Code:    clierrors.ExitRunnerSelfTestFailed,
-		}
-	}
-
-	return nil
+	return writeResults(path, res)
 }

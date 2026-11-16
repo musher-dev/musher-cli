@@ -7,13 +7,14 @@ platform-api depend on all of them.
 
 ## Invocation
 
-platform-api puts these argv in the run (`source_build/application/services/runner_runs.py`):
+platform-api puts these argv in the run (`source_build/application/services/runner_runs.py`). Pelorus models
+the caller as the `BuildRunner` actor, with `fetch-source` as AF-08 and `build` as AF-07:
 
 | Command | Does |
 | --- | --- |
 | `musher runner fetch-source --snapshot <id>` | Downloads the commit's tarball with the assignment's `fetchToken`. Hashes it (SHA-256 and size) and refuses one over `maxArchiveBytes`. Opens the upload (`:openArchiveUpload`) and PUTs the bytes with exactly the returned headers. Reports `:reportFetch` FETCHED, or FAILED with a reason. |
 | `musher runner build --build <id>` | Downloads the archive and checks its `archiveDigest` and size, which are mandatory. Unpacks it safely into scratch, then asks `:grantPushAccess` and renews the grant before it ends. Builds on the guest's buildkitd and pushes with the grant. Sends output to `log-lines` and reports `:reportResult` PUSHED, or FAILED with a kind. |
-| `musher runner self-test` | The host canary's in-guest half (see [Self-test](#self-test)). |
+| `musher runner self-test --api-url <url> --registry <host>` | The host canary's in-guest half (see [Self-test](#self-test)). |
 
 `--snapshot` and `--build` may be left out when `MUSHER_INPUTS_FILE` names the id. If both name one, they must
 agree.
@@ -27,7 +28,7 @@ agree.
 | `MUSHER_INPUTS_FILE` | `/run/musher/inputs.json`: `{"api_url", "snapshot_id"}` or `{"api_url", "build_id"}`. |
 | `MUSHER_RESULTS_FILE` | Where the command writes its [results](#results-file). |
 | `MUSHER_BUILDKIT_HOST` | buildkitd. `--buildkit-host` wins over it, and the default is `unix:///run/buildkit/buildkitd.sock`. The generic `BUILDKIT_HOST` and the Docker Engine are never used. |
-| `MUSHER_REGISTRY_HOST` | The registry `self-test` probes. `--registry-host` wins over it. |
+| `MUSHER_REGISTRY_HOST` | The registry `self-test` probes. `--registry` wins over it. |
 | `TMPDIR` | Scratch, `/scratch` in the guest. The archive, the source and the engine's layouts are kept here. |
 | `MUSHER_UPDATE_DISABLED` | Set by guest protocol v2. Runner mode never checks for updates either way. |
 
@@ -62,12 +63,11 @@ Fixed (`internal/errors`, `TestExitCodesAreStable`):
 
 | Code | Meaning | Reported |
 | --- | --- | --- |
-| 0 | FETCHED or PUSHED was reported and accepted; or self-test found no failed check | yes |
+| 0 | FETCHED or PUSHED was reported and accepted; or self-test wrote its results (failed checks included) | yes |
 | 20 | A classified FAILED was reported and accepted | yes |
 | 21 | Fenced: 401 (`NOT_CURRENT`/`ENDED`/`EXPIRED`) or 404 from the runner surface | no |
 | 22 | The deadline (or the token's expiry) arrived first | no |
 | 23 | An outcome was reached but could not be reported: the API was unreachable after retries, or refused it other than by fencing | no |
-| 24 | `self-test` wrote its results and at least one check failed | n/a |
 | 4 | The environment is incomplete: no attempt token, no API URL, or an unreadable inputs file | no |
 | 64 | Usage: no id, or a flag and the inputs file disagree | no |
 
@@ -105,44 +105,39 @@ The image digest is never written here. It travels only on `:reportResult`.
 
 ## Self-test
 
-`musher runner self-test` runs every check at once. It writes the results document to `--results-file` (or
-`MUSHER_RESULTS_FILE`) and to stdout, and exits 0 or 24. The document's schema is
-[`contracts/runner/self-test.schema.json`](../contracts/runner/self-test.schema.json), and
-`TestSelfTestDocumentMatchesItsSchema` holds the code to it. The keys are snake_case and stable.
-`schema_version` changes only when a key is removed or changes meaning. A check may be added without a version
-change, so a reader ignores checks it does not know. A check is `pass`, `fail` or `skip`. `passed` is false only
-when some check is `fail`.
+`musher runner self-test --api-url <url> --registry <host>` runs every check at once. It writes the results
+document to `--results-file` (or `MUSHER_RESULTS_FILE`) and to stdout. It exits 0 whenever it wrote the
+document, even when a check failed, because the verdicts are in the document. It exits non-zero only when it
+cannot run or cannot write the file.
 
-| Check | Passes when | Isolation condition |
+The schema is [`contracts/runner/self-test.schema.json`](../contracts/runner/self-test.schema.json), and
+`TestSelfTestDocumentMatchesItsSchema` holds the code to it. The shape was fixed with host-agent's canary
+parser, so the keys are camelCase and every check is `{ok, detail}`. `schemaVersion` changes only when a key
+is removed or changes meaning. `detail` is for a person: it names the target, says what happened and how long
+it took, and is never machine-parsed.
+
+| Check | Ok when | Isolation condition |
 | --- | --- | --- |
-| `buildkit_workers` | buildkitd lists at least one worker (`buildctl debug workers`) | `BUILD_ENGINE_READY` |
-| `buildkit_scratch_build` | A `FROM scratch` build with one copied file solves, with nothing exported or pushed | `BUILD_ENGINE_READY` |
-| `api_reachable` | TCP and a verified TLS handshake reach the API URL's host. It fails when no API URL is set. | `API_EGRESS` |
-| `registry_reachable` | TCP and verified TLS reach `--registry-host` (port 443 unless given). It is skipped when none is set. | `REGISTRY_EGRESS` |
-| `egress_denied_metadata` | A TCP connect to `169.254.169.254:80` does not succeed within 3 s | `EGRESS_POLICY_ENFORCED` |
-| `egress_denied_rfc1918` | The same, for `10.0.0.1:443` | `EGRESS_POLICY_ENFORCED` |
-| `egress_denied_cgnat` | The same, for `100.64.0.1:443` (RFC 6598) | `EGRESS_POLICY_ENFORCED` |
-| `scratch_writable` | A file written to `TMPDIR` reads back unchanged | `SCRATCH_DISK` |
+| `buildEngine` | buildkitd at `--buildkit-host` lists at least one worker (`buildctl debug workers`) | `BUILD_ENGINE_READY` |
+| `localBuild` | A `FROM scratch` build with one copied file solves, with nothing exported or pushed | `BUILD_ENGINE_READY` |
+| `apiEgress` | TCP and a verified TLS handshake reach the host of `--api-url` (or `MUSHER_API_URL`, or `api_url` in the inputs file). It is not ok when none is set. | `API_EGRESS` |
+| `registryEgress` | TCP and verified TLS reach `--registry` (or `MUSHER_REGISTRY_HOST`; port 443 unless given). It is not ok when none is set. | `REGISTRY_EGRESS` |
+| `deniedEgress` | No TCP connect to `169.254.169.254:80`, `10.0.0.1:443` or `100.64.0.1:443` succeeds within 3 s each. Refused, unreachable and timed out all count as denied, and `detail` lists each target. | `EGRESS_POLICY_ENFORCED` |
+| `scratch` | A file written to `TMPDIR` reads back unchanged | `SCRATCH_DISK` |
 
-`--deny-metadata`, `--deny-rfc1918` and `--deny-cgnat` change the deny targets. For a deny probe, refused,
-unreachable and timed out all pass, and the reason is in `detail`.
+`--deny-metadata`, `--deny-rfc1918` and `--deny-cgnat` change the deny targets. An empty one is left out.
 
 ```json
 {
-  "schema_version": 1,
-  "runner_version": "0.4.0",
-  "started_at": "2026-11-15T23:31:18.597Z",
-  "finished_at": "2026-11-15T23:31:21.599Z",
-  "passed": true,
+  "schemaVersion": 1,
+  "runnerVersion": "0.4.0",
   "checks": {
-    "api_reachable": { "status": "pass", "target": "api.musher.dev:443", "detail": "TLS 1.3 handshake verified", "duration_ms": 78 },
-    "buildkit_scratch_build": { "status": "pass", "target": "unix:///run/buildkit/buildkitd.sock", "detail": "FROM scratch built, nothing pushed", "duration_ms": 444 },
-    "buildkit_workers": { "status": "pass", "target": "unix:///run/buildkit/buildkitd.sock", "detail": "ti5z7… (linux/amd64)", "duration_ms": 66 },
-    "egress_denied_cgnat": { "status": "pass", "target": "100.64.0.1:443", "detail": "denied: timed out", "duration_ms": 3000 },
-    "egress_denied_metadata": { "status": "pass", "target": "169.254.169.254:80", "detail": "denied: refused", "duration_ms": 2 },
-    "egress_denied_rfc1918": { "status": "pass", "target": "10.0.0.1:443", "detail": "denied: timed out", "duration_ms": 3001 },
-    "registry_reachable": { "status": "pass", "target": "registry.musher.dev:443", "detail": "TLS 1.3 handshake verified", "duration_ms": 137 },
-    "scratch_writable": { "status": "pass", "target": "/scratch", "detail": "written and read back", "duration_ms": 0 }
+    "apiEgress": { "ok": true, "detail": "api.musher.dev:443: TLS 1.3 handshake verified (113ms)" },
+    "buildEngine": { "ok": true, "detail": "unix:///run/buildkit/buildkitd.sock: ti5z7… (linux/amd64) (66ms)" },
+    "deniedEgress": { "ok": true, "detail": "169.254.169.254:80: denied: refused (3ms); 10.0.0.1:443: denied: timed out (3.002s); 100.64.0.1:443: denied: timed out (3.002s)" },
+    "localBuild": { "ok": true, "detail": "unix:///run/buildkit/buildkitd.sock: FROM scratch built, nothing pushed (444ms)" },
+    "registryEgress": { "ok": true, "detail": "registry.musher.dev:443: TLS 1.3 handshake verified (128ms)" },
+    "scratch": { "ok": true, "detail": "/scratch: written and read back (0s)" }
   }
 }
 ```

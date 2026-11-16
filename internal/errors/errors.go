@@ -54,9 +54,6 @@ const (
 	// ExitRunnerUnreported: an outcome was reached but the API could not be
 	// told after retries (unreachable, or a refusal other than fencing).
 	ExitRunnerUnreported = 23
-	// ExitRunnerSelfTestFailed: `musher runner self-test` wrote its results
-	// and at least one check failed.
-	ExitRunnerSelfTestFailed = 24
 )
 
 // Mapping an API problem document to one of these codes lives in

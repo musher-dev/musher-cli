@@ -379,7 +379,7 @@ tasks:
             exit 1
           fi
         done
-        for flag in --buildkit-host --registry-host --results-file --deny-metadata --deny-rfc1918 --deny-cgnat; do
+        for flag in --api-url --buildkit-host --registry --results-file --deny-metadata --deny-rfc1918 --deny-cgnat; do
           if ! ./{{.CONTRACTS_BIN}} runner self-test --help | grep -q -- "$flag"; then
             echo "FAIL: musher runner self-test is missing $flag"
             exit 1
