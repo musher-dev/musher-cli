@@ -121,7 +121,7 @@ it took, and is never machine-parsed.
 | `buildEngine` | buildkitd at `--buildkit-host` lists at least one worker (`buildctl debug workers`) | `BUILD_ENGINE_READY` |
 | `localBuild` | A `FROM scratch` build with one copied file solves, with nothing exported or pushed | `BUILD_ENGINE_READY` |
 | `apiEgress` | TCP and a verified TLS handshake reach the host of `--api-url` (or `MUSHER_API_URL`, or `api_url` in the inputs file). It is not ok when none is set. | `API_EGRESS` |
-| `registryEgress` | TCP and verified TLS reach `--registry` (or `MUSHER_REGISTRY_HOST`; port 443 unless given). It is not ok when none is set. | `REGISTRY_EGRESS` |
+| `registryEgress` | TCP and verified TLS reach `--registry` (or `MUSHER_REGISTRY_HOST`; port 443 unless given), `GET /v2/` answers a challenge, and on a Bearer challenge the token exchange at the advertised `https` realm for the advertised service answers. The exchange carries no credential, because a canary holds no attempt token and so no push grant: a 401 or 403 from the realm is the expected answer, and `detail` then says `unauthenticated: realm and service resolve; no push grant in a canary`. It proves egress and TLS to the registry and its realm and that the realm and service resolve; it never proves a push would be authorized, and nothing is pushed. It is not ok when none is set, when `/v2/` is not a registry, or when the realm is not `https` or fails. | `REGISTRY_EGRESS` |
 | `deniedEgress` | No TCP connect to `169.254.169.254:80`, `10.0.0.1:443` or `100.64.0.1:443` succeeds within 3 s each. Refused, unreachable and timed out all count as denied, and `detail` lists each target. | `EGRESS_POLICY_ENFORCED` |
 | `scratch` | A file written to `TMPDIR` reads back unchanged | `SCRATCH_DISK` |
 
@@ -136,7 +136,7 @@ it took, and is never machine-parsed.
     "buildEngine": { "ok": true, "detail": "unix:///run/buildkit/buildkitd.sock: ti5z7… (linux/amd64) (66ms)" },
     "deniedEgress": { "ok": true, "detail": "169.254.169.254:80: denied: refused (3ms); 10.0.0.1:443: denied: timed out (3.002s); 100.64.0.1:443: denied: timed out (3.002s)" },
     "localBuild": { "ok": true, "detail": "unix:///run/buildkit/buildkitd.sock: FROM scratch built, nothing pushed (444ms)" },
-    "registryEgress": { "ok": true, "detail": "registry.musher.dev:443: TLS 1.3 handshake verified (128ms)" },
+    "registryEgress": { "ok": true, "detail": "registry.musher.dev:443: TLS 1.3 handshake verified; realm https://registry.musher.dev/token service registry.musher.dev: HTTP 401; unauthenticated: realm and service resolve; no push grant in a canary (241ms)" },
     "scratch": { "ok": true, "detail": "/scratch: written and read back (0s)" }
   }
 }

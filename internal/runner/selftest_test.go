@@ -27,7 +27,40 @@ import (
 func selfTest(t *testing.T, open ...string) *runner.SelfTest {
 	t.Helper()
 
-	srv := httptest.NewUnstartedServer(http.NotFoundHandler())
+	return selfTestWith(t, fakeRegistry(http.StatusUnauthorized), open...)
+}
+
+// fakeRegistry answers /v2/ with a Bearer challenge naming a realm on the
+// same server, and the realm's token exchange with tokenStatus.
+func fakeRegistry(tokenStatus int) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			http.Error(w, "the self-test must not authenticate", http.StatusBadRequest)
+
+			return
+		}
+
+		w.Header().Set("WWW-Authenticate", `Bearer realm="https://example.com/token",service="registry.musher.test"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("service") != "registry.musher.test" || r.Header.Get("Authorization") != "" {
+			http.Error(w, "wrong service, or a credential", http.StatusBadRequest)
+
+			return
+		}
+
+		w.WriteHeader(tokenStatus)
+	})
+
+	return mux
+}
+
+func selfTestWith(t *testing.T, handler http.Handler, open ...string) *runner.SelfTest {
+	t.Helper()
+
+	srv := httptest.NewUnstartedServer(handler)
 	// The probes hang up without a request; that is not worth a log line.
 	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
 	srv.StartTLS()
@@ -131,6 +164,59 @@ func TestSelfTestFailsAnUnsetRegistry(t *testing.T) {
 	res := test.Run(t.Context())
 	if c := res.Checks[runner.CheckRegistryEgress]; c.OK || !strings.Contains(c.Detail, "no registry configured") {
 		t.Fatalf("registry check = %+v", c)
+	}
+}
+
+func TestSelfTestRegistryMakesTheTokenExchange(t *testing.T) {
+	t.Parallel()
+
+	c := selfTest(t).Run(t.Context()).Checks[runner.CheckRegistryEgress]
+	if !c.OK || !strings.Contains(c.Detail, runner.RegistryUnauthenticated) || !strings.Contains(c.Detail, "realm https://example.com/token service registry.musher.test: HTTP 401") {
+		t.Fatalf("registry check = %+v", c)
+	}
+
+	// An anonymous token is as good: the realm answered.
+	c = selfTestWith(t, fakeRegistry(http.StatusOK)).Run(t.Context()).Checks[runner.CheckRegistryEgress]
+	if !c.OK || !strings.Contains(c.Detail, "anonymous token") {
+		t.Fatalf("registry check (anonymous token) = %+v", c)
+	}
+}
+
+func TestSelfTestRegistryFailsWhatIsNotARegistry(t *testing.T) {
+	t.Parallel()
+
+	challenge := func(value string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/token" {
+				w.WriteHeader(http.StatusInternalServerError)
+
+				return
+			}
+
+			w.Header().Set("WWW-Authenticate", value)
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+	}
+
+	for name, tc := range map[string]struct {
+		handler http.Handler
+		want    string
+	}{
+		// TLS alone used to pass: any TLS server on 443 did.
+		"not a registry":   {http.NotFoundHandler(), "GET /v2/: HTTP 404"},
+		"no challenge":     {challenge(""), "without a Bearer or Basic challenge"},
+		"plain-http realm": {challenge(`Bearer realm="http://example.com/token",service="s"`), "names no https realm"},
+		"realm broken":     {challenge(`Bearer realm="https://example.com/token",service="s"`), "HTTP 500, want 200, 401 or 403"},
+	} {
+		c := selfTestWith(t, tc.handler).Run(t.Context()).Checks[runner.CheckRegistryEgress]
+		if c.OK || !strings.Contains(c.Detail, tc.want) {
+			t.Errorf("%s: registry check = %+v, want a failure naming %q", name, c, tc.want)
+		}
+	}
+
+	c := selfTestWith(t, challenge(`Basic realm="registry"`)).Run(t.Context()).Checks[runner.CheckRegistryEgress]
+	if !c.OK || !strings.Contains(c.Detail, "challenge Basic; unauthenticated") {
+		t.Errorf("basic challenge: %+v", c)
 	}
 }
 

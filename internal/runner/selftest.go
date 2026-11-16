@@ -5,11 +5,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -132,7 +135,7 @@ func (s *SelfTest) Run(ctx context.Context) *SelfTestResults {
 		CheckBuildEngine:    timed(s.checkWorkers),
 		CheckLocalBuild:     timed(s.checkScratchBuild),
 		CheckAPIEgress:      timed(func(ctx context.Context) probe { return s.checkReach(ctx, apiTarget(s.APIURL), "API URL") }),
-		CheckRegistryEgress: timed(func(ctx context.Context) probe { return s.checkReach(ctx, withPort(s.RegistryHost), "registry") }),
+		CheckRegistryEgress: timed(s.checkRegistry),
 		CheckDeniedEgress:   s.checkAllDenied,
 		CheckScratch:        timed(s.checkScratch),
 	}
@@ -303,6 +306,170 @@ func (s *SelfTest) checkReach(ctx context.Context, target, what string) probe {
 	state := client.ConnectionState()
 
 	return pass(target, tls.VersionName(state.Version)+" handshake verified")
+}
+
+// RegistryUnauthenticated is how the registry check's detail says what it
+// proved: a canary holds no push grant, so the token exchange is made without
+// a credential and its refusal is the expected answer.
+const RegistryUnauthenticated = "unauthenticated: realm and service resolve; no push grant in a canary"
+
+// checkRegistry proves the registry is reachable and speaks the distribution
+// API's auth flow: TCP and a verified TLS handshake, the /v2/ challenge, and
+// a token exchange against the realm and service it advertises. The exchange
+// carries no credential (a canary has no attempt token, so no push grant), so
+// a 401 or 403 from the realm passes: it proves egress and TLS to the realm
+// and that realm and service resolve, not that a push would be authorized.
+// Nothing is pushed and no authenticated request is made.
+func (s *SelfTest) checkRegistry(ctx context.Context) probe {
+	target := withPort(s.RegistryHost)
+
+	reach := s.checkReach(ctx, target, "registry")
+	if !reach.ok {
+		return reach
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, defaultReachTimeout)
+	defer cancel()
+
+	client := s.httpClient()
+
+	resp, err := s.get(ctx, client, "https://"+target+"/v2/")
+	if err != nil {
+		return fail(target, reach.detail+"; GET /v2/: "+err.Error())
+	}
+
+	challenge := resp.Header.Get("WWW-Authenticate")
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return pass(target, reach.detail+"; GET /v2/ answered 200 with no challenge, so there is no token exchange to make")
+	case resp.StatusCode != http.StatusUnauthorized:
+		return fail(target, reach.detail+"; GET /v2/: HTTP "+strconv.Itoa(resp.StatusCode)+", want a 401 challenge")
+	}
+
+	scheme, params := parseChallenge(challenge)
+
+	switch scheme {
+	case "basic":
+		return pass(target, reach.detail+"; /v2/ challenge Basic; unauthenticated: no push grant in a canary")
+	case "bearer":
+	default:
+		return fail(target, reach.detail+"; /v2/ answered 401 without a Bearer or Basic challenge")
+	}
+
+	realm, service := params["realm"], params["service"]
+
+	realmURL, err := url.Parse(realm)
+	if err != nil || realmURL.Scheme != "https" || realmURL.Host == "" {
+		return fail(target, reach.detail+"; the /v2/ challenge names no https realm ("+realm+")")
+	}
+
+	query := realmURL.Query()
+	if service != "" {
+		query.Set("service", service)
+	}
+
+	realmURL.RawQuery = query.Encode()
+
+	tokenResp, err := s.get(ctx, client, realmURL.String())
+	if err != nil {
+		return fail(target, reach.detail+"; token exchange at "+realm+": "+err.Error())
+	}
+
+	exchange := "realm " + realm + " service " + service + ": HTTP " + strconv.Itoa(tokenResp.StatusCode)
+
+	switch tokenResp.StatusCode {
+	case http.StatusOK:
+		return pass(target, reach.detail+"; "+exchange+" (an anonymous token); unauthenticated: no push grant in a canary")
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return pass(target, reach.detail+"; "+exchange+"; "+RegistryUnauthenticated)
+	default:
+		return fail(target, reach.detail+"; "+exchange+", want 200, 401 or 403")
+	}
+}
+
+// response is the part of an HTTP answer the registry check reads.
+type response struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func (s *SelfTest) httpClient() *http.Client {
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	if s.TLSConfig != nil {
+		cfg = s.TLSConfig.Clone()
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:       s.Dial,
+			TLSClientConfig:   cfg,
+			ForceAttemptHTTP2: true,
+		},
+		// A realm is reached where the challenge says; a redirect is not
+		// followed, so the answer is the realm's own.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+// get sends an unauthenticated GET and keeps only status and headers.
+func (s *SelfTest) get(ctx context.Context, client *http.Client, target string) (*response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, http.NoBody)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // folded into the detail
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // folded into the detail
+	}
+
+	defer resp.Body.Close()
+
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16)) //nolint:errcheck // drained for reuse only
+
+	return &response{StatusCode: resp.StatusCode, Header: resp.Header}, nil
+}
+
+// parseChallenge reads a WWW-Authenticate challenge: its lowercased scheme
+// and its quoted or bare parameters.
+func parseChallenge(header string) (scheme string, params map[string]string) {
+	params = map[string]string{}
+
+	header = strings.TrimSpace(header)
+
+	name, rest, _ := strings.Cut(header, " ")
+	scheme = strings.ToLower(name)
+
+	for rest != "" {
+		rest = strings.TrimLeft(rest, " ,")
+
+		key, after, ok := strings.Cut(rest, "=")
+		if !ok {
+			break
+		}
+
+		key = strings.ToLower(strings.TrimSpace(key))
+
+		var value string
+
+		if strings.HasPrefix(after, `"`) {
+			end := strings.Index(after[1:], `"`)
+			if end < 0 {
+				params[key] = after[1:]
+
+				break
+			}
+
+			value, rest = after[1:1+end], after[2+end:]
+		} else {
+			value, rest, _ = strings.Cut(after, ",")
+		}
+
+		params[key] = strings.TrimSpace(value)
+	}
+
+	return scheme, params
 }
 
 // checkDenied passes when target cannot be connected to within the timeout:

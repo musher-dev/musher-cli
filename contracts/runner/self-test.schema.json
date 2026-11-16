@@ -33,7 +33,7 @@
           "$ref": "#/$defs/check"
         },
         "registryEgress": {
-          "description": "TCP and a verified TLS handshake to --registry (or MUSHER_REGISTRY_HOST), port 443 unless given. Not ok when none is set. Maps to REGISTRY_EGRESS.",
+          "description": "TCP and a verified TLS handshake to --registry (or MUSHER_REGISTRY_HOST), port 443 unless given, then GET /v2/ and, on a Bearer challenge, a token exchange at the advertised https realm for the advertised service, made without a credential (a canary holds no push grant). Ok when /v2/ answers 200, or a Basic challenge, or the realm answers 200, 401 or 403. Proves egress and TLS to registry and realm and that realm and service resolve; never that a push would be authorized. Not ok when none is set. Maps to REGISTRY_EGRESS.",
           "$ref": "#/$defs/check"
         },
         "deniedEgress": {
