@@ -49,6 +49,7 @@ type fakeAPI struct {
 	grantHost     string // default registry.musher.test
 	grantPassword string // default push-pass-<n>, a new one per grant
 	grants        int
+	issued        map[string]issuedGrant // by password
 	buildReports  []map[string]any
 	logLines      []map[string]any
 	logCalls      int
@@ -199,10 +200,18 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 			password = "push-pass-" + strconv.Itoa(f.grants)
 		}
 
+		now := time.Now()
+
+		if f.issued == nil {
+			f.issued = map[string]issuedGrant{}
+		}
+
+		f.issued[password] = issuedGrant{n: f.grants, at: now, expiresAt: now.Add(f.grantTTL)}
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"registryHost": f.registryHost(), "repositoryPath": "org-1/src-42",
 			"username": "build", "password": password,
-			"expiresAt": time.Now().Add(f.grantTTL),
+			"expiresAt": now.Add(f.grantTTL),
 		})
 	case strings.HasSuffix(path, "/log-lines"):
 		f.logCalls++
@@ -255,6 +264,13 @@ func (f *fakeAPI) serveUpload(w http.ResponseWriter, r *http.Request) {
 	f.uploadHeader = r.Header.Clone()
 	f.uploadHeader.Set("Content-Length", strconv.FormatInt(r.ContentLength, 10))
 	w.WriteHeader(f.uploadCode)
+}
+
+// issuedGrant is one :grantPushAccess answer, as a token realm checks it.
+type issuedGrant struct {
+	n         int // 1 for the first grant
+	at        time.Time
+	expiresAt time.Time
 }
 
 func (f *fakeAPI) snapshot() fakeAPI {
