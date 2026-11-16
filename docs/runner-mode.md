@@ -146,8 +146,12 @@ it took, and is never machine-parsed.
 ## Engines
 
 Both engines run on the guest's buildkitd, which guest-init starts as root (guest protocol v2). Both push with the
-build's push grant alone. Registry credentials come from the grant and are handed out only for the grant's
-registry host, and only when the registry asks. The docker credential store is never read.
+build's push grant alone. Registry credentials come from one grant source shared by both engines, and are handed out
+only for the grant's registry host, and only when the registry asks. The docker credential store is never read.
+
+Both engines push exactly `imageRepository:imageTag`, never by digest alone, and report the digest the registry then
+holds for that tag, read back with the grant (platform-api checks the tag against it). The read-back is never
+anonymous: with no credential for the host, or a digest the tag does not hold, the build fails `PUSH_FAILED`.
 
 - **Dockerfile.** This is the `internal/build/buildkit` driver pointed at the guest socket. Secrets go in through
   BuildKit's session (`--secret`), and BuildKit's image exporter pushes. BuildKit keeps a credential it has cached for
@@ -159,7 +163,9 @@ registry host, and only when the registry asks. The docker credential store is n
   - Build arguments become the platform's `env/` files. Secrets are session secrets mounted at
     `/platform/env/<id>`, so their values never enter the build definition.
   - The app image comes out as an OCI layout through BuildKit's local exporter. The runner then pushes it itself with
-    the grant.
+    the grant. The push reads the credential each time the registry asks for one, so a grant renewed during a long push
+    is the one used. When the registry refuses a credential mid-push, the runner asks `:grantPushAccess` again and
+    retries; blobs already uploaded are skipped, so the retry resumes at the blob or manifest that was in flight.
   - Nothing in detect, build or export talks to a registry, so no phase holds a registry credential.
 
 The buildpacks path was proved before it was built (the go/no-go spike). `go test -tags integration

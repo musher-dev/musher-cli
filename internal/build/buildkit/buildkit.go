@@ -86,6 +86,14 @@ func New(opts Options) *Driver {
 	drv := &Driver{opts: opts, head: registry.Digest}
 	drv.connect = drv.dial
 
+	if auth := opts.Auth; auth != nil {
+		// The push credential is the only one: the digest is read back with
+		// it, never anonymously and never from the docker credential store.
+		drv.head = func(ctx context.Context, ref string) (string, error) {
+			return registry.PushedDigest(ctx, ref, auth)
+		}
+	}
+
 	return drv
 }
 
@@ -144,11 +152,22 @@ func (d *Driver) Build(ctx context.Context, req core.Request, events chan<- core
 	}
 
 	digest := resp.ExporterResponse[exporterDigestKey]
-	if conn.verifyDigest || digest == "" {
-		digest, err = d.head(ctx, req.Ref())
-		if err != nil {
-			return core.Result{}, staged(core.StagePush, clierrors.Errorf("read pushed digest of %s: %w", req.Ref(), err))
+
+	// With a push credential (runner mode) the tag's digest is always read
+	// back and must be the one pushed: the platform checks the tag against
+	// the reported digest.
+	confirm := d.opts.Auth != nil
+	if conn.verifyDigest || digest == "" || confirm {
+		held, headErr := d.head(ctx, req.Ref())
+		if headErr != nil {
+			return core.Result{}, staged(core.StagePush, clierrors.Errorf("read pushed digest of %s: %w", req.Ref(), headErr))
 		}
+
+		if confirm && !conn.verifyDigest && digest != "" && held != digest {
+			return core.Result{}, staged(core.StagePush, clierrors.Errorf("pushed %s as %s, but the registry holds %s for the tag", req.Ref(), digest, held))
+		}
+
+		digest = held
 	}
 
 	return core.Result{
