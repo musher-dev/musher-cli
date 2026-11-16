@@ -147,7 +147,9 @@ func (s *LogShipper) Add(severity api.BuildLogLineSeverity, message string, occu
 	}
 }
 
-// Run flushes until ctx ends, then flushes what is left with flushCtx.
+// Run flushes until ctx ends, then flushes what is left. Every send runs on
+// flushCtx, never ctx: stopping the shipper must not cancel a batch in
+// flight, which would lose its lines or land them after later ones.
 func (s *LogShipper) Run(ctx, flushCtx context.Context) {
 	defer close(s.done)
 
@@ -164,7 +166,7 @@ func (s *LogShipper) Run(ctx, flushCtx context.Context) {
 		case <-s.wake:
 		}
 
-		s.flushAll(ctx)
+		s.flushAll(flushCtx)
 	}
 }
 
