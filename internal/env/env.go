@@ -45,6 +45,20 @@ const (
 	// LogStderr controls whether structured logs also go to stderr.
 	LogStderr = "MUSHER_LOG_STDERR"
 
+	// APIURL is the Musher API endpoint. In runner mode it is the only source
+	// of the API URL besides the guest's inputs file.
+	APIURL = "MUSHER_API_URL"
+	// InputsFile is the guest's inputs file (runner mode): a JSON object with
+	// api_url and snapshot_id or build_id, written by the host agent.
+	InputsFile = "MUSHER_INPUTS_FILE"
+	// ResultsFile is where a runner command writes its results for the host
+	// agent (runner mode).
+	ResultsFile = "MUSHER_RESULTS_FILE"
+	// RegistryHost is the registry `musher runner self-test` probes.
+	RegistryHost = "MUSHER_REGISTRY_HOST"
+	// TmpDir is the process's scratch directory; the guest points it at /scratch.
+	TmpDir = "TMPDIR"
+
 	// XDGRuntimeDir is the standard XDG runtime directory.
 	XDGRuntimeDir = "XDG_RUNTIME_DIR"
 

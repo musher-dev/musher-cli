@@ -366,6 +366,25 @@ tasks:
             exit 1
           fi
         done
+        # Runner mode: platform-api's argv and the host canary depend on these.
+        for flag in --snapshot; do
+          if ! ./{{.CONTRACTS_BIN}} runner fetch-source --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner fetch-source is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --build --buildkit-host; do
+          if ! ./{{.CONTRACTS_BIN}} runner build --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner build is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --buildkit-host --registry-host --results-file --deny-metadata --deny-rfc1918 --deny-cgnat; do
+          if ! ./{{.CONTRACTS_BIN}} runner self-test --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner self-test is missing $flag"
+            exit 1
+          fi
+        done
         for flag in --watch --replicas --conditions; do
           if ! ./{{.CONTRACTS_BIN}} status --help | grep -q -- "$flag"; then
             echo "FAIL: musher status is missing $flag"

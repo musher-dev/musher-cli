@@ -37,6 +37,28 @@ const (
 	ExitUsage        = 64
 )
 
+// Exit codes of `musher runner` (runner mode, inside an isolation guest). The
+// host agent reads them; docs/runner-mode.md is their reference. A runner
+// command exits 0 only when it reported a success outcome the API accepted.
+const (
+	// ExitRunnerFailureReported: a classified FAILED outcome was reported and
+	// accepted. The attempt ended as designed; the report says why.
+	ExitRunnerFailureReported = 20
+	// ExitRunnerFenced: the API refused the attempt token (401: not the run's
+	// current attempt, ended or expired) or said the resource is not this
+	// attempt's (404). The runner stopped and reported nothing.
+	ExitRunnerFenced = 21
+	// ExitRunnerDeadline: the attempt's deadline arrived first. The runner
+	// stopped before it and reported nothing; the platform times the attempt out.
+	ExitRunnerDeadline = 22
+	// ExitRunnerUnreported: an outcome was reached but the API could not be
+	// told after retries (unreachable, or a refusal other than fencing).
+	ExitRunnerUnreported = 23
+	// ExitRunnerSelfTestFailed: `musher runner self-test` wrote its results
+	// and at least one check failed.
+	ExitRunnerSelfTestFailed = 24
+)
+
 // Mapping an API problem document to one of these codes lives in
 // internal/client (Problem.ExitCode), not here: internal/client imports this
 // package, so a dependency in the other direction would be an import cycle.

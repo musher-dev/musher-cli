@@ -34,6 +34,7 @@ var (
 		moduleRoot + "/internal/errors":        true,
 		moduleRoot + "/internal/observability": true,
 		moduleRoot + "/internal/paths":         true,
+		moduleRoot + "/internal/runner":        true,
 		moduleRoot + "/internal/safeio":        true,
 		moduleRoot + "/internal/terminal":      true,
 		moduleRoot + "/internal/update":        true,

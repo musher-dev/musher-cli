@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/musher-dev/musher-cli/contracts/runner/self-test.schema.json",
+  "title": "musher runner self-test results",
+  "description": "The document `musher runner self-test` writes to MUSHER_RESULTS_FILE (and stdout) inside an isolation guest. The host agent's canary reads it and maps each check to an isolation condition. Keys are snake_case and stable: schema_version changes only when a key is removed or changes meaning. A new check may be added under checks without a version change, so a reader must ignore checks it does not know. See docs/runner-mode.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "runner_version", "started_at", "finished_at", "passed", "checks"],
+  "properties": {
+    "schema_version": {
+      "description": "The document's version; this schema describes version 1.",
+      "const": 1
+    },
+    "runner_version": {
+      "description": "The musher CLI version that ran the checks (\"dev\" for an unreleased build).",
+      "type": "string"
+    },
+    "started_at": {
+      "description": "RFC 3339 UTC time the checks started.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "description": "RFC 3339 UTC time the last check finished.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "passed": {
+      "description": "True when no check has status fail (a skipped check does not fail the run).",
+      "type": "boolean"
+    },
+    "checks": {
+      "description": "Every check by name.",
+      "type": "object",
+      "required": [
+        "buildkit_workers",
+        "buildkit_scratch_build",
+        "api_reachable",
+        "registry_reachable",
+        "egress_denied_metadata",
+        "egress_denied_rfc1918",
+        "egress_denied_cgnat",
+        "scratch_writable"
+      ],
+      "properties": {
+        "buildkit_workers": {
+          "description": "buildkitd at --buildkit-host answers ListWorkers (buildctl debug workers) with at least one worker. Maps to BUILD_ENGINE_READY.",
+          "$ref": "#/$defs/check"
+        },
+        "buildkit_scratch_build": {
+          "description": "A `FROM scratch` Dockerfile build with one copied file solves on buildkitd, exporting and pushing nothing. Maps to BUILD_ENGINE_READY.",
+          "$ref": "#/$defs/check"
+        },
+        "api_reachable": {
+          "description": "TCP and a verified TLS handshake (system roots, SNI) to the API URL's host. Fails when MUSHER_API_URL and the inputs file name none. Maps to API_EGRESS.",
+          "$ref": "#/$defs/check"
+        },
+        "registry_reachable": {
+          "description": "TCP and a verified TLS handshake to --registry-host (or MUSHER_REGISTRY_HOST), port 443 unless given. Skipped when none is configured. Maps to REGISTRY_EGRESS.",
+          "$ref": "#/$defs/check"
+        },
+        "egress_denied_metadata": {
+          "description": "A TCP connect to --deny-metadata (default 169.254.169.254:80) does not succeed within the deny timeout (3s). Refused, unreachable and timed out all pass. Maps to EGRESS_POLICY_ENFORCED.",
+          "$ref": "#/$defs/check"
+        },
+        "egress_denied_rfc1918": {
+          "description": "As egress_denied_metadata, for --deny-rfc1918 (default 10.0.0.1:443). Maps to EGRESS_POLICY_ENFORCED.",
+          "$ref": "#/$defs/check"
+        },
+        "egress_denied_cgnat": {
+          "description": "As egress_denied_metadata, for --deny-cgnat (default 100.64.0.1:443, RFC 6598). Maps to EGRESS_POLICY_ENFORCED.",
+          "$ref": "#/$defs/check"
+        },
+        "scratch_writable": {
+          "description": "A file written to the scratch directory (TMPDIR, default /scratch) reads back unchanged. Maps to SCRATCH_DISK.",
+          "$ref": "#/$defs/check"
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/check" }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "duration_ms"],
+      "properties": {
+        "status": {
+          "description": "pass, fail, or skip (not configured).",
+          "enum": ["pass", "fail", "skip"]
+        },
+        "target": {
+          "description": "What was probed: a host:port, a buildkitd address or a directory. Absent when skipped.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "Words a person reads: the worker list, the TLS version, why it was denied, the error. Never machine-parsed.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long the check took, in milliseconds.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
