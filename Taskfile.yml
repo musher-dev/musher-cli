@@ -7,13 +7,14 @@ version: '3'
 vars:
   BINARY: musher
   MODULE: github.com/musher-dev/musher-cli
-  GO_VERSION: 1.26.10
+  GO_VERSION: 1.26.11
   GOLANGCI_LINT_VERSION: v2.11.3
   GOVULNCHECK_VERSION: v1.1.4
   NILAWAY_VERSION: v0.0.0-20260318203545-ad240b12fb4c
   SHFMT_VERSION: v3.13.0
   ACTIONLINT_VERSION: v1.7.11
   LEFTHOOK_VERSION: v2.1.5
+  OAPI_CODEGEN_VERSION: v2.8.2
   GIT_COMMIT:
     sh: git rev-parse --short HEAD
   GIT_DATE:
@@ -122,6 +123,7 @@ tasks:
     desc: CI build verification group (compile, contracts, install)
     cmds:
       - task: check:compile
+      - task: check:runner-client
       - task: check:contracts
       - task: check:script
       - task: check:docs-snippets
@@ -289,6 +291,29 @@ tasks:
         fi
         echo "OK: total coverage ${total}% meets ${threshold}% floor"
 
+  generate:runner-client:
+    desc: Regenerate the /runner/v1 client from the vendored runner.json
+    dir: internal/runner/api
+    cmds:
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config oapi-codegen.yaml ../../../contracts/vendor/platform-api/contracts/openapi/runner.json
+
+  check:runner-client:
+    desc: Fail when the generated runner client is not what the vendored runner.json generates
+    dir: internal/runner/api
+    cmds:
+      - |
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+        # The config's output: wins over -o, so generate from a copy that
+        # writes into the temporary directory.
+        sed "s|^output: .*|output: $tmp/runner.gen.go|" oapi-codegen.yaml > "$tmp/config.yaml"
+        go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} \
+          -config "$tmp/config.yaml" ../../../contracts/vendor/platform-api/contracts/openapi/runner.json
+        if ! diff -u runner.gen.go "$tmp/runner.gen.go"; then
+          echo "FAIL: internal/runner/api/runner.gen.go is stale; run 'task generate:runner-client'"
+          exit 1
+        fi
+
   check:contracts:
     desc: Verify CLI command tree is stable
     vars:
@@ -338,6 +363,25 @@ tasks:
                     --build-arg --secret --progress --buildkit-host; do
           if ! ./{{.CONTRACTS_BIN}} build --help | grep -q -- "$flag"; then
             echo "FAIL: musher build is missing $flag"
+            exit 1
+          fi
+        done
+        # Runner mode: platform-api's argv and the host canary depend on these.
+        for flag in --snapshot; do
+          if ! ./{{.CONTRACTS_BIN}} runner fetch-source --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner fetch-source is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --build --buildkit-host; do
+          if ! ./{{.CONTRACTS_BIN}} runner build --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner build is missing $flag"
+            exit 1
+          fi
+        done
+        for flag in --api-url --buildkit-host --registry --results-file --deny-metadata --deny-rfc1918 --deny-cgnat; do
+          if ! ./{{.CONTRACTS_BIN}} runner self-test --help | grep -q -- "$flag"; then
+            echo "FAIL: musher runner self-test is missing $flag"
             exit 1
           fi
         done

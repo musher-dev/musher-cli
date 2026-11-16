@@ -31,6 +31,10 @@ func TestExitCodesAreStable(t *testing.T) {
 		{"ExitEntitlement", ExitEntitlement, 12},
 		{"ExitRateLimited", ExitRateLimited, 13},
 		{"ExitUsage", ExitUsage, 64},
+		{"ExitRunnerFailureReported", ExitRunnerFailureReported, 20},
+		{"ExitRunnerFenced", ExitRunnerFenced, 21},
+		{"ExitRunnerDeadline", ExitRunnerDeadline, 22},
+		{"ExitRunnerUnreported", ExitRunnerUnreported, 23},
 	}
 
 	for _, tt := range tests {
@@ -65,6 +69,11 @@ func TestExitCode7IsRetired(t *testing.T) {
 		"ExitEntitlement":  ExitEntitlement,
 		"ExitRateLimited":  ExitRateLimited,
 		"ExitUsage":        ExitUsage,
+
+		"ExitRunnerFailureReported": ExitRunnerFailureReported,
+		"ExitRunnerFenced":          ExitRunnerFenced,
+		"ExitRunnerDeadline":        ExitRunnerDeadline,
+		"ExitRunnerUnreported":      ExitRunnerUnreported,
 	}
 
 	for name, code := range codes {

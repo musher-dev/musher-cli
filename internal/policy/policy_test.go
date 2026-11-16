@@ -34,6 +34,7 @@ var (
 		moduleRoot + "/internal/errors":        true,
 		moduleRoot + "/internal/observability": true,
 		moduleRoot + "/internal/paths":         true,
+		moduleRoot + "/internal/runner":        true,
 		moduleRoot + "/internal/safeio":        true,
 		moduleRoot + "/internal/terminal":      true,
 		moduleRoot + "/internal/update":        true,
@@ -607,5 +608,87 @@ func TestPromptPackageUsesStdinFDForTTYChecks(t *testing.T) {
 
 			return true
 		})
+	}
+}
+
+// runnerModeDenied are the packages runner mode must never reach, directly or
+// through another package: the /v1 client and everything that leads to it or
+// to a credential other than the run attempt token (config, keyring, update
+// checks, the deploy workflow).
+var runnerModeDenied = []string{
+	moduleRoot + "/internal/client",
+	moduleRoot + "/internal/auth",
+	moduleRoot + "/internal/config",
+	moduleRoot + "/internal/update",
+	moduleRoot + "/internal/workflow",
+}
+
+// TestRunnerModeReachesNoV1Client walks the production import graph from
+// internal/runner and fails on any path to a denied package, so runner mode
+// cannot call /v1 even by accident.
+func TestRunnerModeReachesNoV1Client(t *testing.T) {
+	graph := map[string][]string{}
+	for _, pkg := range loadAllPackages(t) {
+		graph[pkg.ImportPath] = pkg.Imports
+	}
+
+	start := moduleRoot + "/internal/runner"
+	if graph[start] == nil {
+		t.Fatalf("%s not found", start)
+	}
+
+	via := map[string]string{start: ""}
+	queue := []string{}
+
+	for pkg := range graph {
+		if pkg == start || strings.HasPrefix(pkg, start+"/") {
+			via[pkg] = ""
+			queue = append(queue, pkg)
+		}
+	}
+
+	for len(queue) > 0 {
+		pkg := queue[0]
+		queue = queue[1:]
+
+		for _, imp := range graph[pkg] {
+			if _, seen := via[imp]; seen || !strings.HasPrefix(imp, moduleRoot+"/") {
+				continue
+			}
+
+			via[imp] = pkg
+			queue = append(queue, imp)
+		}
+	}
+
+	for _, denied := range runnerModeDenied {
+		if _, reached := via[denied]; !reached {
+			continue
+		}
+
+		chain := []string{denied}
+		for at := via[denied]; at != ""; at = via[at] {
+			chain = append(chain, at)
+		}
+
+		t.Errorf("runner mode reaches %s: %s", denied, strings.Join(chain, " <- "))
+	}
+}
+
+// TestRunnerCommandsImportOnlyRunnerMode keeps cmd/musher/runner.go off the
+// /v1 client and the config loader too.
+func TestRunnerCommandsImportOnlyRunnerMode(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(t), "cmd", "musher", "runner.go"), nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, imp := range file.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		for _, denied := range runnerModeDenied {
+			if path == denied {
+				t.Errorf("cmd/musher/runner.go imports %s", path)
+			}
+		}
 	}
 }

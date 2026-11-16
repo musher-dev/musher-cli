@@ -213,6 +213,22 @@ linters:
               desc: the SSE stream client is transport only and must not depend on prompt
             - pkg: github.com/musher-dev/musher-cli/internal/workflow
               desc: the SSE stream client is transport only and must not import use-case packages
+        runner_mode_isolation:
+          # Runner mode speaks only /runner/v1 with the run attempt token
+          # (internal/policy TestRunnerModeReachesNoV1Client checks the whole
+          # import graph; this catches a direct import at lint time).
+          files:
+            - "**/internal/runner/*.go"
+            - "**/internal/runner/**/*.go"
+          deny:
+            - pkg: github.com/musher-dev/musher-cli/internal/client
+              desc: runner mode never calls the /v1 surface
+            - pkg: github.com/musher-dev/musher-cli/internal/auth
+              desc: runner mode authenticates only with the run attempt token
+            - pkg: github.com/musher-dev/musher-cli/internal/config
+              desc: runner mode reads only the guest's environment
+            - pkg: github.com/musher-dev/musher-cli/internal/update
+              desc: runner mode never checks for updates
         cmd_no_net_http:
           files:
             - "**/cmd/musher/*.go"

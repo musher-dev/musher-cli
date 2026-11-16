@@ -78,6 +78,12 @@ terminal to open the interactive UI.`,
 
 			launchTUI = state.launchTUI
 
+			// Runner mode reads only the guest's environment: no config file,
+			// no profile, no keyring, and no update check.
+			if isRunnerMode(cmd) {
+				return nil
+			}
+
 			// Load config once and store in context for all subcommands.
 			cfg := config.LoadWithOverrides(overrides)
 			cmd.SetContext(config.WithContext(cmd.Context(), cfg))
@@ -87,7 +93,7 @@ terminal to open the interactive UI.`,
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
-			if shouldShowUpdateNotice(cmd) {
+			if !isRunnerMode(cmd) && shouldShowUpdateNotice(cmd) {
 				renderUpdateNotice(output.FromContext(cmd.Context()), buildinfo.Version)
 			}
 
@@ -214,6 +220,9 @@ func registerRootCommands(rootCmd *cobra.Command) {
 	versionCmd := newVersionCmd()
 	versionCmd.GroupID = groupMaintenance
 	rootCmd.AddCommand(versionCmd)
+
+	// Runner mode, hidden: the host agent runs it inside an isolation guest.
+	rootCmd.AddCommand(newRunnerCmd())
 
 	completionCmd := newCompletionCmd()
 	completionCmd.GroupID = groupMaintenance

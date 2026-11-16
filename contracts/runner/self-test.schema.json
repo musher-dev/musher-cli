@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/musher-dev/musher-cli/contracts/runner/self-test.schema.json",
+  "title": "musher runner self-test results",
+  "description": "The document `musher runner self-test` writes to MUSHER_RESULTS_FILE (and stdout) inside an isolation guest. host-agent's deep canary parses it and maps each check to an isolation condition. Keys are camelCase and fixed with the canary; schemaVersion changes only when a key is removed or changes meaning. The command exits 0 whenever it wrote this document, failed checks included. See docs/runner-mode.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runnerVersion", "checks"],
+  "properties": {
+    "schemaVersion": {
+      "description": "The document's version; this schema describes version 1.",
+      "const": 1
+    },
+    "runnerVersion": {
+      "description": "The musher CLI version that ran the checks (semver; \"dev\" for an unreleased build).",
+      "type": "string"
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buildEngine", "localBuild", "apiEgress", "registryEgress", "deniedEgress", "scratch"],
+      "properties": {
+        "buildEngine": {
+          "description": "buildkitd at --buildkit-host answers ListWorkers (`buildctl debug workers`) with at least one worker. Maps to BUILD_ENGINE_READY.",
+          "$ref": "#/$defs/check"
+        },
+        "localBuild": {
+          "description": "A `FROM scratch` Dockerfile build with one copied file solves on buildkitd, exporting and pushing nothing. Maps to BUILD_ENGINE_READY.",
+          "$ref": "#/$defs/check"
+        },
+        "apiEgress": {
+          "description": "TCP and a verified TLS handshake (system roots, SNI) to the host of --api-url (or MUSHER_API_URL, or api_url in the inputs file). Not ok when none is set. Maps to API_EGRESS.",
+          "$ref": "#/$defs/check"
+        },
+        "registryEgress": {
+          "description": "TCP and a verified TLS handshake to --registry (or MUSHER_REGISTRY_HOST), port 443 unless given, then GET /v2/ and, on a Bearer challenge, a token exchange at the advertised https realm for the advertised service, made without a credential (a canary holds no push grant). Ok when /v2/ answers 200, or a Basic challenge, or the realm answers 200, 401 or 403. Proves egress and TLS to registry and realm and that realm and service resolve; never that a push would be authorized. Not ok when none is set. Maps to REGISTRY_EGRESS.",
+          "$ref": "#/$defs/check"
+        },
+        "deniedEgress": {
+          "description": "TCP connects to 169.254.169.254:80, 10.0.0.1:443 and 100.64.0.1:443 (--deny-metadata, --deny-rfc1918, --deny-cgnat) all fail within 3s each; refused, unreachable and timed out all count as denied. Not ok if any connected; detail lists each. Maps to EGRESS_POLICY_ENFORCED.",
+          "$ref": "#/$defs/check"
+        },
+        "scratch": {
+          "description": "A file written to the scratch directory (TMPDIR, default /scratch) reads back unchanged. Maps to SCRATCH_DISK.",
+          "$ref": "#/$defs/check"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "detail"],
+      "properties": {
+        "ok": {
+          "description": "Whether the check passed.",
+          "type": "boolean"
+        },
+        "detail": {
+          "description": "Words a person reads: the target, the worker list, the TLS version, why a probe was denied, the error, and how long it took. Never machine-parsed.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}
