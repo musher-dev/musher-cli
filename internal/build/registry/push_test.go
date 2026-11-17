@@ -35,10 +35,19 @@ type tokenRegistry struct {
 	valid func(password string) bool
 	// afterUpload runs after every completed blob upload (PUT).
 	afterUpload func()
+	// bareRefusal refuses a token that is no longer good as zot 2.1 does: a
+	// 401 UNSUPPORTED with no WWW-Authenticate challenge. The anonymous ping
+	// is still challenged.
+	bareRefusal bool
+	// holdManifest delays the first manifest PUT this long before its token
+	// is checked: the token expires in transit, after the body was sent.
+	holdManifest time.Duration
+	held         bool
 
 	mu        sync.Mutex
 	tokens    map[string]string // token -> the password it was issued for
 	headsAnon int               // manifest HEADs sent with no credential
+	pings     int               // GET /v2/: one per push attempt, one for the read-back
 	refusals  int
 }
 
@@ -57,6 +66,17 @@ func newTokenRegistry(t *testing.T) *tokenRegistry {
 }
 
 func (r *tokenRegistry) host() string { return strings.TrimPrefix(r.srv.URL, "http://") }
+
+// holdOnce reports whether the manifest PUT is the first, to be held.
+func (r *tokenRegistry) holdOnce() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	first := !r.held
+	r.held = true
+
+	return first
+}
 
 func (r *tokenRegistry) challenge(w http.ResponseWriter) {
 	r.mu.Lock()
@@ -90,6 +110,12 @@ func (r *tokenRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if req.Method == http.MethodGet && strings.TrimSuffix(req.URL.Path, "/") == "/v2" {
+		r.mu.Lock()
+		r.pings++
+		r.mu.Unlock()
+	}
+
 	bearer, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer ")
 	if !ok {
 		if req.Method == http.MethodHead && strings.Contains(req.URL.Path, "/manifests/") {
@@ -103,11 +129,26 @@ func (r *tokenRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	hold := req.Method == http.MethodPut && strings.Contains(req.URL.Path, "/manifests/") && r.holdOnce()
+
+	if hold {
+		time.Sleep(r.holdManifest)
+	}
+
 	r.mu.Lock()
 	pass, known := r.tokens[bearer]
 	r.mu.Unlock()
 
 	if !known || !r.valid(pass) {
+		if r.bareRefusal {
+			r.mu.Lock()
+			r.refusals++
+			r.mu.Unlock()
+			http.Error(w, `{"errors":[{"code":"UNSUPPORTED"}]}`, http.StatusUnauthorized)
+
+			return
+		}
+
 		r.challenge(w)
 
 		return
@@ -226,6 +267,48 @@ func TestPushLayoutOutlivesItsCredential(t *testing.T) {
 
 	if elapsed := time.Since(start); elapsed < 3*clock.ttl {
 		t.Fatalf("the push took %v, not longer than a credential lives (%v)", elapsed, 3*clock.ttl)
+	}
+
+	if got != want {
+		t.Errorf("reported %s, want the layout's manifest %s", got, want)
+	}
+
+	if held := tagDigest(t, ref, "pass-"+strconv.Itoa(clock.generation())); held != got {
+		t.Errorf("the tag holds %s, the push reported %s", held, got)
+	}
+}
+
+// TestPushLayoutReexchangesATokenRefusedWithoutAChallenge: zot refuses an
+// expired token with no challenge, which go-containerregistry would never
+// answer with a new token. Every blob upload here outlives its token, so the
+// push lands only if each refusal is answered in place: the commit PUT and the
+// manifest PUT (whose body must be sent again) re-exchange and resend.
+func TestPushLayoutReexchangesATokenRefusedWithoutAChallenge(t *testing.T) {
+	t.Parallel()
+
+	reg := newTokenRegistry(t)
+	clock := &grantClock{host: reg.host(), start: time.Now(), ttl: 150 * time.Millisecond}
+	reg.valid = clock.accepts
+	reg.uploadDelay = 400 * time.Millisecond
+	reg.bareRefusal = true
+	reg.holdManifest = 400 * time.Millisecond
+
+	dir, want := writeTestLayout(t, 3)
+	ref := reg.host() + "/acme/web:build-3"
+
+	got, err := PushLayout(t.Context(), dir, ref, clock)
+	if err != nil {
+		t.Fatalf("PushLayout: %v", err)
+	}
+
+	reg.mu.Lock()
+	refusals, pings := reg.refusals, reg.pings
+	reg.mu.Unlock()
+
+	// One attempt, then the digest read-back: every refusal was answered in
+	// place.
+	if attempts := pings - 1; refusals < 2 || attempts != 1 {
+		t.Errorf("refusals = %d, attempts = %d; want expired tokens refused mid-push and one attempt", refusals, attempts)
 	}
 
 	if got != want {
