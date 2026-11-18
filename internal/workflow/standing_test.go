@@ -28,6 +28,11 @@ import (
 //     agrees with the phase (attention FAILED or DEGRADED).
 //   - v30-degraded-no-standing.json is v30-degraded.json without the optional
 //     status.standing, as a platform before standing (AL-382) answered.
+//   - recorded-27.0.1-degraded.json is a real GET /v1/deployments/{id} from
+//     staging, platform-api 27.0.1, recorded read-only on 2026-11-18: phase
+//     DEGRADED with standing.attention DEGRADED, stage WAITING_FOR_HOST and
+//     blockingNode board. Every id, the name and the hostnames are replaced
+//     with placeholders; the shape and the status values are as recorded.
 //   - v31-*.json: platform-api #1647's contract (decision 0119, "a fault is
 //     never a phase"): no DEGRADED phase and no becameDegradedAt; a failed
 //     first deploy stays PROVISIONING with standing.isFailed, and an ACTIVE
@@ -69,6 +74,14 @@ func TestSettleOnRecordedShapes(t *testing.T) {
 		{"v30-degraded.json", 90 * time.Second, workflow.OutcomeFailed, "phase DEGRADED past the grace, as today"},
 		{"v30-degraded-no-standing.json", 30 * time.Second, workflow.OutcomePending, "no standing: today's logic exactly"},
 		{"v30-degraded-no-standing.json", 90 * time.Second, workflow.OutcomeFailed, "no standing: today's logic exactly"},
+		{
+			"recorded-27.0.1-degraded.json", 30 * time.Second, workflow.OutcomePending,
+			"a recorded staging DEGRADED inside the grace, as today",
+		},
+		{
+			"recorded-27.0.1-degraded.json", 90 * time.Second, workflow.OutcomeFailed,
+			"a recorded staging DEGRADED past the grace, as today",
+		},
 		{"v31-active-ready.json", 0, workflow.OutcomeSucceeded, "the new happy path"},
 		{
 			"v31-provisioning-component-failed.json", 0, workflow.OutcomeFailed,
@@ -145,6 +158,7 @@ func TestDeployFailsAnActiveDeploymentThatStaysDegraded(t *testing.T) {
 		"v31-active-degraded-ready.json",
 		"v30-degraded.json",
 		"v30-degraded-no-standing.json",
+		"recorded-27.0.1-degraded.json",
 	} {
 		t.Run(fixture, func(t *testing.T) {
 			t.Parallel()
