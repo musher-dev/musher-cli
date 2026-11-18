@@ -60,6 +60,10 @@ func (o Outcome) String() string {
 // Terminal reports whether the outcome ends the watch.
 func (o Outcome) Terminal() bool { return o != OutcomePending }
 
+// AttentionDegraded is the standing's attention reason for an ACTIVE
+// deployment with a replica that stands UNREADY or FAILED.
+const AttentionDegraded = "DEGRADED"
+
 // DeploymentSnapshot is the subset of deployment status the watcher reasons about.
 type DeploymentSnapshot struct {
 	Phase     string
@@ -67,6 +71,40 @@ type DeploymentSnapshot struct {
 	Health    string
 	// HasPublicURL is true once a PUBLIC endpoint has been published.
 	HasPublicURL bool
+	// Standing is status.standing, or nil when the response carried none.
+	Standing *Standing
+}
+
+// Standing is the platform's verdict on a deployment, from status.standing.
+//
+// Two platform shapes meet here. Up to platform-api 30, a fault is a phase:
+// FAILED before the deployment ever went active, DEGRADED after. From 31
+// (decision 0119) a fault is never a phase: a first deploy whose component
+// fails stays PROVISIONING with IsFailed set, and an ACTIVE deployment with a
+// broken replica stays ACTIVE with Attention DEGRADED. Both shapes carry
+// standing, and on the old one it agrees with the phase, so reading both the
+// phase and the standing is correct against either.
+type Standing struct {
+	// IsFailed is true when the deployment is FAILED, or a component failed
+	// while it was provisioning.
+	IsFailed bool
+	// Attention is the most urgent reason the deployment needs attention, or "".
+	Attention string
+}
+
+// Failed reports whether the platform says the deploy failed.
+func (s DeploymentSnapshot) Failed() bool {
+	return s.Phase == PhaseFailed || (s.Standing != nil && s.Standing.IsFailed)
+}
+
+// Degraded reports whether the deployment ran and then broke: phase DEGRADED
+// on platform-api 30 and earlier, or ACTIVE with attention DEGRADED after.
+func (s DeploymentSnapshot) Degraded() bool {
+	if s.Phase == PhaseDegraded {
+		return true
+	}
+
+	return s.Phase == PhaseActive && s.Standing != nil && s.Standing.Attention == AttentionDegraded
 }
 
 // WaitTarget selects how much has to be true before a deploy is called done.
@@ -82,9 +120,11 @@ const (
 
 // SettleOptions tunes the terminal predicate.
 type SettleOptions struct {
-	// DegradedGrace is how long a deployment may sit in DEGRADED before the
-	// CLI calls it failed. DEGRADED -> ACTIVE is a legal recovery, so failing
-	// instantly would be wrong; but CI cannot wait forever either.
+	// DegradedGrace is how long a deployment may stay degraded (see
+	// DeploymentSnapshot.Degraded) before the CLI calls it failed. A replica
+	// is briefly unready during a rolling update, and a degraded deployment
+	// may recover, so failing instantly would be wrong; but CI cannot wait
+	// forever either.
 	DegradedGrace time.Duration
 	// Timeout bounds the whole watch.
 	Timeout time.Duration
@@ -111,8 +151,8 @@ func DefaultSettleOptions() SettleOptions {
 // machine and useless for a CLI: FAILED is recoverable via :retry, so the
 // server keeps it live. The CLI needs its own notion of "stop watching".
 //
-// started is when the watch began; degradedSince is when the deployment first
-// entered DEGRADED during this watch (zero if it is not currently degraded).
+// started is when the watch began; degradedSince is when the deployment
+// became degraded during this watch (zero if it is not currently degraded).
 func Settle(
 	snap DeploymentSnapshot,
 	started, degradedSince, now time.Time,
@@ -120,7 +160,7 @@ func Settle(
 ) Outcome {
 	// Success is checked first so a deployment that reaches ACTIVE on the same
 	// tick it would have timed out is still reported as a success.
-	if snap.Phase == PhaseActive && snap.Readiness == ReadinessReady {
+	if snap.Phase == PhaseActive && snap.Readiness == ReadinessReady && !snap.Degraded() {
 		if opts.WaitFor == WaitURL && !snap.HasPublicURL {
 			return pendingUnlessExpired(started, now, opts)
 		}
@@ -129,17 +169,19 @@ func Settle(
 	}
 
 	switch snap.Phase {
-	case PhaseFailed:
-		return OutcomeFailed
 	case PhaseDeleted, PhaseSuspended:
 		// Someone else acted on this deployment. Do not fight them, and do not
 		// report their action as our failure.
 		return OutcomeAborted
-	case PhaseDegraded:
-		if !degradedSince.IsZero() && opts.DegradedGrace > 0 &&
-			now.Sub(degradedSince) >= opts.DegradedGrace {
-			return OutcomeFailed
-		}
+	}
+
+	if snap.Failed() {
+		return OutcomeFailed
+	}
+
+	if snap.Degraded() && !degradedSince.IsZero() && opts.DegradedGrace > 0 &&
+		now.Sub(degradedSince) >= opts.DegradedGrace {
+		return OutcomeFailed
 	}
 
 	return pendingUnlessExpired(started, now, opts)
@@ -156,12 +198,12 @@ func pendingUnlessExpired(started, now time.Time, opts SettleOptions) Outcome {
 // TrackDegraded maintains the degradedSince timestamp across snapshots. It
 // returns the timestamp to carry into the next Settle call.
 //
-// Resetting on any transition out of DEGRADED is what makes the grace window a
-// window rather than a cumulative budget: a deployment that flaps in and out of
-// DEGRADED is unhealthy but recovering, and should not be failed for the sum of
-// its dips.
-func TrackDegraded(previous time.Time, phase string, now time.Time) time.Time {
-	if phase != PhaseDegraded {
+// Resetting whenever the snapshot is not degraded is what makes the grace
+// window a window rather than a cumulative budget: a deployment that flaps in
+// and out of degraded is unhealthy but recovering, and should not be failed for
+// the sum of its dips.
+func TrackDegraded(previous time.Time, snap DeploymentSnapshot, now time.Time) time.Time {
+	if !snap.Degraded() {
 		return time.Time{}
 	}
 

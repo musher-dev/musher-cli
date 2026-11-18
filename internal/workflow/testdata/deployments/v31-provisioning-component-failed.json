@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "id": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f40",
+    "organizationId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f41",
+    "name": "api",
+    "sourceListingId": null,
+    "sourceListingVersion": null,
+    "sourceListingSlug": null,
+    "sourceListingName": null,
+    "sourceListingCategory": null,
+    "createdBy": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f42",
+    "createdAt": "2026-11-18T09:00:00Z",
+    "updatedAt": "2026-11-18T09:04:00Z",
+    "rowVersion": 7
+  },
+  "spec": {
+    "blueprintId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f43",
+    "blueprintVersion": 3,
+    "resolutionId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f44"
+  },
+  "status": {
+    "phase": "PROVISIONING",
+    "desiredPhase": "ACTIVE",
+    "desiredReason": null,
+    "desiredSetAt": "2026-11-18T09:00:00Z",
+    "health": "UNHEALTHY",
+    "readiness": "NOT_READY",
+    "reason": "No replica of 'worker' is ready (The container keeps crashing and restarting). 2 of 3 replicas are ready.",
+    "draftedAt": "2026-11-18T09:00:00Z",
+    "provisioningRequestedAt": "2026-11-18T09:00:01Z",
+    "becameActiveAt": null,
+    "suspendedAt": null,
+    "deletedAt": null,
+    "standing": {
+      "stage": "STARTING",
+      "step": 5,
+      "stepCount": 8,
+      "isLive": false,
+      "isFailed": true,
+      "needsAttention": true,
+      "attention": "FAILED",
+      "totalComponents": 2,
+      "readyComponents": 1,
+      "unhealthyComponents": 1,
+      "unhealthyNodes": [
+        "worker"
+      ],
+      "blockingNode": "worker",
+      "reason": "CrashLooping",
+      "components": [
+        {
+          "node": "web",
+          "desired": 2,
+          "ready": 2,
+          "progressing": 0,
+          "unready": 0,
+          "failed": 0
+        },
+        {
+          "node": "worker",
+          "desired": 1,
+          "ready": 0,
+          "progressing": 0,
+          "unready": 0,
+          "failed": 1
+        }
+      ],
+      "observedAt": "2026-11-18T09:04:00Z"
+    }
+  }
+}

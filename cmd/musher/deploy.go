@@ -126,7 +126,7 @@ func registerDeployFlags(cmd *cobra.Command, flags *deployFlags) {
 	set.BoolVar(&flags.watch, "watch", true, "Follow the deployment until it settles")
 	set.DurationVar(&flags.timeout, "timeout", 0, "How long to watch before giving up (default: 15m)")
 	set.DurationVar(&flags.degradedGrace, "degraded-grace", 0,
-		"How long DEGRADED is tolerated before it is a failure (default: 1m)")
+		"How long a running deployment may stay degraded (a replica unready or failed) before it is a failure (default: 1m)")
 	set.StringVar(&flags.waitFor, "wait-for", "ready", "Success condition: ready or url")
 	set.BoolVarP(&flags.yes, "yes", "y", false, "Do not ask for confirmation")
 	set.BoolVar(&flags.force, "force", false, "Roll the deployment even when nothing changed")

@@ -158,6 +158,76 @@ func TestSettle(t *testing.T) {
 			why:     "zero means unbounded, for --watch sessions a human is driving",
 		},
 		{
+			name: "a component failed while provisioning fails",
+			snap: DeploymentSnapshot{
+				Phase: PhaseProvisioning, Readiness: ReadinessNotReady,
+				Standing: &Standing{IsFailed: true, Attention: "FAILED"},
+			},
+			elapsed: time.Minute,
+			opts:    opts,
+			want:    OutcomeFailed,
+			why:     "from platform-api 31 a failed first deploy stays PROVISIONING; only the standing says it failed",
+		},
+		{
+			name: "active and ready but degraded keeps waiting inside the grace",
+			snap: DeploymentSnapshot{
+				Phase: PhaseActive, Readiness: ReadinessReady,
+				Standing: &Standing{Attention: AttentionDegraded},
+			},
+			degradedSince: start.Add(30 * time.Second),
+			elapsed:       time.Minute,
+			opts:          opts,
+			want:          OutcomePending,
+			why:           "a replica is briefly unready during a rolling update; a partial failure is not a success",
+		},
+		{
+			name: "active and degraded past the grace fails",
+			snap: DeploymentSnapshot{
+				Phase: PhaseActive, Readiness: ReadinessReady,
+				Standing: &Standing{Attention: AttentionDegraded},
+			},
+			degradedSince: start,
+			elapsed:       90 * time.Second,
+			opts:          opts,
+			want:          OutcomeFailed,
+			why:           "from platform-api 31 an ACTIVE deployment never leaves for a fault phase; attention DEGRADED is the fault",
+		},
+		{
+			name: "attention DEGRADED outside ACTIVE is not the degraded rule",
+			snap: DeploymentSnapshot{
+				Phase:    PhaseProvisioning,
+				Standing: &Standing{Attention: AttentionDegraded},
+			},
+			degradedSince: start,
+			elapsed:       90 * time.Second,
+			opts:          opts,
+			want:          OutcomePending,
+			why:           "the platform gives DEGRADED only to an ACTIVE deployment; anything else is still provisioning",
+		},
+		{
+			name: "other attention does not block success",
+			snap: DeploymentSnapshot{
+				Phase: PhaseActive, Readiness: ReadinessReady,
+				Standing: &Standing{Attention: "ENDPOINT_BLOCKED"},
+			},
+			elapsed: time.Minute,
+			opts:    opts,
+			want:    OutcomeSucceeded,
+			why:     "an operator-blocked endpoint is not this deploy's fault; --wait-for url covers the URL",
+		},
+		{
+			name: "a standing that agrees with phase DEGRADED changes nothing",
+			snap: DeploymentSnapshot{
+				Phase:    PhaseDegraded,
+				Standing: &Standing{Attention: AttentionDegraded},
+			},
+			degradedSince: start.Add(30 * time.Second),
+			elapsed:       time.Minute,
+			opts:          opts,
+			want:          OutcomePending,
+			why:           "platform-api 30 carries standing beside phase DEGRADED; the grace applies once",
+		},
+		{
 			name:    "unknown phase keeps waiting",
 			snap:    DeploymentSnapshot{Phase: "SOMETHING_NEW"},
 			elapsed: time.Minute,
@@ -188,7 +258,7 @@ func TestTrackDegraded(t *testing.T) {
 	t.Run("records the first degraded moment", func(t *testing.T) {
 		t.Parallel()
 
-		got := TrackDegraded(time.Time{}, PhaseDegraded, now)
+		got := TrackDegraded(time.Time{}, DeploymentSnapshot{Phase: PhaseDegraded}, now)
 		if !got.Equal(now) {
 			t.Errorf("got %v, want %v", got, now)
 		}
@@ -197,7 +267,7 @@ func TestTrackDegraded(t *testing.T) {
 	t.Run("keeps the original moment while still degraded", func(t *testing.T) {
 		t.Parallel()
 
-		got := TrackDegraded(now, PhaseDegraded, later)
+		got := TrackDegraded(now, DeploymentSnapshot{Phase: PhaseDegraded}, later)
 		if !got.Equal(now) {
 			t.Errorf("got %v, want the original %v", got, now)
 		}
@@ -209,8 +279,17 @@ func TestTrackDegraded(t *testing.T) {
 	t.Run("resets when leaving degraded", func(t *testing.T) {
 		t.Parallel()
 
-		if got := TrackDegraded(now, PhaseActive, later); !got.IsZero() {
+		if got := TrackDegraded(now, DeploymentSnapshot{Phase: PhaseActive}, later); !got.IsZero() {
 			t.Errorf("got %v, want zero", got)
+		}
+	})
+
+	t.Run("an ACTIVE deployment with attention DEGRADED is degraded", func(t *testing.T) {
+		t.Parallel()
+
+		snap := DeploymentSnapshot{Phase: PhaseActive, Standing: &Standing{Attention: AttentionDegraded}}
+		if got := TrackDegraded(time.Time{}, snap, now); !got.Equal(now) {
+			t.Errorf("got %v, want %v", got, now)
 		}
 	})
 }

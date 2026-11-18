@@ -260,6 +260,29 @@ type DeploymentStatus struct {
 	Conditions     []DeploymentCondition `json:"conditions,omitempty"`
 	AllowedActions AllowedActions        `json:"allowedActions,omitempty"`
 	Error          *DeploymentError      `json:"error,omitempty"`
+	// Standing is the platform's own verdict on where the deployment stands.
+	// It is nil when the response carries none: the platform answers null
+	// from lifecycle actions, and an older platform omits it.
+	Standing *DeploymentStanding `json:"standing,omitempty"`
+}
+
+// DeploymentStanding is the subset of status.standing the CLI reads.
+//
+// Since platform-api 31 (decision 0119, "a fault is never a phase") it is the
+// only place a fault shows: a first deploy whose component fails stays
+// PROVISIONING with IsFailed set, and an ACTIVE deployment with a broken
+// replica stays ACTIVE with Attention DEGRADED.
+type DeploymentStanding struct {
+	// IsFailed is true when the deployment is FAILED, or a component failed
+	// while it was provisioning.
+	IsFailed bool `json:"isFailed"`
+	// Attention is the most urgent reason it needs attention: FAILED,
+	// DEGRADED, ENDPOINT_BLOCKED, PROVISIONING_OVERDUE or STALLED_DRAFT, or ""
+	// (null) when it needs none.
+	Attention string `json:"attention,omitempty"`
+	// BlockingNode names the node that holds the deployment, or the one it
+	// failed on; "" (null) when no single node does.
+	BlockingNode string `json:"blockingNode,omitempty"`
 }
 
 // Deployment is a running (or failed) instance of a blueprint.
