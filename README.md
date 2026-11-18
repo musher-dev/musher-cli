@@ -39,6 +39,13 @@ irm https://get.musher.dev/install.ps1 | iex
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
 
+### Upgrading
+
+Check the installed version with `musher version`, and upgrade with `musher update` (or re-run the install
+command above). Use 0.4.1 or later: from platform-api 32.0.0, a deployment's status is derived from its replicas,
+and an older CLI can wait for its 15-minute timeout on a deploy that has failed, or report success when only part
+of it is serving.
+
 ## What You'll Need
 
 - **Musher CLI** — installed above.
