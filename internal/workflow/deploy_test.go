@@ -1283,8 +1283,8 @@ func TestDeployReportsActivityOncePerEntry(t *testing.T) {
 		deployment(workflow.PhaseActive, workflow.ReadinessReady),
 	}
 	api.activity = []client.Activity{
-		{ID: "a2", Message: "second"},
-		{ID: "a1", Message: "first"},
+		{ID: "a2", EventKind: "deployment.second"},
+		{ID: "a1", EventKind: "deployment.first"},
 	}
 
 	rep := &captureReporter{}
@@ -1311,7 +1311,7 @@ func TestDeployReportsActivityOncePerEntry(t *testing.T) {
 // readiness or health: it prompts a re-read, which settles the deploy.
 const settlingStream = `event: deployment.activity
 id: a1
-data: {"kind":"IMAGE","message":"pulling image"}
+data: {"id":"00000000-0000-7000-8000-000000000021","eventKind":"deployment.component_image_pull_started","occurredAt":"2026-11-18T09:01:00Z","ingestedAt":"2026-11-18T09:01:00Z","actor":{"kind":"AGENT","label":"Musher"},"node":"web","replicaIndex":0,"payload":{},"traceId":null}
 
 event: deployment.status
 id: 0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f51
@@ -1355,7 +1355,7 @@ func TestDeployWatchesTheEventStream(t *testing.T) {
 	}
 
 	_, activities, _ := rep.snapshot()
-	if len(activities) != 1 || activities[0] != "pulling image" {
+	if len(activities) != 1 || activities[0] != "component image pull started (web#0)" {
 		t.Errorf("activities = %v", activities)
 	}
 }

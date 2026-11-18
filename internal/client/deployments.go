@@ -352,11 +352,98 @@ type ReplicaGroup struct {
 
 // Activity is one entry of a deployment's human-readable timeline.
 type Activity struct {
-	ID         string  `json:"id,omitempty"`
-	Kind       string  `json:"kind,omitempty"`
-	Message    string  `json:"message,omitempty"`
-	Severity   string  `json:"severity,omitempty"`
-	OccurredAt APITime `json:"occurredAt,omitzero"`
+	ID string `json:"id,omitempty"`
+	// EventKind is a dotted token naming what happened, such as
+	// deployment.became_active or deployment.component_failed.
+	EventKind  string        `json:"eventKind,omitempty"`
+	OccurredAt APITime       `json:"occurredAt,omitzero"`
+	IngestedAt APITime       `json:"ingestedAt,omitzero"`
+	Actor      ActivityActor `json:"actor"`
+	// Node is the Blueprint node the event is about, or "" for the whole
+	// deployment.
+	Node string `json:"node,omitempty"`
+	// ReplicaIndex is the node's replica the event is about, or nil.
+	ReplicaIndex *int `json:"replicaIndex,omitempty"`
+	// Payload is the event kind's own context, such as reason or error_detail.
+	Payload map[string]any `json:"payload,omitempty"`
+	TraceID string         `json:"traceId,omitempty"`
+}
+
+// ActivityActor is the sanitized actor behind an activity entry.
+type ActivityActor struct {
+	// Kind is USER, RECONCILER, and so on.
+	Kind  string `json:"kind,omitempty"`
+	Label string `json:"label,omitempty"`
+}
+
+// activityKindPrefix is dropped from an event kind when it is shown: every
+// entry of a deployment's timeline is about the deployment.
+const activityKindPrefix = "deployment."
+
+// Message renders the entry as one line: what happened, to which node or
+// replica, and why. The platform sends no prose of its own, only the kind and
+// the payload.
+func (a *Activity) Message() string {
+	what := strings.TrimPrefix(a.EventKind, activityKindPrefix)
+	what = strings.NewReplacer("_", " ", ".", " ").Replace(what)
+
+	if a.Node != "" {
+		subject := a.Node
+		if a.ReplicaIndex != nil {
+			subject += "#" + strconv.Itoa(*a.ReplicaIndex)
+		}
+
+		what += " (" + subject + ")"
+	}
+
+	if detail := a.detail(); detail != "" {
+		what += ": " + detail
+	}
+
+	return what
+}
+
+// detail is the payload's most specific explanation, or "".
+func (a *Activity) detail() string {
+	for _, key := range []string{"error_detail", "reason", "message"} {
+		if text, ok := a.Payload[key].(string); ok && strings.TrimSpace(text) != "" {
+			return text
+		}
+	}
+
+	return ""
+}
+
+// Activity severities, derived from the event kind.
+const (
+	ActivitySeverityInfo  = "INFO"
+	ActivitySeverityWarn  = "WARN"
+	ActivitySeverityError = "ERROR"
+)
+
+// Severity classifies the entry from its kind: a failure is an ERROR, a sign
+// of trouble short of one is a WARN, and anything else is INFO.
+func (a *Activity) Severity() string {
+	kind := strings.ToLower(a.EventKind)
+
+	switch {
+	case strings.Contains(kind, "failed"):
+		return ActivitySeverityError
+	case containsAny(kind, "degraded", "failing", "unreachable", "timed_out", "exhausted", "quarantined", "severed"):
+		return ActivitySeverityWarn
+	default:
+		return ActivitySeverityInfo
+	}
+}
+
+func containsAny(text string, parts ...string) bool {
+	for _, part := range parts {
+		if strings.Contains(text, part) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // LogEntry is one line of workload output.
