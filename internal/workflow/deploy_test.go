@@ -1304,17 +1304,22 @@ func TestDeployReportsActivityOncePerEntry(t *testing.T) {
 	}
 }
 
+// The deployment.status frames below are the API's real shape: platform-api
+// rollout/application/realtime.py DeploymentStatusFrame, serialized camelCase
+// (asserted by its tests/unit/contexts/rollout/test_realtime.py). A frame is
+// sent on a phase transition only, and carries the new phase, never the
+// readiness or health: it prompts a re-read, which settles the deploy.
 const settlingStream = `event: deployment.activity
 id: a1
 data: {"kind":"IMAGE","message":"pulling image"}
 
 event: deployment.status
-id: s1
-data: {"phase":"PROVISIONING","readiness":"NOT_READY"}
+id: 0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f51
+data: {"deploymentId":"0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f40","newPhase":"PROVISIONING","previousPhase":"DRAFT","reason":null,"errorCode":null,"error":null}
 
 event: deployment.status
-id: s2
-data: {"phase":"ACTIVE","readiness":"READY","health":"HEALTHY"}
+id: 0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f52
+data: {"deploymentId":"0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f40","newPhase":"ACTIVE","previousPhase":"PROVISIONING","reason":null,"errorCode":null,"error":null}
 
 `
 
@@ -1323,6 +1328,10 @@ func TestDeployWatchesTheEventStream(t *testing.T) {
 
 	api := baseAPI()
 	api.endpoints = [][]client.Endpoint{liveEndpoints()}
+	api.states = []*client.Deployment{
+		deployment(workflow.PhaseProvisioning, workflow.ReadinessNotReady),
+		deployment(workflow.PhaseActive, workflow.ReadinessReady),
+	}
 	api.openStream = func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(settlingStream)), nil
 	}
@@ -1341,13 +1350,58 @@ func TestDeployWatchesTheEventStream(t *testing.T) {
 		t.Errorf("outcome = %v, want the stream to settle it", result.Outcome)
 	}
 
-	if contains(api.recorded(), "GetDeployment") {
+	if contains(api.recorded(), "ListActivity") {
 		t.Error("a stream that settles must not fall back to polling")
 	}
 
 	_, activities, _ := rep.snapshot()
 	if len(activities) != 1 || activities[0] != "pulling image" {
 		t.Errorf("activities = %v", activities)
+	}
+}
+
+// A status frame is a prompt, never a verdict: one that names ACTIVE settles
+// nothing while the deployment it prompts a read of is not READY.
+func TestDeployStatusFrameIsNotAVerdict(t *testing.T) {
+	t.Parallel()
+
+	const activeFrame = `event: deployment.status
+id: 0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f52
+data: {"deploymentId":"0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f40","newPhase":"ACTIVE","previousPhase":"PROVISIONING","reason":null,"errorCode":null,"error":null}
+
+`
+
+	api := baseAPI()
+	api.states = []*client.Deployment{
+		deployment(workflow.PhaseActive, workflow.ReadinessNotReady),
+		deployment(workflow.PhaseActive, workflow.ReadinessReady),
+	}
+	api.openStream = func() (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(activeFrame)), nil
+	}
+
+	opts := pollOptions(newFakeClock())
+	opts.DisableStream = false
+
+	result, err := workflow.Deploy(t.Context(), api, nil, baseInput(), opts)
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+
+	if result.Outcome != workflow.OutcomeSucceeded {
+		t.Errorf("outcome = %v", result.Outcome)
+	}
+
+	reads := 0
+
+	for _, call := range api.recorded() {
+		if call == "GetDeployment" {
+			reads++
+		}
+	}
+
+	if reads < 2 {
+		t.Errorf("reads = %d, want the frame's re-read to find it not READY and a later read to settle it", reads)
 	}
 }
 
@@ -1384,20 +1438,18 @@ func TestDeployFallsBackToPollingWhenTheStreamIsBlocked(t *testing.T) {
 	}
 }
 
-func TestDeployIgnoresUnreadableStatusFrames(t *testing.T) {
+func TestDeployReReadsOnAnUnreadableStatusFrame(t *testing.T) {
 	t.Parallel()
 
+	// The frame is never parsed: its arrival is the whole message.
 	const garbled = `event: deployment.status
 id: s1
 data: {not json
 
-event: deployment.status
-id: s2
-data: {"phase":"ACTIVE","readiness":"READY"}
-
 `
 
 	api := baseAPI()
+	api.states = []*client.Deployment{deployment(workflow.PhaseActive, workflow.ReadinessReady)}
 	api.openStream = func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(garbled)), nil
 	}
@@ -1411,7 +1463,7 @@ data: {"phase":"ACTIVE","readiness":"READY"}
 	}
 
 	if result.Outcome != workflow.OutcomeSucceeded {
-		t.Errorf("outcome = %v, want the next readable frame to settle it", result.Outcome)
+		t.Errorf("outcome = %v, want the frame's re-read to settle it", result.Outcome)
 	}
 }
 

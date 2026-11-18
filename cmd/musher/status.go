@@ -182,12 +182,8 @@ func watchStatus(
 
 	for {
 		now := time.Now()
-		snap := workflow.DeploymentSnapshot{
-			Phase:     deployment.Status.Phase,
-			Readiness: deployment.Status.Readiness,
-			Health:    deployment.Status.Health,
-		}
-		degradedSince = workflow.TrackDegraded(degradedSince, snap.Phase, now)
+		snap := workflow.SnapshotOf(deployment)
+		degradedSince = workflow.TrackDegraded(degradedSince, snap, now)
 
 		if snap.Phase != previous {
 			out.Muted("%s %s", now.UTC().Format(stampLayout), snap.Phase)
