@@ -1125,9 +1125,11 @@ func (r *deployRun) handleEvent(event stream.Event) bool {
 	case stream.EventStatus, stream.EventReplica:
 		return true
 	case stream.EventActivity:
-		var frame activityFrame
-		if json.Unmarshal(event.Data, &frame) == nil {
-			r.rep.Activity(frame.Kind, frame.Message, frame.OccurredAt.Time)
+		// The frame is the same document GET /activity returns, so an entry
+		// the stream showed is never shown again by a later poll.
+		var entry client.Activity
+		if json.Unmarshal(event.Data, &entry) == nil {
+			r.reportActivity(&entry)
 		}
 
 		return false
@@ -1219,23 +1221,27 @@ func (r *deployRun) pollActivity(ctx context.Context, deploymentID string) {
 		return
 	}
 
+	// The route returns newest first; a timeline reads forwards.
+	for index := len(page.Data) - 1; index >= 0; index-- {
+		r.reportActivity(&page.Data[index])
+	}
+}
+
+// reportActivity reports one timeline entry unless this run already has.
+func (r *deployRun) reportActivity(entry *client.Activity) {
 	if r.seenActivity == nil {
 		r.seenActivity = make(map[string]struct{}, activityPageSize)
 	}
 
-	// The route returns newest first; a timeline reads forwards.
-	for index := len(page.Data) - 1; index >= 0; index-- {
-		entry := page.Data[index]
-		if entry.ID != "" {
-			if _, seen := r.seenActivity[entry.ID]; seen {
-				continue
-			}
-
-			r.rememberActivity(entry.ID)
+	if entry.ID != "" {
+		if _, seen := r.seenActivity[entry.ID]; seen {
+			return
 		}
 
-		r.rep.Activity(entry.Kind, entry.Message, entry.OccurredAt.Time)
+		r.rememberActivity(entry.ID)
 	}
+
+	r.rep.Activity(entry.EventKind, entry.Message(), entry.OccurredAt.Time)
 }
 
 // rememberActivity records an activity id, clearing the set when it grows past
@@ -1356,13 +1362,6 @@ func pollInterval(elapsed time.Duration) time.Duration {
 	default:
 		return pollFast
 	}
-}
-
-// activityFrame is the payload of a deployment.activity event.
-type activityFrame struct {
-	Kind       string         `json:"kind,omitempty"`
-	Message    string         `json:"message,omitempty"`
-	OccurredAt client.APITime `json:"occurredAt,omitzero"`
 }
 
 // UsageError marks a failure the user can fix in the command they just typed —

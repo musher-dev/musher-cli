@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "id": "00000000-0000-7000-8000-000000000012",
+      "eventKind": "deployment.component_failed",
+      "occurredAt": "2026-11-18T09:03:00Z",
+      "ingestedAt": "2026-11-18T09:03:01Z",
+      "actor": {"kind": "AGENT", "label": "Musher"},
+      "node": "worker",
+      "replicaIndex": 0,
+      "payload": {"error_detail": "container exited with code 1"},
+      "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
+    },
+    {
+      "id": "00000000-0000-7000-8000-000000000011",
+      "eventKind": "deployment.became_active",
+      "occurredAt": "2026-11-18T09:02:00Z",
+      "ingestedAt": "2026-11-18T09:02:00Z",
+      "actor": {"kind": "RECONCILER", "label": "Musher"},
+      "node": null,
+      "replicaIndex": null,
+      "payload": {},
+      "traceId": null
+    }
+  ],
+  "meta": {"hasMore": false, "nextCursor": null}
+}

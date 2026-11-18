@@ -89,7 +89,7 @@ func (d *deployReporter) Step(id, state, note string) {
 }
 
 // Activity renders one platform timeline entry.
-func (d *deployReporter) Activity(kind, message string, when time.Time) {
+func (d *deployReporter) Activity(_, message string, when time.Time) {
 	if d.silent || strings.TrimSpace(message) == "" {
 		return
 	}
@@ -97,10 +97,6 @@ func (d *deployReporter) Activity(kind, message string, when time.Time) {
 	stamp := d.prefix()
 	if d.timestamps && !when.IsZero() {
 		stamp = when.UTC().Format(stampLayout) + " "
-	}
-
-	if kind != "" {
-		message = kind + " " + message
 	}
 
 	d.out.Muted("%s", "  "+stamp+message)

@@ -372,29 +372,26 @@ func (d *deploymentDetailScreen) renderActivity() string {
 
 	now := d.now()
 
-	for idx, entry := range d.detail.Activity {
+	for idx := range d.detail.Activity {
 		if idx >= detailActivityLimit {
 			break
 		}
 
-		lines = append(lines, activityLine(sty, &entry, now))
+		lines = append(lines, activityLine(sty, &d.detail.Activity[idx], now))
 	}
 
 	return strings.Join(lines, "\n")
 }
 
 func activityLine(sty *styles, entry *client.Activity, now time.Time) string {
-	message := entry.Message
-	if message == "" {
-		message = entry.Kind
-	}
+	message := entry.Message()
 
 	when := sty.muted.Render(padCell(relativeTime(entry.OccurredAt.Time, now), 9))
 
-	switch strings.ToUpper(entry.Severity) {
-	case "ERROR", "CRITICAL":
+	switch entry.Severity() {
+	case client.ActivitySeverityError:
 		message = sty.errStyle.Render(message)
-	case "WARN", "WARNING":
+	case client.ActivitySeverityWarn:
 		message = sty.warning.Render(message)
 	}
 

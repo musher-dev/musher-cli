@@ -82,7 +82,7 @@ func newFakePlatform() *fakePlatformAPI {
 				{Action: "REDEPLOY", IsAllowed: false, Reason: "suspended"},
 			}},
 		},
-		activity: []client.Activity{{Message: "started"}},
+		activity: []client.Activity{{EventKind: "deployment.became_active"}},
 	}
 }
 
