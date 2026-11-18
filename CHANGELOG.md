@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1](https://github.com/musher-dev/musher-cli/compare/v0.4.0...v0.4.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **build:** re-exchange a token zot refuses without a challenge ([53e8547](https://github.com/musher-dev/musher-cli/commit/53e85476be844955e8c0b7f95e06d4f01d5bfe94))
+* **build:** re-exchange a token zot refuses without a challenge ([40b8844](https://github.com/musher-dev/musher-cli/commit/40b8844639bc81f75bcc72e47afc4be739afc3eb))
+* **cli:** read deployment activity in the platform's real shape ([#126](https://github.com/musher-dev/musher-cli/issues/126)) ([67f298a](https://github.com/musher-dev/musher-cli/commit/67f298a84862e31482cd0c1e2e2fde3338575346))
+* **cli:** settle deploy and status on the derived deployment status ([#125](https://github.com/musher-dev/musher-cli/issues/125)) ([e4524ab](https://github.com/musher-dev/musher-cli/commit/e4524abd7774772ba896d97ee38033d96fff27f4))
+
 ## [0.4.0](https://github.com/musher-dev/musher-cli/compare/v0.3.14...v0.4.0) (2026-11-16)
 
 
