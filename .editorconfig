@@ -24,3 +24,9 @@ indent_size = 2
 
 [Makefile]
 indent_style = tab
+
+# A verbatim copy of musher-dev/development-container's canonical script, which
+# is formatted there and must stay byte-identical to it, so shfmt leaves it as
+# it is (`--apply-ignore` in Taskfile.yml). ShellCheck still scans it.
+[.devcontainer/scripts/lib/github-auth.sh]
+ignore = true
