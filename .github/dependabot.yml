@@ -1,25 +1,33 @@
+# Version updates are quiet (engineering-conventions DEPS-17): monthly, with
+# every dependency, majors included, in one group, so each ecosystem opens at
+# most one pull request a month. Security updates skip the schedule and the
+# cooldown and open as soon as an advisory does, in the `-security` group.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 3
     open-pull-requests-limit: 10
     groups:
-      go-minor-patch:
+      gomod-all:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+      gomod-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 3
     open-pull-requests-limit: 5
     groups:
-      actions-minor-patch:
+      github-actions-all:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+      github-actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
