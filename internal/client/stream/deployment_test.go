@@ -189,7 +189,7 @@ func TestOpenSendsTicketCursorAndStreamHeaders(t *testing.T) {
 
 	_, opener := NewDeploymentEvents(server.URL, "secret-token", server.Client(), testDeploymentID)
 
-	body, err := opener.Open(t.Context(), "tkt-9", "cursor-7", url.Values{"runtime_id": {"rt-1"}})
+	body, err := opener.Open(t.Context(), "tkt-9", "cursor-7", url.Values{"replica_id": {"rep-1"}})
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -221,8 +221,12 @@ func TestOpenSendsTicketCursorAndStreamHeaders(t *testing.T) {
 			t.Errorf("ticket param = %q, want %q", got, "tkt-9")
 		}
 
-		if got := r.query.Get("runtime_id"); got != "rt-1" {
-			t.Errorf("runtime_id param = %q, want %q", got, "rt-1")
+		if got := r.query.Get("replica_id"); got != "rep-1" {
+			t.Errorf("replica_id param = %q, want %q", got, "rep-1")
+		}
+
+		if r.query.Has("runtime_id") {
+			t.Errorf("runtime_id param sent; platform-api ignores it since 9.1.0")
 		}
 	})
 }

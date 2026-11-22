@@ -189,7 +189,9 @@ type Options struct {
 	// Backoff controls the retry schedule for counted failures.
 	Backoff BackoffPolicy
 	// Query carries extra query parameters for the stream GET, such as
-	// stream=RUNTIME or runtime_id=... It is never mutated.
+	// stream=RUNTIME or replica_id=... (platform-api removed the old runtime_id
+	// alias in 9.1.0, and ignores it rather than refusing it). It is never
+	// mutated.
 	Query url.Values
 	// OnReconnect fires after every successful reconnect (never for the first
 	// connection). Live-only events such as deployment.replica and
