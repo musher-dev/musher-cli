@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/musher-dev/musher-cli/compare/v0.4.1...v0.4.2) (2026-11-25)
+
+
+### Bug Fixes
+
+* **auth:** point login help at the console's API keys page ([#130](https://github.com/musher-dev/musher-cli/issues/130)) ([7b093df](https://github.com/musher-dev/musher-cli/commit/7b093df12f99ff53f643664eaa192afd19b1ce85))
+
 ## [0.4.1](https://github.com/musher-dev/musher-cli/compare/v0.4.0...v0.4.1) (2026-11-18)
 
 
