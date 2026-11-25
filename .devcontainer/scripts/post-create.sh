@@ -3,6 +3,7 @@
 #
 # Runs once after the container is created. Sets up environment files,
 # invokes the base setup orchestrator, and configures shell customization.
+# post-attach.sh finishes the GitHub credential once an editor attaches.
 #
 # Usage: Called automatically by devcontainer.json postCreateCommand.
 set -euo pipefail
