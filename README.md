@@ -49,7 +49,7 @@ of it is serving.
 ## What You'll Need
 
 - **Musher CLI** — installed above.
-- **A Musher account and API key** — create or manage keys at [console.musher.dev](https://console.musher.dev/settings/organization/api-keys).
+- **A Musher account and API key** — create or manage keys in the [console](https://console.musher.dev) under **Organization settings › API keys**.
 
 ## Quick Start
 
