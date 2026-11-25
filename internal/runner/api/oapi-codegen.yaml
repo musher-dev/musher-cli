@@ -1,0 +1,19 @@
+# Generates the /runner/v1 client the runner commands call, from the vendored
+# platform-api runner surface. Only the operations a run attempt token speaks
+# for are generated: the runner never calls /runner/v1/me or the /agent/v1
+# aliases. Regenerate with `task generate:runner-client`; `task
+# check:runner-client` fails when this file and the spec disagree.
+package: api
+output: runner.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - runner_get_source_snapshot_assignment
+    - runner_open_source_snapshot_archive_upload
+    - runner_report_source_snapshot_fetch
+    - runner_get_image_build_assignment
+    - runner_grant_image_build_push_access
+    - runner_report_image_build_result
+    - runner_create_image_build_log_lines

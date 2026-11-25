@@ -1,0 +1,2531 @@
+{
+  "components": {
+    "schemas": {
+      "ArchiveUploadResponse": {
+        "description": "A presigned upload of the declared archive: send exactly these headers and bytes.",
+        "properties": {
+          "expiresAt": {
+            "description": "RFC 3339 timestamp when the presigned URL stops working.",
+            "format": "date-time",
+            "readOnly": true,
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The headers the upload must carry, checksum and length included.",
+            "readOnly": true,
+            "title": "Headers",
+            "type": "object"
+          },
+          "method": {
+            "description": "The HTTP method to upload with.",
+            "readOnly": true,
+            "title": "Method",
+            "type": "string"
+          },
+          "uploadUrl": {
+            "description": "The presigned URL to upload the archive to.",
+            "readOnly": true,
+            "title": "Uploadurl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uploadUrl",
+          "method",
+          "headers",
+          "expiresAt"
+        ],
+        "title": "ArchiveUploadResponse",
+        "type": "object"
+      },
+      "BuildLogLine": {
+        "additionalProperties": false,
+        "description": "One line the build wrote.",
+        "properties": {
+          "message": {
+            "description": "The line; the build's secret values are redacted from it.",
+            "maxLength": 16384,
+            "title": "Message",
+            "type": "string"
+          },
+          "occurredAt": {
+            "description": "RFC 3339 timestamp when the build wrote the line.",
+            "format": "date-time",
+            "title": "Occurredat",
+            "type": "string"
+          },
+          "seq": {
+            "description": "The line's sequence number within the attempt; a repeat is dropped.",
+            "minimum": 0.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "severity": {
+            "description": "The line's severity.",
+            "enum": [
+              "DEBUG",
+              "INFO",
+              "WARNING",
+              "ERROR",
+              "CRITICAL"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "occurredAt",
+          "severity",
+          "message"
+        ],
+        "title": "BuildLogLine",
+        "type": "object"
+      },
+      "BuildLogLinesAcceptedResponse": {
+        "description": "What the batch added to the build's log.",
+        "properties": {
+          "accepted": {
+            "description": "Lines kept, after duplicates were dropped and the cap applied.",
+            "readOnly": true,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Whether the log reached its line cap; further lines are dropped.",
+            "readOnly": true,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted",
+          "truncated"
+        ],
+        "title": "BuildLogLinesAcceptedResponse",
+        "type": "object"
+      },
+      "BuildRecipeResponse": {
+        "description": "How to build the image; each secret by id only.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Build arguments by name.",
+            "readOnly": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "builderImage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The buildpacks builder pinned by digest (`name@sha256:...`); null for a Dockerfile.",
+            "readOnly": true,
+            "title": "Builderimage"
+          },
+          "context": {
+            "description": "The build context, relative to the source root.",
+            "readOnly": true,
+            "title": "Context",
+            "type": "string"
+          },
+          "dockerfilePath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Dockerfile, relative to the context; null for buildpacks.",
+            "readOnly": true,
+            "title": "Dockerfilepath"
+          },
+          "kind": {
+            "description": "DOCKERFILE or BUILDPACKS.",
+            "readOnly": true,
+            "title": "Kind",
+            "type": "string"
+          },
+          "secretIds": {
+            "description": "The ids of the build's secrets, whose values `secrets` holds.",
+            "items": {
+              "type": "string"
+            },
+            "readOnly": true,
+            "title": "Secretids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "context",
+          "dockerfilePath",
+          "builderImage",
+          "arguments",
+          "secretIds"
+        ],
+        "title": "BuildRecipeResponse",
+        "type": "object"
+      },
+      "BuildSourceResponse": {
+        "description": "The archive to build from, and the digest it must have.",
+        "properties": {
+          "archiveDigest": {
+            "description": "The archive's digest; refuse an archive of any other.",
+            "readOnly": true,
+            "title": "Archivedigest",
+            "type": "string"
+          },
+          "archiveSizeBytes": {
+            "description": "The archive's size in bytes.",
+            "readOnly": true,
+            "title": "Archivesizebytes",
+            "type": "integer"
+          },
+          "archiveUrl": {
+            "description": "A presigned URL that downloads the archive.",
+            "readOnly": true,
+            "title": "Archiveurl",
+            "type": "string"
+          },
+          "commitSha": {
+            "description": "The commit the archive holds.",
+            "readOnly": true,
+            "title": "Commitsha",
+            "type": "string"
+          },
+          "snapshotId": {
+            "description": "The source snapshot.",
+            "format": "uuid",
+            "readOnly": true,
+            "title": "Snapshotid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshotId",
+          "commitSha",
+          "archiveUrl",
+          "archiveDigest",
+          "archiveSizeBytes"
+        ],
+        "title": "BuildSourceResponse",
+        "type": "object"
+      },
+      "CreateBuildLogLinesRequest": {
+        "additionalProperties": false,
+        "description": "A batch of the lines a build wrote, in order.",
+        "properties": {
+          "lines": {
+            "description": "The lines, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/BuildLogLine"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "title": "CreateBuildLogLinesRequest",
+        "type": "object"
+      },
+      "FailedBuildReport": {
+        "additionalProperties": false,
+        "description": "The attempt built no image.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the step reported; the build's secret values are redacted from it.",
+            "title": "Detail"
+          },
+          "kind": {
+            "description": "The step that failed.",
+            "enum": [
+              "RECIPE_INVALID",
+              "BUILD_FAILED",
+              "PUSH_FAILED",
+              "INFRASTRUCTURE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "const": "FAILED",
+            "description": "The build failed.",
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "kind"
+        ],
+        "title": "FailedBuildReport",
+        "type": "object"
+      },
+      "FailedFetchReport": {
+        "additionalProperties": false,
+        "description": "The runner could not fetch the commit.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the runner saw, in words a person reads.",
+            "title": "Detail"
+          },
+          "outcome": {
+            "const": "FAILED",
+            "description": "The fetch failed.",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the fetch failed.",
+            "enum": [
+              "COMMIT_NOT_FOUND",
+              "REPOSITORY_UNREACHABLE",
+              "ARCHIVE_TOO_LARGE",
+              "FETCH_FAILED"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "reason"
+        ],
+        "title": "FailedFetchReport",
+        "type": "object"
+      },
+      "FetchedReport": {
+        "additionalProperties": false,
+        "description": "The runner stored the commit's archive through the upload it opened.",
+        "properties": {
+          "commitSha": {
+            "description": "The full commit the archive holds; it must be the one assigned.",
+            "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+            "title": "Commitsha",
+            "type": "string"
+          },
+          "contentDigest": {
+            "description": "The archive's digest, as declared when its upload was opened.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Contentdigest",
+            "type": "string"
+          },
+          "outcome": {
+            "const": "FETCHED",
+            "description": "The fetch stored the archive.",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "The archive's size in bytes, as declared.",
+            "minimum": 1.0,
+            "title": "Sizebytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "outcome",
+          "commitSha",
+          "contentDigest",
+          "sizeBytes"
+        ],
+        "title": "FetchedReport",
+        "type": "object"
+      },
+      "ImageBuildAssignmentResponse": {
+        "description": "What a build runner builds, from what, with which secrets, and where it pushes.",
+        "properties": {
+          "buildId": {
+            "description": "The image build.",
+            "format": "uuid",
+            "readOnly": true,
+            "title": "Buildid",
+            "type": "string"
+          },
+          "deadlineAt": {
+            "description": "RFC 3339 timestamp when the attempt, and its token, end.",
+            "format": "date-time",
+            "readOnly": true,
+            "title": "Deadlineat",
+            "type": "string"
+          },
+          "imageRepository": {
+            "description": "Where to push: `<registry host>/org-<organization>/src-<repository id>`.",
+            "readOnly": true,
+            "title": "Imagerepository",
+            "type": "string"
+          },
+          "imageTag": {
+            "description": "The tag the push carries.",
+            "readOnly": true,
+            "title": "Imagetag",
+            "type": "string"
+          },
+          "recipe": {
+            "$ref": "#/components/schemas/BuildRecipeResponse",
+            "description": "How to build the image.",
+            "readOnly": true
+          },
+          "recipeDigest": {
+            "description": "The digest of the recipe as authored.",
+            "readOnly": true,
+            "title": "Recipedigest",
+            "type": "string"
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Each build secret's value by id, for BuildKit's --secret or the lifecycle's platform env; never written to a layer or a log.",
+            "readOnly": true,
+            "title": "Secrets",
+            "type": "object"
+          },
+          "source": {
+            "$ref": "#/components/schemas/BuildSourceResponse",
+            "description": "The source archive.",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "buildId",
+          "recipe",
+          "recipeDigest",
+          "source",
+          "secrets",
+          "imageRepository",
+          "imageTag",
+          "deadlineAt"
+        ],
+        "title": "ImageBuildAssignmentResponse",
+        "type": "object"
+      },
+      "ImageBuildResultResponse": {
+        "description": "Where the build is once its result is reported.",
+        "properties": {
+          "buildId": {
+            "description": "The image build.",
+            "format": "uuid",
+            "readOnly": true,
+            "title": "Buildid",
+            "type": "string"
+          },
+          "status": {
+            "description": "QUEUED, RUNNING, ATTESTING, SUCCEEDED, FAILED, TIMED_OUT or CANCELED: a pushed build is ATTESTING until its provenance is attached.",
+            "readOnly": true,
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "buildId",
+          "status"
+        ],
+        "title": "ImageBuildResultResponse",
+        "type": "object"
+      },
+      "OpenArchiveUploadRequest": {
+        "additionalProperties": false,
+        "description": "The archive the fetch runner is about to upload.",
+        "properties": {
+          "sha256": {
+            "description": "The archive's SHA-256, 64 lowercase hex digits; storage refuses other bytes.",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "The archive's exact size in bytes.",
+            "minimum": 1.0,
+            "title": "Sizebytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sha256",
+          "sizeBytes"
+        ],
+        "title": "OpenArchiveUploadRequest",
+        "type": "object"
+      },
+      "ProblemDetailResponse": {
+        "description": "RFC 9457 Problem Details response schema.\n\nThis is the base error response format used by all API errors.",
+        "properties": {
+          "detail": {
+            "description": "Human-readable explanation specific to this particular occurrence of the problem.",
+            "example": "Deployment with identifier 'abc123' not found",
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "URI reference for this specific occurrence, usually the request path, or null when not set.",
+            "example": "/v1/deployments/abc123",
+            "title": "Instance"
+          },
+          "status": {
+            "description": "HTTP status code generated for this error response.",
+            "example": 404,
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Short human-readable summary of the problem category, stable across occurrences.",
+            "example": "Resource Not Found",
+            "title": "Title",
+            "type": "string"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Correlation identifier for this request; equals the X-Request-ID response header. Quote it to support to find the request's trace and logs.",
+            "example": "4bf92f35",
+            "title": "Traceid"
+          },
+          "type": {
+            "description": "Stable URI reference that identifies the category of problem that occurred. Always an absolute-path reference of the form /errors/{slug}; switch on this rather than on the detail prose.",
+            "example": "/errors/not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "ProblemDetailResponse",
+        "type": "object"
+      },
+      "PushAccessResponse": {
+        "description": "Registry credentials for the build's one repository, for minutes.",
+        "properties": {
+          "expiresAt": {
+            "description": "RFC 3339 timestamp when the credentials stop working; ask again after.",
+            "format": "date-time",
+            "readOnly": true,
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "password": {
+            "description": "The password to present at the registry's token realm.",
+            "readOnly": true,
+            "title": "Password",
+            "type": "string"
+          },
+          "registryHost": {
+            "description": "The registry to push to.",
+            "readOnly": true,
+            "title": "Registryhost",
+            "type": "string"
+          },
+          "repositoryPath": {
+            "description": "The one repository the credentials reach.",
+            "readOnly": true,
+            "title": "Repositorypath",
+            "type": "string"
+          },
+          "username": {
+            "description": "The user to present at the registry's token realm.",
+            "readOnly": true,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "registryHost",
+          "repositoryPath",
+          "username",
+          "password",
+          "expiresAt"
+        ],
+        "title": "PushAccessResponse",
+        "type": "object"
+      },
+      "PushedReport": {
+        "additionalProperties": false,
+        "description": "The attempt pushed the build's image.",
+        "properties": {
+          "imageDigest": {
+            "description": "The digest of the pushed image's manifest.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Imagedigest",
+            "type": "string"
+          },
+          "outcome": {
+            "const": "PUSHED",
+            "description": "The image is pushed.",
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "imageDigest"
+        ],
+        "title": "PushedReport",
+        "type": "object"
+      },
+      "RunnerBootstrapIdentity": {
+        "description": "Identity block in bootstrap response.",
+        "properties": {
+          "credentialId": {
+            "description": "Identifier of the API key credential used to authenticate.",
+            "title": "Credentialid",
+            "type": "string"
+          },
+          "credentialName": {
+            "description": "Operator-assigned name of the authenticating API key.",
+            "title": "Credentialname",
+            "type": "string"
+          },
+          "credentialType": {
+            "const": "API_KEY",
+            "description": "Kind of credential used to authenticate, always api_key on this surface.",
+            "title": "Credentialtype",
+            "type": "string"
+          },
+          "organizationId": {
+            "description": "Identifier of the organization the credential belongs to.",
+            "title": "Organizationid",
+            "type": "string"
+          },
+          "organizationName": {
+            "description": "Display name of the organization the credential belongs to.",
+            "title": "Organizationname",
+            "type": "string"
+          },
+          "runnerId": {
+            "description": "Stable identifier of the runner bound to this credential.",
+            "title": "Runnerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credentialType",
+          "credentialId",
+          "credentialName",
+          "runnerId",
+          "organizationId",
+          "organizationName"
+        ],
+        "title": "RunnerBootstrapIdentity",
+        "type": "object"
+      },
+      "RunnerBootstrapResponse": {
+        "description": "Response schema for runner bootstrap \u2014 everything the CLI needs on startup.",
+        "properties": {
+          "flags": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Feature flags the CLI should honor, or null when none are set.",
+            "title": "Flags"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/RunnerBootstrapIdentity",
+            "description": "Identity block describing the authenticated runner credential."
+          },
+          "policies": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "description": "Organization policies the CLI should enforce, keyed by policy group.",
+            "title": "Policies",
+            "type": "object"
+          },
+          "preferences": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "description": "Merged user preferences the CLI should apply, keyed by preference group.",
+            "title": "Preferences",
+            "type": "object"
+          }
+        },
+        "required": [
+          "identity",
+          "preferences",
+          "policies"
+        ],
+        "title": "RunnerBootstrapResponse",
+        "type": "object"
+      },
+      "RunnerIdentityResponse": {
+        "description": "Response schema for runner identity lookup.",
+        "properties": {
+          "credentialId": {
+            "description": "Identifier of the API key credential used to authenticate.",
+            "format": "uuid",
+            "title": "Credentialid",
+            "type": "string"
+          },
+          "credentialName": {
+            "description": "Operator-assigned name of the authenticating API key.",
+            "title": "Credentialname",
+            "type": "string"
+          },
+          "credentialType": {
+            "const": "API_KEY",
+            "description": "Kind of credential used to authenticate, always api_key on this surface.",
+            "title": "Credentialtype",
+            "type": "string"
+          },
+          "organizationId": {
+            "description": "Identifier of the organization the credential belongs to.",
+            "format": "uuid",
+            "title": "Organizationid",
+            "type": "string"
+          },
+          "organizationName": {
+            "description": "Display name of the organization the credential belongs to.",
+            "title": "Organizationname",
+            "type": "string"
+          },
+          "runnerId": {
+            "description": "Stable identifier of the runner bound to this credential.",
+            "title": "Runnerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credentialType",
+          "credentialId",
+          "credentialName",
+          "runnerId",
+          "organizationId",
+          "organizationName"
+        ],
+        "title": "RunnerIdentityResponse",
+        "type": "object"
+      },
+      "SnapshotRepositoryResponse": {
+        "description": "The repository the fetch reads.",
+        "properties": {
+          "cloneUrl": {
+            "description": "The repository's HTTPS clone URL.",
+            "readOnly": true,
+            "title": "Cloneurl",
+            "type": "string"
+          },
+          "fullName": {
+            "description": "The repository's owner/name on GitHub.",
+            "readOnly": true,
+            "title": "Fullname",
+            "type": "string"
+          },
+          "repositoryId": {
+            "description": "GitHub's numeric id of the repository.",
+            "readOnly": true,
+            "title": "Repositoryid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repositoryId",
+          "fullName",
+          "cloneUrl"
+        ],
+        "title": "SnapshotRepositoryResponse",
+        "type": "object"
+      },
+      "SourceSnapshotAssignmentResponse": {
+        "description": "What a fetch runner fetches, and the token it reads the repository with.",
+        "properties": {
+          "commitSha": {
+            "description": "The full commit to fetch.",
+            "readOnly": true,
+            "title": "Commitsha",
+            "type": "string"
+          },
+          "fetchToken": {
+            "description": "A GitHub token that reads the one repository's contents, until it expires.",
+            "readOnly": true,
+            "title": "Fetchtoken",
+            "type": "string"
+          },
+          "fetchTokenExpiresAt": {
+            "description": "RFC 3339 timestamp when the fetch token stops working.",
+            "format": "date-time",
+            "readOnly": true,
+            "title": "Fetchtokenexpiresat",
+            "type": "string"
+          },
+          "maxArchiveBytes": {
+            "description": "The largest archive the upload accepts.",
+            "readOnly": true,
+            "title": "Maxarchivebytes",
+            "type": "integer"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/SnapshotRepositoryResponse",
+            "description": "The repository to fetch.",
+            "readOnly": true
+          },
+          "snapshotId": {
+            "description": "The snapshot to fetch.",
+            "format": "uuid",
+            "readOnly": true,
+            "title": "Snapshotid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshotId",
+          "repository",
+          "commitSha",
+          "fetchToken",
+          "fetchTokenExpiresAt",
+          "maxArchiveBytes"
+        ],
+        "title": "SourceSnapshotAssignmentResponse",
+        "type": "object"
+      },
+      "SourceSnapshotFetchResponse": {
+        "description": "Where the snapshot is once its fetch is reported.",
+        "properties": {
+          "commitSha": {
+            "description": "The snapshot's commit.",
+            "readOnly": true,
+            "title": "Commitsha",
+            "type": "string"
+          },
+          "contentDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stored archive's digest once FETCHED; null otherwise.",
+            "readOnly": true,
+            "title": "Contentdigest"
+          },
+          "snapshotId": {
+            "description": "The snapshot whose fetch was reported.",
+            "format": "uuid",
+            "readOnly": true,
+            "title": "Snapshotid",
+            "type": "string"
+          },
+          "status": {
+            "description": "REQUESTED, VERIFYING, FETCHED or FAILED.",
+            "readOnly": true,
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshotId",
+          "status",
+          "commitSha",
+          "contentDigest"
+        ],
+        "title": "SourceSnapshotFetchResponse",
+        "type": "object"
+      },
+      "ValidationErrorResponse": {
+        "description": "Response schema for a request that failed validation (422 ``validation-error``).\n\nExtends ProblemDetail with field-level error information.",
+        "properties": {
+          "detail": {
+            "description": "Human-readable explanation specific to this particular occurrence of the problem.",
+            "example": "Request validation failed",
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Field-level validation failures, each naming the offending field (a dotted path), the reason, and the failure's type, or null when absent.",
+            "example": [
+              {
+                "field": "body.name",
+                "message": "String should have at least 1 character",
+                "type": "string_too_short"
+              },
+              {
+                "field": "body.parameters.region",
+                "message": "Field required",
+                "type": "missing"
+              }
+            ],
+            "title": "Errors"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "URI reference for this specific occurrence, usually the request path, or null when not set.",
+            "example": "/v1/deployments",
+            "title": "Instance"
+          },
+          "status": {
+            "const": 422,
+            "description": "The HTTP status code of the response.",
+            "example": 422,
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "const": "Validation Error",
+            "description": "Short human-readable summary of the problem category.",
+            "example": "Validation Error",
+            "title": "Title",
+            "type": "string"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Correlation identifier for this request; equals the X-Request-ID response header. Quote it to support to find the request's trace and logs.",
+            "example": "4bf92f35",
+            "title": "Traceid"
+          },
+          "type": {
+            "const": "/errors/validation-error",
+            "description": "Always /errors/validation-error; switch on this rather than on the detail prose.",
+            "example": "/errors/validation-error",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "ValidationErrorResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "RunAttemptToken": {
+        "description": "The token signed for one attempt of a service run, which the host agent hands to the runner in that attempt's guest, sent as `Authorization: Bearer mush_run_<kid>.<attempt>.<fencing>.<expiry>.<sig>`. It speaks only for its attempt, only while that attempt is its run's current live one, and never past the attempt's deadline.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "RunnerApiKey": {
+        "bearerFormat": "mush_{public_id}.{secret}",
+        "description": "Organization API key, sent as `Authorization: Bearer mush_{public_id}.{secret}` \u2014 a 8-character Base62 public id and a 43-character Base62 secret. Bound to the AGENT audience: the key a Musher CLI runner authenticates with.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "email": "engineering@musher.dev",
+      "name": "Musher Engineering",
+      "url": "https://docs.musher.dev"
+    },
+    "description": "> **Beta**: This API is in beta. Endpoints and request/response shapes may change with advance notice.",
+    "title": "Musher Runner API",
+    "version": "1",
+    "x-api-stability": "beta"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/runner/v1/me": {
+      "get": {
+        "description": "Return the authenticated caller's identity.\n\nUsed by the Musher CLI (`musher auth status`) to display the current credential's\nname, type, and organization. Accepts `mush_*` keys.",
+        "operationId": "runner_get_runner_identity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerIdentityResponse"
+                }
+              }
+            },
+            "description": "Runner identity"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Invalid or missing authentication"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Organization not found"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunnerApiKey": []
+          }
+        ],
+        "summary": "Get runner identity",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/me:bootstrap": {
+      "get": {
+        "description": "Single startup call for the Mush CLI. Returns identity, merged user preferences,\nand org policies in one response.",
+        "operationId": "runner_bootstrap_runner",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerBootstrapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunnerApiKey": []
+          }
+        ],
+        "summary": "Bootstrap runner configuration",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/source-snapshots/{snapshot_id}/assignment": {
+      "get": {
+        "operationId": "runner_get_source_snapshot_assignment",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSnapshotAssignmentResponse"
+                }
+              }
+            },
+            "description": "The commit to fetch and a token that reads the one repository."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Get a source snapshot's assignment",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/source-snapshots/{snapshot_id}:openArchiveUpload": {
+      "post": {
+        "operationId": "runner_open_source_snapshot_archive_upload",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenArchiveUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveUploadResponse"
+                }
+              }
+            },
+            "description": "A presigned upload that accepts only the declared archive."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Open a source snapshot's archive upload",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/source-snapshots/{snapshot_id}:reportFetch": {
+      "post": {
+        "operationId": "runner_report_source_snapshot_fetch",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "FAILED": "#/components/schemas/FailedFetchReport",
+                    "FETCHED": "#/components/schemas/FetchedReport"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FetchedReport"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FailedFetchReport"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSnapshotFetchResponse"
+                }
+              }
+            },
+            "description": "The snapshot: VERIFYING while the API reads its stored archive, FETCHED once it has, or FAILED."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Report a source snapshot's fetch",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/image-builds/{build_id}/assignment": {
+      "get": {
+        "operationId": "runner_get_image_build_assignment",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageBuildAssignmentResponse"
+                }
+              }
+            },
+            "description": "What to build, from which archive, with which secrets, and where to push."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Get an image build's assignment",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/image-builds/{build_id}:grantPushAccess": {
+      "post": {
+        "operationId": "runner_grant_image_build_push_access",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushAccessResponse"
+                }
+              }
+            },
+            "description": "Registry credentials for the build's one repository, for minutes."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Grant an image build push access",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/image-builds/{build_id}:reportResult": {
+      "post": {
+        "operationId": "runner_report_image_build_result",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "FAILED": "#/components/schemas/FailedBuildReport",
+                    "PUSHED": "#/components/schemas/PushedReport"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PushedReport"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FailedBuildReport"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageBuildResultResponse"
+                }
+              }
+            },
+            "description": "The build: ATTESTING once its pushed image is recorded, or FAILED."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Report an image build's result",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runner/v1/image-builds/{build_id}/log-lines": {
+      "post": {
+        "operationId": "runner_create_image_build_log_lines",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuildLogLinesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogLinesAcceptedResponse"
+                }
+              }
+            },
+            "description": "What the batch added to the build's log."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Create image build log lines",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/agent/v1/runner/me": {
+      "get": {
+        "deprecated": true,
+        "description": "Return the authenticated caller's identity.\n\nUsed by the Musher CLI (`musher auth status`) to display the current credential's\nname, type, and organization. Accepts `mush_*` keys.",
+        "operationId": "get_runner_identity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerIdentityResponse"
+                }
+              }
+            },
+            "description": "Runner identity"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Invalid or missing authentication"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Organization not found"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunnerApiKey": []
+          }
+        ],
+        "summary": "Get runner identity",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/me:bootstrap": {
+      "get": {
+        "deprecated": true,
+        "description": "Single startup call for the Mush CLI. Returns identity, merged user preferences,\nand org policies in one response.",
+        "operationId": "bootstrap_runner",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerBootstrapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunnerApiKey": []
+          }
+        ],
+        "summary": "Bootstrap runner configuration",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/source-snapshots/{snapshot_id}/assignment": {
+      "get": {
+        "deprecated": true,
+        "operationId": "get_source_snapshot_assignment",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSnapshotAssignmentResponse"
+                }
+              }
+            },
+            "description": "The commit to fetch and a token that reads the one repository."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Get a source snapshot's assignment",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/source-snapshots/{snapshot_id}:openArchiveUpload": {
+      "post": {
+        "deprecated": true,
+        "operationId": "open_source_snapshot_archive_upload",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenArchiveUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveUploadResponse"
+                }
+              }
+            },
+            "description": "A presigned upload that accepts only the declared archive."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Open a source snapshot's archive upload",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/source-snapshots/{snapshot_id}:reportFetch": {
+      "post": {
+        "deprecated": true,
+        "operationId": "report_source_snapshot_fetch",
+        "parameters": [
+          {
+            "description": "The source snapshot.",
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "description": "The source snapshot.",
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "FAILED": "#/components/schemas/FailedFetchReport",
+                    "FETCHED": "#/components/schemas/FetchedReport"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FetchedReport"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FailedFetchReport"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSnapshotFetchResponse"
+                }
+              }
+            },
+            "description": "The snapshot: VERIFYING while the API reads its stored archive, FETCHED once it has, or FAILED."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Report a source snapshot's fetch",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/image-builds/{build_id}/assignment": {
+      "get": {
+        "deprecated": true,
+        "operationId": "get_image_build_assignment",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageBuildAssignmentResponse"
+                }
+              }
+            },
+            "description": "What to build, from which archive, with which secrets, and where to push."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Get an image build's assignment",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/image-builds/{build_id}:grantPushAccess": {
+      "post": {
+        "deprecated": true,
+        "operationId": "grant_image_build_push_access",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushAccessResponse"
+                }
+              }
+            },
+            "description": "Registry credentials for the build's one repository, for minutes."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Grant an image build push access",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/image-builds/{build_id}:reportResult": {
+      "post": {
+        "deprecated": true,
+        "operationId": "report_image_build_result",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "FAILED": "#/components/schemas/FailedBuildReport",
+                    "PUSHED": "#/components/schemas/PushedReport"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PushedReport"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FailedBuildReport"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageBuildResultResponse"
+                }
+              }
+            },
+            "description": "The build: ATTESTING once its pushed image is recorded, or FAILED."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "The resource does not exist, or the run attempt token is not for it."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Report an image build's result",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    },
+    "/agent/v1/runner/image-builds/{build_id}/log-lines": {
+      "post": {
+        "deprecated": true,
+        "operationId": "create_image_build_log_lines",
+        "parameters": [
+          {
+            "description": "The image build.",
+            "in": "path",
+            "name": "build_id",
+            "required": true,
+            "schema": {
+              "description": "The image build.",
+              "format": "uuid",
+              "title": "Build Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuildLogLinesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildLogLinesAcceptedResponse"
+                }
+              }
+            },
+            "description": "What the batch added to the build's log."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "Not authenticated with the credential the route takes."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            },
+            "description": "The request failed validation (`validation-error`)."
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailResponse"
+                }
+              }
+            },
+            "description": "An RFC 9457 problem document. Returned for any error status this operation does not document explicitly."
+          }
+        },
+        "security": [
+          {
+            "RunAttemptToken": []
+          }
+        ],
+        "summary": "Create image build log lines",
+        "tags": [
+          "runner"
+        ],
+        "x-sunset": "2027-04-01"
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Production",
+      "url": "https://api.musher.dev"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Runner machine endpoints covering identity, configuration, registration, and heartbeat reports.",
+      "name": "runner",
+      "x-displayName": "Runner Machines"
+    }
+  ],
+  "x-scalar-environments": [
+    {
+      "description": "Production",
+      "name": "production",
+      "url": "https://api.musher.dev"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Pipeline & Integrations",
+      "tags": [
+        "runner"
+      ]
+    }
+  ]
+}

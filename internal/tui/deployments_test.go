@@ -174,9 +174,9 @@ func sampleDetail() *DeploymentDetail {
 		}}},
 		Endpoints: []client.Endpoint{{PublicURL: "https://web.example.dev", Protocol: "HTTP", ContainerPort: 8080, Visibility: "PUBLIC"}},
 		Activity: []client.Activity{
-			{Kind: "deploy", Message: "Deployment started", OccurredAt: client.APITime{Time: time.Now().Add(-time.Hour)}},
-			{Kind: "warn", Message: "Slow pull", Severity: "WARN"},
-			{Kind: "fail", Severity: "ERROR"},
+			{EventKind: "deployment.became_active", OccurredAt: client.APITime{Time: time.Now().Add(-time.Hour)}},
+			{EventKind: "deployment.component_healthcheck_failing", Node: "web"},
+			{EventKind: "deployment.component_failed", Node: "web", Payload: map[string]any{"error_detail": "exit 1"}},
 		},
 		Error: &client.DeploymentError{Title: "Image pull failed", Detail: "not found", Remediation: "Check the image"},
 	}
@@ -210,7 +210,7 @@ func TestDeploymentDetailRenders(t *testing.T) {
 
 	for _, want := range []string{
 		"RUNNING", "CONDITIONS", "Ready", "REPLICAS", "1/2 ready", "web-0", "2 restarts",
-		"ENDPOINTS", ":8080", "RECENT ACTIVITY", "Deployment started", "Image pull failed", "Check the image", "rolled out",
+		"ENDPOINTS", ":8080", "RECENT ACTIVITY", "became active", "Image pull failed", "Check the image", "rolled out",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("detail view missing %q:\n%s", want, out)

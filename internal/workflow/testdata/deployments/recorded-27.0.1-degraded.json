@@ -1,0 +1,194 @@
+{
+  "metadata": {
+    "id": "00000000-0000-7000-8000-000000000001",
+    "organizationId": "00000000-0000-7000-8000-000000000002",
+    "name": "example-app",
+    "sourceListingId": null,
+    "sourceListingVersion": null,
+    "sourceListingSlug": null,
+    "sourceListingName": null,
+    "sourceListingCategory": null,
+    "createdBy": "00000000-0000-7000-8000-000000000003",
+    "createdAt": "2026-11-18T03:29:58.918027Z",
+    "updatedAt": "2026-11-18T06:30:41.219417Z",
+    "rowVersion": 24
+  },
+  "spec": {
+    "blueprintId": "00000000-0000-7000-8000-000000000004",
+    "blueprintVersion": 6,
+    "resolutionId": "00000000-0000-7000-8000-000000000001",
+    "environmentId": "00000000-0000-7000-8000-000000000005"
+  },
+  "status": {
+    "phase": "DEGRADED",
+    "desiredPhase": "ACTIVE",
+    "desiredReason": null,
+    "desiredSetAt": "2026-11-18T06:00:29.469148Z",
+    "health": "DEGRADED",
+    "readiness": "NOT_READY",
+    "conditions": [
+      {
+        "type": "PROVISIONED",
+        "status": "TRUE",
+        "source": "DERIVED",
+        "reason": "Provisioned",
+        "message": "The deployment has been provisioned.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "READY",
+        "status": "FALSE",
+        "source": "DERIVED",
+        "reason": "DeploymentNotActive",
+        "message": "The deployment is not active.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "REPLICAS_READY",
+        "status": "FALSE",
+        "source": "DERIVED",
+        "reason": "NodeNotReady",
+        "message": "No replica of 'board' is ready; 1 of 2 replicas are ready.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "HEALTHCHECK_PASSING",
+        "status": "TRUE",
+        "source": "DERIVED",
+        "reason": "HealthcheckPassing",
+        "message": "All reporting replicas are passing their health check.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "EDGE_ROUTE_PUBLISHED",
+        "status": "TRUE",
+        "source": "DERIVED",
+        "reason": "EdgeRoutePublished",
+        "message": "The edge serves every public endpoint (2).",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "VOLUMES_ATTACHED",
+        "status": "FALSE",
+        "source": "DERIVED",
+        "reason": "VolumeProvisioningPending",
+        "message": "1 of 2 block volumes are still provisioning — waiting for the component to be placed.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "SHARED_VOLUMES_EXPORTED",
+        "status": "TRUE",
+        "source": "DERIVED",
+        "reason": "NoSharedVolumesDeclared",
+        "message": "The deployment declares no shared volumes.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      },
+      {
+        "type": "PROGRESSING",
+        "status": "UNKNOWN",
+        "source": "DERIVED",
+        "reason": "NotProvisioning",
+        "message": "The deployment is not currently provisioning.",
+        "observedGeneration": null,
+        "lastTransitionAt": "2026-11-18T06:30:41.219417Z"
+      }
+    ],
+    "error": null,
+    "allowedActions": [
+      {
+        "action": "SUSPEND",
+        "isAllowed": true,
+        "reason": null
+      },
+      {
+        "action": "RESUME",
+        "isAllowed": false,
+        "reason": "Resume is not available from phase DEGRADED."
+      },
+      {
+        "action": "RETRY",
+        "isAllowed": false,
+        "reason": "Retry is not available from phase DEGRADED."
+      },
+      {
+        "action": "CANCEL",
+        "isAllowed": false,
+        "reason": "Cancel is not available from phase DEGRADED."
+      },
+      {
+        "action": "TERMINATE",
+        "isAllowed": true,
+        "reason": null
+      }
+    ],
+    "progress": {
+      "stage": "WAITING_FOR_HOST",
+      "step": 3,
+      "stepCount": 8,
+      "isLive": false,
+      "isFailed": false,
+      "readyComponents": 1,
+      "totalComponents": 2,
+      "blockingNode": "board",
+      "reason": "WaitingForHost",
+      "message": "No running host has room for this component, so it is waiting for one. It starts as soon as a host is ready, and a replica that is waiting is not billed.",
+      "changedAt": "2026-11-18T06:00:35.001071Z",
+      "expectedServingBy": null
+    },
+    "sources": null,
+    "standing": {
+      "stage": "WAITING_FOR_HOST",
+      "step": 3,
+      "stepCount": 8,
+      "isLive": false,
+      "isFailed": false,
+      "needsAttention": true,
+      "attention": "DEGRADED",
+      "totalComponents": 2,
+      "readyComponents": 1,
+      "unhealthyComponents": 1,
+      "unhealthyNodes": [
+        "board"
+      ],
+      "blockingNode": "board",
+      "reason": "WaitingForHost"
+    },
+    "endpoints": [
+      {
+        "id": "00000000-0000-7000-8000-000000000006",
+        "nodeName": "board",
+        "endpointName": "web",
+        "publicHostname": "board-example-app.example.test",
+        "publicUrl": "board-example-app.example.test",
+        "publicScheme": "https",
+        "servingStatus": "SERVING",
+        "servingStatusReason": null
+      },
+      {
+        "id": "00000000-0000-7000-8000-000000000007",
+        "nodeName": "portal",
+        "endpointName": "web",
+        "publicHostname": "portal-example-app.example.test",
+        "publicUrl": "portal-example-app.example.test",
+        "publicScheme": "https",
+        "servingStatus": "SERVING",
+        "servingStatusReason": null
+      }
+    ],
+    "reason": "1 of 2 replica(s) ready after 30m; not ready: 'board'.",
+    "draftedAt": "2026-11-18T03:29:58.918027Z",
+    "provisioningRequestedAt": "2026-11-18T06:00:29.469148Z",
+    "becameActiveAt": "2026-11-18T03:43:32.429024Z",
+    "becameDegradedAt": "2026-11-18T06:30:41.303365Z",
+    "failedAt": null,
+    "suspendedAt": "2026-11-18T05:59:46.635385Z",
+    "deletedAt": null
+  }
+}

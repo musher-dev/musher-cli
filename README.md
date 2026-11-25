@@ -33,16 +33,23 @@ curl -fsSL https://get.musher.dev | sh
 irm https://get.musher.dev/install.ps1 | iex
 ```
 
-**From source** (requires Go 1.26.10+):
+**From source** (requires Go 1.26.11+):
 
 ```bash
 go install github.com/musher-dev/musher-cli/cmd/musher@latest
 ```
 
+### Upgrading
+
+Check the installed version with `musher version`, and upgrade with `musher update` (or re-run the install
+command above). Use 0.4.1 or later: from platform-api 32.0.0, a deployment's status is derived from its replicas,
+and an older CLI can wait for its 15-minute timeout on a deploy that has failed, or report success when only part
+of it is serving.
+
 ## What You'll Need
 
 - **Musher CLI** — installed above.
-- **A Musher account and API key** — create or manage keys at [console.musher.dev](https://console.musher.dev/settings/organization/api-keys).
+- **A Musher account and API key** — create or manage keys in the [console](https://console.musher.dev) under **Organization settings › API keys**.
 
 ## Quick Start
 

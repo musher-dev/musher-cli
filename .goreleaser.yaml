@@ -61,3 +61,5 @@ release:
   extra_files:
     - glob: install.sh
     - glob: install.ps1
+    # The runner self-test results schema host-agent's canary reads.
+    - glob: contracts/runner/self-test.schema.json

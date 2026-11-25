@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -238,8 +240,17 @@ func TestListReplicasAndActivityAndLogs(t *testing.T) {
 	t.Run("activity", func(t *testing.T) {
 		t.Parallel()
 
-		api, seen := recordingMock(t, http.StatusOK,
-			`{"data":[{"id":"a1","kind":"SCALE","message":"scaled","occurredAt":"2026-04-01T10:00:00Z"}]}`)
+		// testdata/activity-page.json is a DeploymentActivityListResponse that
+		// validates against platform-api 27.0.1's, 30.0.0's and #1647's
+		// contracts, with the key set staging 27.0.1 returns live: id,
+		// eventKind, occurredAt, ingestedAt, actor, node, replicaIndex,
+		// payload, traceId. There is no kind, message or severity.
+		body, readErr := os.ReadFile(filepath.Join("testdata", "activity-page.json"))
+		if readErr != nil {
+			t.Fatalf("read fixture: %v", readErr)
+		}
+
+		api, seen := recordingMock(t, http.StatusOK, string(body))
 
 		page, err := api.ListActivity(t.Context(), "dep-1", 20, "")
 		if err != nil {
@@ -250,8 +261,21 @@ func TestListReplicasAndActivityAndLogs(t *testing.T) {
 			t.Errorf("request = %s?%s", seen.path, seen.query)
 		}
 
-		if len(page.Data) != 1 || page.Data[0].Message != "scaled" {
+		if len(page.Data) != 2 {
 			t.Fatalf("page = %+v", page)
+		}
+
+		failed, active := page.Data[0], page.Data[1]
+		if got := failed.Message(); got != "component failed (worker#0): container exited with code 1" {
+			t.Errorf("Message() = %q", got)
+		}
+
+		if failed.Severity() != client.ActivitySeverityError || failed.Actor.Kind != "AGENT" || failed.OccurredAt.IsZero() {
+			t.Errorf("entry = %+v", failed)
+		}
+
+		if got := active.Message(); got != "became active" || active.Severity() != client.ActivitySeverityInfo {
+			t.Errorf("Message() = %q, Severity() = %q", got, active.Severity())
 		}
 	})
 

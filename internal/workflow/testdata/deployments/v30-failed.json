@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "id": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f40",
+    "organizationId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f41",
+    "name": "api",
+    "sourceListingId": null,
+    "sourceListingVersion": null,
+    "sourceListingSlug": null,
+    "sourceListingName": null,
+    "sourceListingCategory": null,
+    "createdBy": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f42",
+    "createdAt": "2026-11-18T09:00:00Z",
+    "updatedAt": "2026-11-18T09:04:00Z",
+    "rowVersion": 7
+  },
+  "spec": {
+    "blueprintId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f43",
+    "blueprintVersion": 3,
+    "resolutionId": "0193a5b2-7c41-7d2e-9f3a-5b8c1d2e3f44"
+  },
+  "status": {
+    "phase": "FAILED",
+    "desiredPhase": "ACTIVE",
+    "desiredReason": null,
+    "desiredSetAt": "2026-11-18T09:00:00Z",
+    "health": "UNHEALTHY",
+    "readiness": "NOT_READY",
+    "reason": "pull refused",
+    "draftedAt": "2026-11-18T09:00:00Z",
+    "provisioningRequestedAt": "2026-11-18T09:00:01Z",
+    "becameActiveAt": null,
+    "becameDegradedAt": null,
+    "suspendedAt": null,
+    "deletedAt": null,
+    "standing": {
+      "stage": "PULLING_IMAGE",
+      "step": 4,
+      "stepCount": 8,
+      "isLive": false,
+      "isFailed": true,
+      "needsAttention": true,
+      "attention": "FAILED",
+      "totalComponents": 2,
+      "readyComponents": 0,
+      "unhealthyComponents": 1,
+      "unhealthyNodes": [
+        "web"
+      ],
+      "blockingNode": "web",
+      "reason": "DeploymentFailed"
+    }
+  }
+}

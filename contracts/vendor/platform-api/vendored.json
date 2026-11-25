@@ -1,0 +1,20 @@
+{
+  "description": "The platform-api contract files this repository builds against, copied byte for byte. The runner client in internal/runner/api is generated from openapi/runner.json (task generate:runner-client), and internal/runner/contract_test.go holds both this record and the client to the file. platform-api 24.0.0 published no release bundle (no release.json asset), so the copy is taken from the release tag and pinned here by digest. To move it: copy the file from the new tag, update version, tag, commit and sha256, then regenerate.",
+  "repository": "platform-api",
+  "output": "contracts",
+  "version": "24.0.0",
+  "tag": "v24.0.0",
+  "commit": "1cd0d78752ad527b36aaaa567b69d59568f71fd7",
+  "interfaces": [
+    {
+      "id": "runner-http",
+      "files": [
+        {
+          "path": "contracts/openapi/runner.json",
+          "source": "platform-api/contracts/openapi/runner.json",
+          "sha256": "f0b9fdf586e587fb03a8b5a1daa5bfb89fda48b85c1bce27ee3b50e1980d108f"
+        }
+      ]
+    }
+  ]
+}

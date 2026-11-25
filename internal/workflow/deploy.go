@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/musher-dev/musher-cli/internal/build"
@@ -61,6 +62,11 @@ const (
 	pollSlow       = 10 * time.Second
 	pollMediumFrom = 2 * time.Minute
 	pollSlowFrom   = 5 * time.Minute
+
+	// streamRecheckInterval is how often a watch on the event stream re-reads
+	// the deployment unprompted. No frame announces the end of the degraded
+	// grace, or a standing that changed without a phase transition.
+	streamRecheckInterval = pollSlow
 
 	// activityPageSize bounds each timeline poll.
 	activityPageSize = 20
@@ -123,7 +129,8 @@ type DeployOptions struct {
 	Watch bool
 	// Timeout bounds the whole watch. Zero means no bound.
 	Timeout time.Duration
-	// DegradedGrace is how long DEGRADED is tolerated before it is a failure.
+	// DegradedGrace is how long a running deployment may stay degraded (phase
+	// DEGRADED, or ACTIVE with attention DEGRADED) before it is a failure.
 	DegradedGrace time.Duration
 	// WaitFor selects the success condition.
 	WaitFor WaitTarget
@@ -340,6 +347,10 @@ type deployRun struct {
 	snapshot      DeploymentSnapshot
 	endpoints     []client.Endpoint
 	seenActivity  map[string]struct{}
+
+	// statusMu guards what a status read writes: degradedSince, snapshot and
+	// endpoints. The stream's recheck reads on a goroutine of its own.
+	statusMu sync.Mutex
 }
 
 // execute runs the deploy sequence end to end.
@@ -993,6 +1004,13 @@ func (r *deployRun) expire(ctx context.Context, cancel context.CancelFunc) {
 
 // watchStream follows the deployment's SSE event stream.
 //
+// The stream never carries the verdict. A deployment.status frame is sent only
+// on a phase transition and names only the phase it moved to, and since
+// platform-api 31 a fault moves no phase at all; a deployment.replica frame
+// says one replica moved. Both are prompts to re-read the deployment, which is
+// what settles it. A periodic re-read covers what no frame announces: the end
+// of the degraded grace, or a standing that changed without a transition.
+//
 // A non-nil error means the stream never became usable; the caller falls back
 // to polling rather than failing, because a blocked event stream is a network
 // policy problem, not a deployment problem.
@@ -1002,75 +1020,151 @@ func (r *deployRun) watchStream(ctx context.Context, deploymentID string) (Outco
 		return OutcomePending, repoerrors.Errorf("no event stream is configured")
 	}
 
-	outcome := OutcomePending
+	streamCtx, stop := context.WithCancel(ctx)
+	defer stop()
 
-	err := stream.Follow(ctx, minter, opener, stream.Options{
+	verdict := &streamVerdict{}
+
+	// reread reads the deployment and reports whether it has settled. A read
+	// that fails is not a reason to abandon a live stream: the next prompt or
+	// recheck reads again, and the watch budget bounds it.
+	reread := func() bool {
+		outcome, err := r.readStatus(streamCtx, deploymentID)
+		if err != nil || !verdict.offer(outcome) {
+			return false
+		}
+
+		stop()
+
+		return true
+	}
+
+	var rechecks sync.WaitGroup
+
+	rechecks.Go(func() {
+		for {
+			select {
+			case <-streamCtx.Done():
+				return
+			case <-r.clock.After(streamRecheckInterval):
+				if reread() {
+					return
+				}
+			}
+		}
+	})
+
+	// The recheck writes the snapshot the caller reads once the watch ends,
+	// so it is stopped and waited for before this returns.
+	defer func() {
+		stop()
+		rechecks.Wait()
+	}()
+
+	err := stream.Follow(streamCtx, minter, opener, stream.Options{
 		Clock: r.clock,
 		OnReconnect: func() {
 			// Replica and config events have no replay backing, so a reconnect
 			// means the local view may be stale. Resync from the authority.
-			r.resync(ctx, deploymentID)
+			reread()
 		},
 	}, func(event stream.Event) error {
-		settled, handleErr := r.handleEvent(ctx, event)
-		if handleErr != nil {
-			return handleErr
-		}
-
-		if settled.Terminal() {
-			outcome = settled
-
+		if r.handleEvent(event) && reread() {
 			return errWatchSettled
 		}
 
 		return nil
 	})
 
-	switch {
-	case errors.Is(err, errWatchSettled):
+	if outcome := verdict.get(); outcome.Terminal() {
 		return outcome, nil
-	case err != nil && ctx.Err() == nil:
+	}
+
+	if err != nil && !errors.Is(err, errWatchSettled) && ctx.Err() == nil {
 		return OutcomePending, repoerrors.Errorf("follow deployment events: %w", err)
+	}
+
+	return OutcomePending, nil
+}
+
+// streamVerdict holds the first terminal outcome the stream's re-reads reach.
+type streamVerdict struct {
+	mu      sync.Mutex
+	outcome Outcome
+}
+
+// offer records outcome if it is the first terminal one, and reports whether
+// the watch has settled.
+func (v *streamVerdict) offer(outcome Outcome) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if !v.outcome.Terminal() {
+		v.outcome = outcome
+	}
+
+	return v.outcome.Terminal()
+}
+
+func (v *streamVerdict) get() Outcome {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	return v.outcome
+}
+
+// handleEvent applies one business event and reports whether it is a prompt
+// to re-read the deployment.
+//
+// A deployment.status frame is {deploymentId, newPhase, previousPhase, reason,
+// errorCode, error}, sent on a phase transition only (platform-api
+// rollout/application/realtime.py DeploymentStatusFrame). It is read for
+// nothing but its arrival: the phase alone cannot settle a deploy.
+func (r *deployRun) handleEvent(event stream.Event) bool {
+	switch event.Type {
+	case stream.EventStatus, stream.EventReplica:
+		return true
+	case stream.EventActivity:
+		// The frame is the same document GET /activity returns, so an entry
+		// the stream showed is never shown again by a later poll.
+		var entry client.Activity
+		if json.Unmarshal(event.Data, &entry) == nil {
+			r.reportActivity(&entry)
+		}
+
+		return false
 	default:
-		return outcome, nil
+		return false
 	}
 }
 
-// handleEvent applies one business event and returns the resulting outcome.
-func (r *deployRun) handleEvent(ctx context.Context, event stream.Event) (Outcome, error) {
-	switch event.Type {
-	case stream.EventStatus:
-		var frame statusFrame
-
-		// A frame this client cannot read is not a reason to abandon a running
-		// deployment; the next frame, or the poller, recovers.
-		if json.Unmarshal(event.Data, &frame) != nil {
-			r.rep.Note(NoteWarn, "ignoring an unreadable status event")
-
-			return OutcomePending, nil //nolint:nilerr // an unreadable frame must not abort a live deployment
+// readStatus reads the deployment once and classifies it.
+//
+// The stream's prompts and its periodic recheck run on different goroutines,
+// so the snapshot they share is written under statusMu.
+func (r *deployRun) readStatus(ctx context.Context, deploymentID string) (Outcome, error) {
+	deployment, err := r.api.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		if ctx.Err() != nil {
+			// The watch was cut short, not the read: the caller decides whether
+			// that was a detach or an expired budget.
+			return OutcomePending, nil //nolint:nilerr // a canceled watch is not a read failure
 		}
 
-		return r.applyStatus(ctx, DeploymentSnapshot{
-			Phase:     frame.Phase,
-			Readiness: frame.Readiness,
-			Health:    frame.Health,
-		}), nil
-	case stream.EventActivity:
-		var frame activityFrame
-		if json.Unmarshal(event.Data, &frame) == nil {
-			r.rep.Activity(frame.Kind, frame.Message, frame.OccurredAt.Time)
-		}
-
-		return OutcomePending, nil
-	default:
-		return OutcomePending, nil
+		return OutcomePending, repoerrors.Errorf("read deployment: %w", err)
 	}
+
+	r.statusMu.Lock()
+	outcome := r.applyStatus(ctx, SnapshotOf(deployment))
+	r.statusMu.Unlock()
+
+	return outcome, nil
 }
 
 // applyStatus records a snapshot and classifies it.
 func (r *deployRun) applyStatus(ctx context.Context, snap DeploymentSnapshot) Outcome {
 	now := r.clock.Now()
-	r.degradedSince = TrackDegraded(r.degradedSince, snap.Phase, now)
+	r.degradedSince = TrackDegraded(r.degradedSince, snap, now)
 
 	opts := r.settleOptions()
 	if opts.WaitFor == WaitURL && snap.Phase == PhaseActive && snap.Readiness == ReadinessReady {
@@ -1110,18 +1204,10 @@ func (r *deployRun) watchPoll(ctx context.Context, deploymentID string) (Outcome
 
 // pollOnce reads the deployment once, reports new activity, and classifies it.
 func (r *deployRun) pollOnce(ctx context.Context, deploymentID string) (Outcome, error) {
-	deployment, err := r.api.GetDeployment(ctx, deploymentID)
+	outcome, err := r.readStatus(ctx, deploymentID)
 	if err != nil {
-		if ctx.Err() != nil {
-			// The watch was cut short, not the read: the caller decides whether
-			// that was a detach or an expired budget.
-			return OutcomePending, nil //nolint:nilerr // a canceled watch is not a read failure
-		}
-
-		return OutcomePending, repoerrors.Errorf("read deployment: %w", err)
+		return OutcomePending, err
 	}
-
-	outcome := r.applyStatus(ctx, snapshotOf(deployment))
 
 	r.pollActivity(ctx, deploymentID)
 
@@ -1135,23 +1221,27 @@ func (r *deployRun) pollActivity(ctx context.Context, deploymentID string) {
 		return
 	}
 
+	// The route returns newest first; a timeline reads forwards.
+	for index := len(page.Data) - 1; index >= 0; index-- {
+		r.reportActivity(&page.Data[index])
+	}
+}
+
+// reportActivity reports one timeline entry unless this run already has.
+func (r *deployRun) reportActivity(entry *client.Activity) {
 	if r.seenActivity == nil {
 		r.seenActivity = make(map[string]struct{}, activityPageSize)
 	}
 
-	// The route returns newest first; a timeline reads forwards.
-	for index := len(page.Data) - 1; index >= 0; index-- {
-		entry := page.Data[index]
-		if entry.ID != "" {
-			if _, seen := r.seenActivity[entry.ID]; seen {
-				continue
-			}
-
-			r.rememberActivity(entry.ID)
+	if entry.ID != "" {
+		if _, seen := r.seenActivity[entry.ID]; seen {
+			return
 		}
 
-		r.rep.Activity(entry.Kind, entry.Message, entry.OccurredAt.Time)
+		r.rememberActivity(entry.ID)
 	}
+
+	r.rep.Activity(entry.EventKind, entry.Message(), entry.OccurredAt.Time)
 }
 
 // rememberActivity records an activity id, clearing the set when it grows past
@@ -1162,16 +1252,6 @@ func (r *deployRun) rememberActivity(id string) {
 	}
 
 	r.seenActivity[id] = struct{}{}
-}
-
-// resync re-reads the deployment after a stream reconnect.
-func (r *deployRun) resync(ctx context.Context, deploymentID string) {
-	deployment, err := r.api.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return
-	}
-
-	r.snapshot = snapshotOf(deployment)
 }
 
 // resolveURL returns the deployment's live public URL, or "".
@@ -1208,6 +1288,13 @@ func (r *deployRun) explainFailure(ctx context.Context, deploymentID string) *De
 
 	failure := deployment.Status.Error
 	if failure == nil {
+		// A component that fails while provisioning moves no phase, so there
+		// is no composed error: the standing names the node and the status
+		// reason says what holds it.
+		if title := standingTitle(SnapshotOf(deployment), deployment.Status.Standing); title != "" {
+			fallback.Title = title
+		}
+
 		if reason := deployment.Status.Reason; reason != "" {
 			fallback.Detail = reason
 		}
@@ -1226,18 +1313,43 @@ func (r *deployRun) explainFailure(ctx context.Context, deploymentID string) *De
 	}
 }
 
-// snapshotOf reduces a deployment document to the fields the watcher reasons
-// about.
-func snapshotOf(deployment *client.Deployment) DeploymentSnapshot {
+// standingTitle names a failure that moved no phase, or returns "".
+func standingTitle(snap DeploymentSnapshot, standing *client.DeploymentStanding) string {
+	if standing == nil {
+		return ""
+	}
+
+	switch {
+	case standing.IsFailed && standing.BlockingNode != "":
+		return "Component '" + standing.BlockingNode + "' failed while provisioning"
+	case standing.IsFailed:
+		return "A component failed while provisioning"
+	case snap.Degraded():
+		return "The deployment stayed degraded past the grace period"
+	default:
+		return ""
+	}
+}
+
+// SnapshotOf reduces a deployment document to the fields the watcher reasons
+// about. `musher deploy` and `musher status` both read it, so they can never
+// disagree about whether a deployment is done.
+func SnapshotOf(deployment *client.Deployment) DeploymentSnapshot {
 	if deployment == nil {
 		return DeploymentSnapshot{}
 	}
 
-	return DeploymentSnapshot{
+	snap := DeploymentSnapshot{
 		Phase:     deployment.Status.Phase,
 		Readiness: deployment.Status.Readiness,
 		Health:    deployment.Status.Health,
 	}
+
+	if standing := deployment.Status.Standing; standing != nil {
+		snap.Standing = &Standing{IsFailed: standing.IsFailed, Attention: standing.Attention}
+	}
+
+	return snap
 }
 
 // pollInterval returns the poll delay for a watch that has run for elapsed.
@@ -1250,23 +1362,6 @@ func pollInterval(elapsed time.Duration) time.Duration {
 	default:
 		return pollFast
 	}
-}
-
-// statusFrame is the payload of a deployment.status event.
-//
-// Status frames carry only an error CODE, never the composed error document,
-// which is why a FAILED frame costs one extra read of the deployment.
-type statusFrame struct {
-	Phase     string `json:"phase"`
-	Health    string `json:"health,omitempty"`
-	Readiness string `json:"readiness,omitempty"`
-}
-
-// activityFrame is the payload of a deployment.activity event.
-type activityFrame struct {
-	Kind       string         `json:"kind,omitempty"`
-	Message    string         `json:"message,omitempty"`
-	OccurredAt client.APITime `json:"occurredAt,omitzero"`
 }
 
 // UsageError marks a failure the user can fix in the command they just typed —

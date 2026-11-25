@@ -70,7 +70,7 @@ func testRequest(t *testing.T) core.Request {
 	}
 }
 
-func newTestDriver(slv *fakeSolver, opts Options) *Driver {
+func newTestDriver(slv *fakeSolver, opts Options) *Driver { //nolint:gocritic // hugeParam: mirrors New
 	opts.LookupEnv = func(key string) (string, bool) {
 		if key == "TOKEN_VAR" {
 			return "s3cret", true

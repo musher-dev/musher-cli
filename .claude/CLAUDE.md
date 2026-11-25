@@ -78,6 +78,31 @@ is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
   This path is the interim image-source route; keep recipes spec-conformant so
   the remote path stays open.
 
+## Runner Mode (read this before changing `internal/runner`)
+
+`musher runner {fetch-source,build,self-test}` is the CLI inside an isolation
+guest, run by the host agent for one attempt of a platform-owned run (hidden
+from help). docs/runner-mode.md is the reference: its environment, exit codes
+20-23, failure classification and the self-test document
+(`contracts/runner/self-test.schema.json`).
+
+- **Only the run attempt token** (`MUSHER_API_KEY`, `mush_run_…`) and **only
+  `/runner/v1`**, through the client generated from the vendored
+  `contracts/vendor/platform-api/contracts/openapi/runner.json`
+  (`task generate:runner-client`; `task check:runner-client` fails on drift).
+  The root command skips config loading and the update agent for the runner
+  tree. `internal/runner` must never reach `internal/client`, `auth`,
+  `config`, `update` or `workflow` (depguard `runner_mode_isolation` and
+  `internal/policy` TestRunnerModeReachesNoV1Client).
+- **401/404 fences**: stop, report nothing. **Never past `deadlineAt`** or the
+  token's expiry.
+- Use the generated `...JSONBody` union types with the `WithBody` calls for
+  `:reportFetch`/`:reportResult`: the generated `...JSONRequestBody` aliases
+  marshal to `{}`.
+- Buildpacks run the CNB lifecycle on BuildKit (`internal/build/cnb`) in OCI
+  layout mode; the runner pushes the layout. No registry credential is ever
+  inside the build. No cross-build cache in v1.
+
 ## Directory Overview
 
 ### CLI Entry — `cmd/musher/`
@@ -101,7 +126,9 @@ is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
 - `auth/` — Credential storage (keyring + file fallback), profile-scoped
 - `buildinfo/` — Build metadata
 - `build/` — Local image builds: `core` (types, `Builder`), `buildkit`,
-  `buildpacks`, `daemon`, `detect`, `registry`; doctor checks
+  `buildpacks`, `daemon`, `detect`, `registry`; doctor checks. `cnb` runs the
+  buildpacks lifecycle on a standalone BuildKit (runner mode); `guest.go` is
+  the runner's engine entry point
 - `client/` — HTTP client for the Musher API
 - `deployspec/` — `musher.yaml` schema, parsing, validation, encoding
 - `config/` — Viper-based configuration, profiles, overrides
@@ -113,6 +140,8 @@ is no upload API, build worker, or Musher registry (Pelorus `SourceBuild` /
 - `terminal/` — TTY detection and capabilities
 - `update/` — Self-update from GitHub Releases
 - `validate/` — Input validation utilities
+- `runner/` — Runner mode (inside an isolation guest): fetch-source, build,
+  self-test; `runner/api` is generated from the vendored runner.json
 - `workflow/` — Transport-agnostic use cases: `Deploy` (compile → validate →
   converge → watch), `Build`, scaffolding for `init`
 
@@ -166,7 +195,7 @@ task check:contracts # Assert the command tree (incl. that bundle/hub stay gone)
 task fmt            # Format code
 ```
 
-golangci-lint must run with the pinned go1.26.10 toolchain (a newer local Go
+golangci-lint must run with the pinned go1.26.11 toolchain (a newer local Go
 breaks its typecheck). Docker-backed build tests are behind
 `-tags integration` (`go test -tags integration ./internal/build/...`).
 
@@ -180,4 +209,6 @@ breaks its typecheck). Docker-backed build tests are behind
 - **API endpoint**: `api.url` config key or `MUSHER_API_URL`
 - **Auth**: `MUSHER_API_KEY` env var or `musher auth login`
 - **Exit codes**: 0 ok, 1 general, 2 auth, 3 network, 4 config, 5 timeout,
-  6 execution, 64 usage. 7 is retired and must never be reassigned.
+  6 execution, 64 usage. 7 is retired and must never be reassigned. Runner
+  mode adds 20 failure reported, 21 fenced, 22 deadline, 23 unreported
+  (self-test exits 0 whenever it wrote its results).

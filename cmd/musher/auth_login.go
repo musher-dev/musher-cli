@@ -33,8 +33,9 @@ func newAuthLoginCmd() *cobra.Command {
 		Short: "Authenticate with the Musher platform",
 		Long: `Authenticate with the Musher platform using an API key or an account sign-in.
 
-You can create or manage API keys at:
-  https://console.musher.dev/settings/organization/api-keys
+You can create or manage API keys in the console, under Organization
+settings > API keys:
+  https://console.musher.dev/orgs/<your-org>/settings/api-keys
 
 With --web, musher signs in with your account email and password and
 stores the resulting session. A session reaches every API route; an API
@@ -82,7 +83,7 @@ func runLogin(cmd *cobra.Command, out *output.Writer, apiKeyFlag string, noVerif
 	if !apiKeyPattern.MatchString(apiKey) {
 		return &clierrors.CLIError{
 			Message:   "That does not look like a Musher API key",
-			Hint:      "Keys look like mush_XXXXXXXX.<43 characters>. Create one at https://console.musher.dev/settings/organization/api-keys",
+			Hint:      "Keys look like mush_XXXXXXXX.<43 characters>. Create one in the console under Organization settings > API keys (https://console.musher.dev/orgs/<your-org>/settings/api-keys)",
 			Code:      clierrors.ExitAuth,
 			ErrorCode: "ERR-AUTH-002",
 		}
@@ -165,7 +166,7 @@ func verifyAndReport(cmd *cobra.Command, out *output.Writer, cfg *config.Config,
 		if errors.Is(err, client.ErrUnauthenticated) {
 			return &clierrors.CLIError{
 				Message:   "The API key was rejected",
-				Hint:      "Check the key, or create a new one at https://console.musher.dev/settings/organization/api-keys",
+				Hint:      "Check the key, or create a new one in the console under Organization settings > API keys (https://console.musher.dev/orgs/<your-org>/settings/api-keys)",
 				Cause:     err,
 				Code:      clierrors.ExitAuth,
 				ErrorCode: "ERR-AUTH-001",
